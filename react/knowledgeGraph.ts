@@ -3,7 +3,7 @@
 // KnowledgeGraph3DScene draws ABSTRACT nodes/edges that already carry their own
 // color/radius/particles — "the caller owns all domain→visual mapping". But the
 // agent-facing skill params (core/skills/params.ts KnowledgeGraph3DParamsSchema)
-// carry bounded evidence-grade entity/assertion metadata. `mapCorpusKnowledgeGraph`
+// carry bounded evidence-shaped entity/assertion metadata. `mapCorpusKnowledgeGraph`
 // is the missing bridge: it turns validated corpus.knowledge_graph params into
 // ready-to-render KnowledgeGraph3DNode/Edge props using a semantic palette, so an
 // agent's VizSpec renders end-to-end without every host reinventing the mapping.
@@ -325,7 +325,7 @@ function graphEdgeMetadataMatchesQuery(
 }
 
 /** Compute the exact node-id set used by query-aware scene emphasis. Matching
- * evidence-grade edge metadata reveals both incident nodes; WebGL and the DOM
+ * evidence-shaped edge metadata reveals both incident nodes; WebGL and the DOM
  * companion call this same pure helper. */
 export function graphQueryMatchIds(
   nodes: readonly GraphSearchNode[],

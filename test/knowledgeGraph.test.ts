@@ -752,7 +752,7 @@ describe('graph helpers', () => {
     expect(graphEdgeMatchesQuery('model:iaf', 'family:hh', ids, '')).toBe(true);
   });
 
-  it('matches evidence-grade node and edge metadata and reveals incident nodes', () => {
+  it('matches evidence-shaped node and edge metadata and reveals incident nodes', () => {
     const nodes = [
       {
         id: 'model:a',

@@ -2,7 +2,6 @@
 // Runs in an isolated temp project: core first with only normal dependencies,
 // then every React subpath after installing the documented optional peers.
 
-import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   accessSync,
@@ -64,16 +63,15 @@ import {
 import { serializeManifest } from './emit-manifest';
 import { packagedContractRelativeFiles } from './lib/contract-package';
 import {
-  REVIEWED_NODE_COMMAND_HANDSHAKE_SCHEMA as COMMAND_HANDSHAKE_SCHEMA,
-  REVIEWED_NODE_COMMAND_RESULT_SCHEMA as COMMAND_RESULT_SCHEMA,
-  REVIEWED_NODE_COMMAND_TEST_HOOK_SCHEMA as COMMAND_TEST_HOOK_SCHEMA,
-  REVIEWED_NODE_GUARDIAN_PAYLOAD_ENV,
-  REVIEWED_NODE_SUPERVISOR_PAYLOAD_ENV,
-  REVIEWED_NODE_SUPERVISOR_GRACE_MS as COMMAND_SUPERVISOR_GRACE_MS,
-  REVIEWED_NODE_SUPERVISOR_SOURCE as REVIEWED_NODE_SUPERVISOR,
-  REVIEWED_NODE_TEST_HOOK_ENV as COMMAND_TEST_HOOK_ENVIRONMENT,
-  REVIEWED_NODE_WORKER_PAYLOAD_ENV,
-} from './lib/reviewed-node-supervisor';
+  assertReviewedNodeRuntimeLive,
+  createReviewedNodeRuntime,
+  disposeReviewedNodeRuntime,
+  type ReviewedNodeRuntime,
+} from './lib/reviewed-node-runtime';
+import {
+  REVIEWED_POSIX_COMMAND_LIMITS,
+  runReviewedPosixCommand,
+} from './lib/reviewed-posix-command';
 
 const root = resolve(import.meta.dirname, '..');
 const fixtureRoot = join(root, 'scripts', 'fixtures', 'package-smoke');
@@ -99,12 +97,80 @@ const RUNTIME_TREE_HASH_DOMAIN = 'cortexel-package-smoke-npm-tree-v1\0';
 const RUNTIME_ANCESTRY_HASH_DOMAIN = 'cortexel-package-smoke-path-ancestry-v1\0';
 const MAX_RUNTIME_EXECUTABLE_BYTES = 256 * 1024 * 1024;
 const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60_000;
+const NPM_CI_COMMAND_TIMEOUT_MS = REVIEWED_POSIX_COMMAND_LIMITS.timeoutMs;
 const MAX_COMMAND_OUTPUT_BYTES = 16 * 1024 * 1024;
-const MAX_COMMAND_PROTOCOL_OVERHEAD_BYTES = 4_096;
-const MAX_COMMAND_PAYLOAD_BYTES = 256 * 1024;
-const MAX_COMMAND_ARGUMENTS = 1_024;
-const MAX_COMMAND_ARGUMENT_BYTES = 128 * 1024;
+
+interface PackageSmokeCommandPolicy {
+  readonly operation: string;
+  readonly timeoutMs: number;
+}
+
+export const PACKAGE_SMOKE_COMMAND_POLICIES = Object.freeze({
+  ordinary: Object.freeze({
+    operation: 'package.ordinary',
+    timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
+  }),
+  npmVersion: Object.freeze({
+    operation: 'prepare.npm-version',
+    timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
+  }),
+  npmPack: Object.freeze({
+    operation: 'prepare.npm-pack',
+    timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
+  }),
+  npmCiCore: Object.freeze({
+    operation: 'prepare.npm-ci.core',
+    timeoutMs: NPM_CI_COMMAND_TIMEOUT_MS,
+  }),
+  npmCiCharts: Object.freeze({
+    operation: 'prepare.npm-ci.charts',
+    timeoutMs: NPM_CI_COMMAND_TIMEOUT_MS,
+  }),
+  npmCiFull: Object.freeze({
+    operation: 'prepare.npm-ci.full',
+    timeoutMs: NPM_CI_COMMAND_TIMEOUT_MS,
+  }),
+} satisfies Readonly<Record<string, PackageSmokeCommandPolicy>>);
+
+type PackageSmokeConsumerProfile = Readonly<{
+  commandPolicy: PackageSmokeCommandPolicy;
+  omittedDependencyClasses: readonly ('dev' | 'optional')[];
+}>;
+
+export const PACKAGE_SMOKE_CONSUMER_PROFILES = Object.freeze({
+  core: Object.freeze({
+    commandPolicy: PACKAGE_SMOKE_COMMAND_POLICIES.npmCiCore,
+    omittedDependencyClasses: Object.freeze(['dev', 'optional'] as const),
+  }),
+  charts: Object.freeze({
+    commandPolicy: PACKAGE_SMOKE_COMMAND_POLICIES.npmCiCharts,
+    omittedDependencyClasses: Object.freeze(['optional'] as const),
+  }),
+  full: Object.freeze({
+    commandPolicy: PACKAGE_SMOKE_COMMAND_POLICIES.npmCiFull,
+    omittedDependencyClasses: Object.freeze([] as const),
+  }),
+} satisfies Readonly<Record<string, PackageSmokeConsumerProfile>>);
+
+const CLOSED_PACKAGE_SMOKE_COMMAND_POLICIES = new Set<PackageSmokeCommandPolicy>(
+  Object.values(PACKAGE_SMOKE_COMMAND_POLICIES),
+);
+const LEGACY_REVIEWED_NODE_RESERVED_ENVIRONMENT_KEYS = Object.freeze([
+  'CORTEXEL_PACKAGE_SMOKE_SUPERVISOR_PAYLOAD',
+  'CORTEXEL_PACKAGE_SMOKE_GUARDIAN_PAYLOAD',
+  'CORTEXEL_PACKAGE_SMOKE_WORKER_PAYLOAD',
+  'CORTEXEL_PACKAGE_SMOKE_TRUSTED_COMMAND_TEST_HOOK',
+] as const);
 const SUPPORTED_NODE_MAJORS = new Set([22, 24, 26]);
+const EXPECTED_REGULAR_READ_FLAGS = fsConstants.O_RDONLY |
+  (process.platform === 'win32'
+    ? 0
+    : fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+const EXPECTED_DIRECTORY_READ_FLAGS = fsConstants.O_RDONLY |
+  fsConstants.O_DIRECTORY |
+  (process.platform === 'win32'
+    ? 0
+    : fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
 export const PACKAGE_TARBALL_LIMITS = Object.freeze({
   compressedBytes: 128 * 1024 * 1024,
   uncompressedBytes: 512 * 1024 * 1024,
@@ -142,6 +208,11 @@ const NPM_GZIP_HEADER = Buffer.from([0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0
 let commandEnvironment: NodeJS.ProcessEnv | undefined;
 let commandNodeAuthority: NodeExecutableFileAuthority | undefined;
 let commandRuntimeAuthority: PackageRuntimeAuthority | undefined;
+interface PackageSmokeCommandRuntimeScope {
+  readonly protectedParent: string;
+  runtime?: ReviewedNodeRuntime;
+}
+let activeCommandRuntimeScope: PackageSmokeCommandRuntimeScope | undefined;
 
 export interface ReviewedNodeCommandResult {
   readonly guardianSweepIntentCount: number;
@@ -162,22 +233,47 @@ export interface ReviewedNodeCommandTestHook {
   readonly readyPath: string;
 }
 
+export interface PackageSmokeRegularFileOpenTestEvent {
+  readonly phase: 'regular-file-reviewed-before-open';
+  readonly path: string;
+  readonly label: string;
+}
+
+export type PackageSmokeRegularFileOpenTestHook = (
+  event: PackageSmokeRegularFileOpenTestEvent,
+) => void;
+
+function openExpectedRegularFileAfterReview(
+  path: string,
+  label: string,
+  trustedTestHook?: PackageSmokeRegularFileOpenTestHook,
+): number {
+  trustedTestHook?.(Object.freeze({
+    phase: 'regular-file-reviewed-before-open',
+    path,
+    label,
+  }));
+  return openSync(path, EXPECTED_REGULAR_READ_FLAGS);
+}
+
 /*
  * The synchronous child_process timeout waits for a signal-resistant target and
- * for descendant-held pipes. The exact reviewed Node therefore supervises a
- * trusted gated guardian in a fresh POSIX session/process group. The guardian is
- * the live group leader and is the only production process allowed to address the
- * group: it writes one bounded sweep intent and then calls
- * one self-addressed negative-PID SIGKILL while its own live identity pins the
- * PGID. The supervisor owns the guardian's exclusive control-pipe writer; EOF
- * therefore triggers the same anchored self-sweep if the supervisor dies at any
- * point. A non-leader worker sits between guardian and reviewed target so a target
- * that kills its immediate parent cannot kill the group anchor.
+ * for descendant-held pipes. The shared reviewed-POSIX boundary therefore starts
+ * an exact launcher, supervisor, gated guardian, and non-leader worker. The
+ * guardian is the live group leader and the only production process allowed to
+ * address the group: it writes one bounded sweep intent and then calls one
+ * self-addressed negative-PID SIGKILL while its own live identity pins the PGID.
+ * The supervisor owns the guardian's exclusive control-pipe writer; EOF therefore
+ * triggers the same anchored self-sweep if the supervisor dies at any point. The
+ * worker remains the reviewed target's immediate parent, so killing that parent
+ * cannot kill the group anchor.
  *
- * The outer synchronous caller receives only an unforgeable-for-cleanup boolean
- * armed handshake, never a PID/PGID, and performs no numeric fallback after
- * supervisor completion. Deliberate regrouping/detachment, discovery and killing
- * of the guardian, or hostile signal-authority changes still require an external
+ * The outer caller's protocol pipe is also an outer-authored lifetime capability
+ * retained by the live guardian. The call therefore cannot return after launcher
+ * or supervisor loss until that capability reaches EOF. It receives only an
+ * unforgeable-for-cleanup boolean armed handshake, never a PID/PGID, and performs
+ * no numeric fallback. Deliberate regrouping/detachment, discovery and killing of
+ * the guardian, or hostile signal-authority changes still require an external
  * cgroup/sandbox/Job Object; uncertain cleanup fails without signalling a reusable
  * numeric identity.
  */
@@ -250,6 +346,7 @@ function inspectRuntimeRegularFile(
   maximumBytes: number,
   label: string,
   executable = false,
+  trustedTestHook?: PackageSmokeRegularFileOpenTestHook,
 ): RuntimeFileAuthority {
   if (!isAbsolute(path) || Buffer.byteLength(path, 'utf8') > NPM_AUTHORITY_LIMITS.pathBytes ||
       realpathSync(path) !== path) {
@@ -266,7 +363,7 @@ function inspectRuntimeRegularFile(
   if (executable && (mode & 0o111n) === 0n) fail(`${label} is not executable`);
   if (executable) accessSync(path, fsConstants.X_OK);
   const size = boundedBigIntNumber(initial.size, maximumBytes, label);
-  const descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  const descriptor = openExpectedRegularFileAfterReview(path, label, trustedTestHook);
   try {
     const opened = fstatSync(descriptor, { bigint: true });
     if (!opened.isFile() || opened.nlink !== 1n || !sameRuntimeStat(opened, initial)) {
@@ -338,7 +435,10 @@ function inspectRuntimePathAncestry(path: string, label: string): RuntimePathAnc
   };
 }
 
-export function inspectNodeExecutableAuthority(executable: string): NodeExecutableFileAuthority {
+export function inspectNodeExecutableAuthority(
+  executable: string,
+  trustedTestHook?: PackageSmokeRegularFileOpenTestHook,
+): NodeExecutableFileAuthority {
   return {
     executable,
     file: inspectRuntimeRegularFile(
@@ -346,6 +446,7 @@ export function inspectNodeExecutableAuthority(executable: string): NodeExecutab
       MAX_RUNTIME_EXECUTABLE_BYTES,
       'reviewed Node executable authority',
       true,
+      trustedTestHook,
     ),
     ancestry: inspectRuntimePathAncestry(executable, 'reviewed Node executable'),
   };
@@ -359,6 +460,146 @@ function assertNodeExecutableAuthority(
   if (!exactJsonEqual(observed, expected)) fail(`${label} Node executable authority changed`);
 }
 
+function openPackageSmokeCommandRuntimeScope(protectedParent = tmpdir()): void {
+  if (activeCommandRuntimeScope !== undefined) {
+    fail('package-smoke reviewed Node runtime scope is already active');
+  }
+  if (typeof protectedParent !== 'string') {
+    fail('package-smoke reviewed Node runtime parent must be one string');
+  }
+  activeCommandRuntimeScope = { protectedParent };
+}
+
+function closePackageSmokeCommandRuntimeScope(): void {
+  const scope = activeCommandRuntimeScope;
+  if (scope === undefined) {
+    fail('package-smoke reviewed Node runtime scope is not active');
+  }
+  if (scope.runtime !== undefined) {
+    disposeReviewedNodeRuntime(scope.runtime);
+  }
+  activeCommandRuntimeScope = undefined;
+}
+
+function isPotentiallyAsynchronousResult(value: unknown): boolean {
+  if (
+    value === null ||
+    (typeof value !== 'object' && typeof value !== 'function')
+  ) return false;
+  const visited = new Set<object>();
+  let cursor: object | null = value;
+  for (let depth = 0; cursor !== null && depth < 128; depth++) {
+    if (visited.has(cursor)) return true;
+    visited.add(cursor);
+    let descriptor: PropertyDescriptor | undefined;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(cursor, 'then');
+      cursor = Object.getPrototypeOf(cursor);
+    } catch {
+      return true;
+    }
+    if (descriptor === undefined) continue;
+    if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) return true;
+    return typeof descriptor.value === 'function';
+  }
+  return cursor !== null;
+}
+
+/**
+ * Runs one strictly synchronous operation inside an exclusive staged-Node scope.
+ * The callback must not start asynchronous work; Promise/thenable results fail
+ * closed and the staged runtime is disposed before the rejection is returned.
+ */
+export function withPackageSmokeCommandRuntime<T>(
+  operation: () => T,
+  protectedParent = tmpdir(),
+): T {
+  if (typeof operation !== 'function') {
+    fail('package-smoke reviewed Node runtime operation must be callable');
+  }
+  openPackageSmokeCommandRuntimeScope(protectedParent);
+  let completed = false;
+  let result: T | undefined;
+  let operationError: unknown;
+  try {
+    const operationResult = operation();
+    if (isPotentiallyAsynchronousResult(operationResult)) {
+      fail('package-smoke reviewed Node runtime operation must be synchronous');
+    }
+    result = operationResult;
+    completed = true;
+  } catch (error) {
+    operationError = error;
+  }
+
+  let cleanupFailed = false;
+  let cleanupError: unknown;
+  try {
+    closePackageSmokeCommandRuntimeScope();
+  } catch (error) {
+    cleanupFailed = true;
+    cleanupError = error;
+  }
+  if (!completed) {
+    if (cleanupFailed) {
+      throw new AggregateError(
+        [operationError, cleanupError],
+        'package-smoke operation failed and staged Node runtime disposal was uncertain',
+        { cause: operationError },
+      );
+    }
+    throw operationError;
+  }
+  if (cleanupFailed) throw cleanupError;
+  return result as T;
+}
+
+function assertPackageSmokeCommandRuntimeBinding(
+  runtime: ReviewedNodeRuntime,
+  expectedSource: NodeExecutableFileAuthority,
+  label: string,
+): void {
+  assertReviewedNodeRuntimeLive(runtime);
+  const acquired = runtime.node.executable;
+  const stagedAuthority = runtime.node.authority;
+  if (
+    runtime.sourceNodeExecutable !== expectedSource.executable ||
+    acquired.sourcePath !== expectedSource.executable ||
+    acquired.sourceSha256 !== expectedSource.file.sha256 ||
+    acquired.stagedSha256 !== expectedSource.file.sha256 ||
+    acquired.size !== expectedSource.file.size ||
+    stagedAuthority.executable !== acquired.stagedPath ||
+    stagedAuthority.file.path !== acquired.stagedPath ||
+    stagedAuthority.file.sha256 !== expectedSource.file.sha256 ||
+    stagedAuthority.file.size !== expectedSource.file.size
+  ) {
+    fail(`${label} staged Node runtime differs from its source authority`);
+  }
+  if (
+    commandRuntimeAuthority !== undefined &&
+    commandRuntimeAuthority.node.executable === expectedSource.executable &&
+    runtime.nodeVersion !== commandRuntimeAuthority.node.version.replace(/^v/u, '')
+  ) {
+    fail(`${label} staged Node version differs from package runtime authority`);
+  }
+}
+
+function activePackageSmokeCommandRuntime(
+  expectedSource: NodeExecutableFileAuthority,
+): ReviewedNodeRuntime {
+  const scope = activeCommandRuntimeScope;
+  if (scope === undefined) {
+    fail('reviewed Node command requires one active operation-scoped staged runtime');
+  }
+  if (scope.runtime === undefined) {
+    scope.runtime = createReviewedNodeRuntime(scope.protectedParent, {
+      sourceNodeCandidates: [expectedSource.executable],
+    });
+  }
+  assertPackageSmokeCommandRuntimeBinding(scope.runtime, expectedSource, 'pre-command');
+  return scope.runtime;
+}
+
 export function runReviewedNodeCommand(
   reviewedNodeExecutable: string,
   args: readonly string[],
@@ -368,6 +609,8 @@ export function runReviewedNodeCommand(
     readonly timeoutMs?: number;
     readonly outputLimitBytes?: number;
     readonly nodeAuthority?: NodeExecutableFileAuthority;
+    /** Explicit already-acquired runtime for focused tests outside an operation scope. */
+    readonly reviewedRuntime?: ReviewedNodeRuntime;
     /** Host-controlled regression rendezvous; never copied into guardian, worker, or target input. */
     readonly trustedTestHook?: ReviewedNodeCommandTestHook;
   } = {},
@@ -377,7 +620,10 @@ export function runReviewedNodeCommand(
   }
   const timeoutMs = options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
   const outputLimitBytes = options.outputLimitBytes ?? MAX_COMMAND_OUTPUT_BYTES;
-  if (!isAbsolute(reviewedNodeExecutable) || realpathSync(reviewedNodeExecutable) !== reviewedNodeExecutable) {
+  if (
+    !isAbsolute(reviewedNodeExecutable) ||
+    realpathSync(reviewedNodeExecutable) !== reviewedNodeExecutable
+  ) {
     fail('reviewed Node command executable must be a canonical absolute path');
   }
   const expectedNodeAuthority = options.nodeAuthority ??
@@ -386,300 +632,131 @@ export function runReviewedNodeCommand(
     fail('reviewed Node command executable differs from its byte authority');
   }
   assertNodeExecutableAuthority(expectedNodeAuthority, 'pre-command');
-  if (!isAbsolute(cwd) || realpathSync(cwd) !== cwd || !lstatSync(cwd).isDirectory()) {
-    fail('reviewed Node command working directory must be a canonical absolute directory');
-  }
-  let trustedTestHookPayload: string | undefined;
-  if (options.trustedTestHook !== undefined) {
-    const hook = options.trustedTestHook;
-    if (
-      hook.phase !== 'worker-ready-before-handshake' &&
-      hook.phase !== 'handshake-published-before-go' &&
-      hook.phase !== 'go-sent' &&
-      hook.phase !== 'guardian-swept-before-result'
-    ) {
-      fail('reviewed Node command test hook has an invalid phase');
-    }
-    const readyPath = hook.readyPath;
-    if (
-      !isAbsolute(readyPath) ||
-      resolve(readyPath) !== readyPath ||
-      readyPath.includes('\0') ||
-      Buffer.byteLength(readyPath, 'utf8') > NPM_AUTHORITY_LIMITS.pathBytes ||
-      !isInside(cwd, readyPath)
-    ) {
-      fail('reviewed Node command test hook ready path is not bounded inside its working directory');
-    }
-    const readyParent = dirname(readyPath);
-    const readyParentStats = lstatSync(readyParent);
-    if (
-      realpathSync(readyParent) !== readyParent ||
-      !readyParentStats.isDirectory() ||
-      readyParentStats.isSymbolicLink()
-    ) {
-      fail('reviewed Node command test hook ready parent is not one canonical directory');
-    }
-    if (existsSync(readyPath)) fail('reviewed Node command test hook ready path already exists');
-    trustedTestHookPayload = canonicalize({
-      phase: hook.phase,
-      readyPath: hook.readyPath,
-      schema: COMMAND_TEST_HOOK_SCHEMA,
-    });
-  }
-  let payloadInputBytes = Buffer.byteLength(cwd, 'utf8');
-  if (args.length > MAX_COMMAND_ARGUMENTS) fail('reviewed Node command has too many arguments');
-  for (const [index, argument] of args.entries()) {
-    if (typeof argument !== 'string' || argument.includes('\0') ||
-        Buffer.byteLength(argument, 'utf8') > MAX_COMMAND_ARGUMENT_BYTES) {
-      fail(`reviewed Node command argument ${index} is invalid or oversized`);
-    }
-    payloadInputBytes += Buffer.byteLength(argument, 'utf8');
-    if (payloadInputBytes > MAX_COMMAND_PAYLOAD_BYTES) {
-      fail('reviewed Node command payload input exceeds its pre-serialization byte budget');
-    }
-  }
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > DEFAULT_COMMAND_TIMEOUT_MS) {
+  if (
+    !Number.isSafeInteger(timeoutMs) ||
+    timeoutMs < 1 ||
+    timeoutMs > REVIEWED_POSIX_COMMAND_LIMITS.timeoutMs
+  ) {
     fail('reviewed Node command timeout is outside its bound');
   }
-  if (!Number.isSafeInteger(outputLimitBytes) || outputLimitBytes < 1 ||
-      outputLimitBytes > MAX_COMMAND_OUTPUT_BYTES) {
+  if (
+    !Number.isSafeInteger(outputLimitBytes) ||
+    outputLimitBytes < 1 ||
+    outputLimitBytes > MAX_COMMAND_OUTPUT_BYTES
+  ) {
     fail('reviewed Node command output budget is outside its bound');
   }
   const targetEnvironment = Object.fromEntries(
     Object.entries(options.environment ?? activeCommandEnvironment())
       .filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
-  for (const reserved of [
-    REVIEWED_NODE_SUPERVISOR_PAYLOAD_ENV,
-    REVIEWED_NODE_GUARDIAN_PAYLOAD_ENV,
-    REVIEWED_NODE_WORKER_PAYLOAD_ENV,
-    COMMAND_TEST_HOOK_ENVIRONMENT,
-  ]) {
+  for (const reserved of LEGACY_REVIEWED_NODE_RESERVED_ENVIRONMENT_KEYS) {
     if (Object.hasOwn(targetEnvironment, reserved)) {
       fail(`reviewed Node command environment contains reserved entry ${reserved}`);
     }
   }
-  for (const [key, value] of Object.entries(targetEnvironment)) {
-    if (key.length === 0 || key.includes('\0') || key.includes('=') || value.includes('\0')) {
-      fail('reviewed Node command environment contains an invalid entry');
-    }
-    payloadInputBytes += Buffer.byteLength(key, 'utf8') + Buffer.byteLength(value, 'utf8');
-    if (payloadInputBytes > MAX_COMMAND_PAYLOAD_BYTES) {
-      fail('reviewed Node command payload input exceeds its pre-serialization byte budget');
-    }
-  }
-  const payload = canonicalize({
-    args,
-    cwd,
-    environment: targetEnvironment,
-    outputLimitBytes,
-    timeoutMs,
-  });
-  if (Buffer.byteLength(payload, 'utf8') > MAX_COMMAND_PAYLOAD_BYTES) {
-    fail('reviewed Node command payload exceeds its environment-safe byte budget');
-  }
-  // Control-plane processes receive a fresh closed environment. In particular,
-  // arbitrary target loader/runtime variables (LD_PRELOAD, DYLD_*, NODE_OPTIONS,
-  // and future equivalents) must never execute before the supervisor/guardian
-  // JavaScript can enforce its protocol. The exact target environment travels
-  // only as bounded JSON and is installed by the worker for the reviewed target.
-  const supervisorEnvironment: NodeJS.ProcessEnv = {
-    [REVIEWED_NODE_SUPERVISOR_PAYLOAD_ENV]: payload,
-  };
-  if (trustedTestHookPayload !== undefined) {
-    supervisorEnvironment[COMMAND_TEST_HOOK_ENVIRONMENT] = trustedTestHookPayload;
-  }
-  const maximumEnvelopeBytes = 4 * Math.ceil(outputLimitBytes / 3) +
-    MAX_COMMAND_PROTOCOL_OVERHEAD_BYTES;
-  const outer = spawnSync(reviewedNodeExecutable, ['-e', REVIEWED_NODE_SUPERVISOR], {
-    cwd,
-    encoding: null,
-    env: supervisorEnvironment,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: timeoutMs + COMMAND_SUPERVISOR_GRACE_MS,
-    killSignal: 'SIGKILL',
-    maxBuffer: maximumEnvelopeBytes,
-    windowsHide: true,
-  });
-  const outerStdout = Buffer.isBuffer(outer.stdout) ? outer.stdout : Buffer.alloc(0);
-  let guardianArmed = false;
-  let resultRaw = outerStdout;
-  const firstLineEnd = outerStdout.indexOf(0x0a);
-  if (firstLineEnd >= 0 && firstLineEnd + 1 <= MAX_COMMAND_PROTOCOL_OVERHEAD_BYTES) {
-    const firstLine = outerStdout.subarray(0, firstLineEnd + 1);
-    const firstValue = parseCanonicalJsonBuffer(
-      firstLine,
-      'reviewed Node command handshake',
-      MAX_COMMAND_PROTOCOL_OVERHEAD_BYTES,
+
+  // The original package-smoke authority remains source/provenance evidence.
+  // Execution uses only its descriptor-acquired private copy; the two authority
+  // records have deliberately different ancestry-digest domains and are never
+  // relabelled as each other.
+  let commandResult: ReturnType<typeof runReviewedPosixCommand> | undefined;
+  let reviewedRuntime: ReviewedNodeRuntime | undefined;
+  const failures: unknown[] = [];
+  try {
+    reviewedRuntime = options.reviewedRuntime ??
+      activePackageSmokeCommandRuntime(expectedNodeAuthority);
+    assertPackageSmokeCommandRuntimeBinding(
+      reviewedRuntime,
+      expectedNodeAuthority,
+      'pre-command',
     );
-    if (isRecord(firstValue) && firstValue.schema === COMMAND_HANDSHAKE_SCHEMA) {
-      exactKeys(
-        firstValue,
-        ['guardianArmed', 'schema'],
-        'reviewed Node command handshake',
+    const stagedNode = reviewedRuntime.node.authority.executable;
+    commandResult = runReviewedPosixCommand(
+      stagedNode,
+      stagedNode,
+      args,
+      cwd,
+      {
+        controlRuntimeAuthority: reviewedRuntime.node.authority,
+        environment: targetEnvironment,
+        outputLimitBytes,
+        targetAuthority: reviewedRuntime.node.authority,
+        timeoutMs,
+        trustedTestHook: options.trustedTestHook,
+      },
+    );
+  } catch (error) {
+    failures.push(error);
+  }
+  try {
+    assertNodeExecutableAuthority(expectedNodeAuthority, 'post-command');
+    if (reviewedRuntime !== undefined) {
+      assertPackageSmokeCommandRuntimeBinding(
+        reviewedRuntime,
+        expectedNodeAuthority,
+        'post-command',
       );
-      if (firstValue.guardianArmed !== true) {
-        fail('reviewed Node command handshake did not arm its private guardian');
-      }
-      guardianArmed = true;
-      resultRaw = outerStdout.subarray(firstLineEnd + 1);
     }
+  } catch (error) {
+    failures.push(error);
   }
-  // The production handshake deliberately carries no numeric cleanup handle.
-  // Abnormal supervisor completion fails here without signalling or probing a
-  // potentially reusable PID/PGID; the exclusive guardian-lease writer closes
-  // with the supervisor and the still-live guardian self-sweeps its own group.
-  assertNodeExecutableAuthority(expectedNodeAuthority, 'post-command');
-  if (outer.error !== undefined) {
-    const code = (outer.error as NodeJS.ErrnoException).code;
-    if (code === 'ENOBUFS') {
-      fail('reviewed Node command supervisor crossed its outer output bound');
-    }
-    if (code === 'ETIMEDOUT') {
-      fail('reviewed Node command supervisor crossed its outer hard timeout');
-    }
-    fail(`reviewed Node command supervisor failed: ${code ?? 'unknown error'}`);
-  }
-  if (outer.status !== 0 || outer.signal !== null) {
-    const detail = Buffer.isBuffer(outer.stderr) && outer.stderr.byteLength > 0
-      ? decodeUtf8Fatal(outer.stderr, 'reviewed Node supervisor stderr').slice(0, 2_048).trimEnd()
-      : '';
-    const summary = outer.signal === 'SIGKILL'
-      ? 'reviewed Node command supervisor was terminated by SIGKILL without a valid result'
-      : 'reviewed Node command supervisor failed without a valid result';
-    fail(
-      summary +
-      ` (status ${String(outer.status)}, signal ${String(outer.signal)})` +
-      (detail ? `: ${detail}` : ''),
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) {
+    throw new AggregateError(
+      failures,
+      'reviewed Node command failed with a post-command authority revalidation failure',
     );
   }
-  const outerStderr = Buffer.isBuffer(outer.stderr) ? outer.stderr : Buffer.alloc(0);
-  if (outerStderr.byteLength !== 0) {
-    fail('reviewed Node command supervisor wrote outside its result envelope');
+  if (commandResult === undefined) {
+    fail('reviewed Node command returned no result');
   }
-  if (resultRaw.byteLength === 0 || resultRaw.byteLength > maximumEnvelopeBytes) {
-    fail('reviewed Node command supervisor returned an invalid result size');
-  }
-  const resultValue = parseCanonicalJsonBuffer(
-    resultRaw,
-    'reviewed Node command result',
-    maximumEnvelopeBytes,
-  );
-  const record = expectRecord(resultValue, 'reviewed Node command result');
-  exactKeys(
-    record,
-    [
-      'guardianSweepIntentCount',
-      'outputOverflow',
-      'schema',
-      'signal',
-      'spawnError',
-      'status',
-      'stderrBase64',
-      'stdoutBase64',
-      'timedOut',
-    ],
-    'reviewed Node command result',
-  );
-  const validSignal = record.signal === null ||
-    (typeof record.signal === 'string' && /^SIG[A-Z0-9]+$/u.test(record.signal));
-  const validStatus = record.status === null ||
-    (typeof record.status === 'number' && Number.isSafeInteger(record.status) &&
-      record.status >= 0 && record.status <= 255);
-  if (
-    record.schema !== COMMAND_RESULT_SCHEMA ||
-    (record.guardianSweepIntentCount !== 0 && record.guardianSweepIntentCount !== 1) ||
-    typeof record.outputOverflow !== 'boolean' ||
-    typeof record.timedOut !== 'boolean' ||
-    (record.spawnError !== null &&
-      (typeof record.spawnError !== 'string' ||
-        record.spawnError.length === 0 ||
-        record.spawnError.length > 256)) ||
-    typeof record.stderrBase64 !== 'string' ||
-    typeof record.stdoutBase64 !== 'string' ||
-    !validSignal ||
-    !validStatus
-  ) {
-    fail('reviewed Node command supervisor returned an invalid result record');
-  }
-  const hasSpawnError = record.spawnError !== null;
-  const wasHardStopped = record.timedOut || record.outputOverflow;
-  const hasStatus = typeof record.status === 'number';
-  const hasSignal = typeof record.signal === 'string';
-  if (hasSpawnError) {
-    if (
-      hasStatus ||
-      hasSignal ||
-      wasHardStopped ||
-      (record.guardianSweepIntentCount === 0) === guardianArmed
-    ) {
-      fail('reviewed Node command spawn failure has an impossible completion state');
-    }
-    fail(`reviewed Node target spawn failed: ${record.spawnError}`);
-  }
-  if (!guardianArmed) {
-    fail('reviewed Node command result has no pre-execution guardian handshake');
-  }
-  if (record.guardianSweepIntentCount !== 1) {
-    fail('reviewed Node command did not publish exactly one guardian sweep intent');
-  }
-  if (wasHardStopped) {
-    if (hasStatus || record.signal !== 'SIGKILL') {
-      fail('reviewed Node command did not terminate with the required hard signal');
-    }
-  } else if (hasStatus === hasSignal) {
-    fail('reviewed Node command completion must have exactly one status discriminator');
-  }
-  // Normal completion is accepted only after the gated worker published the
-  // target result, the live guardian published one intent, and the guardian
-  // closed by SIGKILL. No numeric group identity crosses this boundary.
-  const decodeCanonicalBase64 = (value: string, label: string): Buffer => {
-    if (value.length % 4 !== 0) {
-      fail(`${label} is not canonical base64`);
-    }
-    let padding = 0;
-    if (value.endsWith('=')) padding++;
-    if (value.endsWith('==')) padding++;
-    const encodedLength = value.length - padding;
-    for (let index = 0; index < value.length; index++) {
-      const code = value.charCodeAt(index);
-      const alphabet =
-        (code >= 0x41 && code <= 0x5a) ||
-        (code >= 0x61 && code <= 0x7a) ||
-        (code >= 0x30 && code <= 0x39) ||
-        code === 0x2b ||
-        code === 0x2f;
-      if ((index < encodedLength && !alphabet) ||
-          (index >= encodedLength && code !== 0x3d)) {
-        fail(`${label} is not canonical base64`);
-      }
-    }
-    const decoded = Buffer.from(value, 'base64');
-    if (decoded.toString('base64') !== value) fail(`${label} is not canonical base64`);
-    return decoded;
-  };
-  const stdoutRaw = decodeCanonicalBase64(record.stdoutBase64 as string, 'reviewed Node stdout');
-  const stderrRaw = decodeCanonicalBase64(record.stderrBase64 as string, 'reviewed Node stderr');
-  if (stdoutRaw.byteLength + stderrRaw.byteLength > outputLimitBytes) {
-    fail('reviewed Node command output crossed its supervisor budget');
-  }
-  const stdout = decodeUtf8Fatal(stdoutRaw, 'reviewed Node command stdout');
-  const stderr = decodeUtf8Fatal(stderrRaw, 'reviewed Node command stderr');
+
   return {
-    guardianSweepIntentCount: record.guardianSweepIntentCount as number,
-    status: typeof record.status === 'number' ? record.status : -1,
-    signal: record.signal as NodeJS.Signals | null,
-    stdout,
-    stderr,
-    timedOut: record.timedOut,
-    outputOverflow: record.outputOverflow,
+    guardianSweepIntentCount: commandResult.guardianSweepIntentCount,
+    status: commandResult.status ?? -1,
+    signal: commandResult.signal,
+    stdout: decodeUtf8Fatal(commandResult.stdout, 'reviewed Node command stdout'),
+    stderr: decodeUtf8Fatal(commandResult.stderr, 'reviewed Node command stderr'),
+    timedOut: commandResult.timedOut,
+    outputOverflow: commandResult.outputOverflow,
   };
 }
 
-function runResult(command: string, args: string[], cwd: string): ReviewedNodeCommandResult {
-  const result = runReviewedNodeCommand(command, args, cwd);
-  if (result.timedOut) fail(`${command} exceeded its hard timeout`);
-  if (result.outputOverflow) fail(`${command} exceeded its output budget`);
+function assertClosedPackageSmokeCommandPolicy(
+  policy: PackageSmokeCommandPolicy,
+): void {
+  if (!CLOSED_PACKAGE_SMOKE_COMMAND_POLICIES.has(policy)) {
+    fail('reviewed Node operation policy is not one closed host-authored profile');
+  }
+}
+
+export function formatReviewedNodeOperationBoundFailure(
+  policy: PackageSmokeCommandPolicy,
+  kind: 'timeout' | 'output-overflow',
+): string {
+  assertClosedPackageSmokeCommandPolicy(policy);
+  return kind === 'timeout'
+    ? `reviewed Node operation ${JSON.stringify(policy.operation)} exceeded its ` +
+      `${policy.timeoutMs} ms hard timeout`
+    : `reviewed Node operation ${JSON.stringify(policy.operation)} exceeded its ` +
+      `${MAX_COMMAND_OUTPUT_BYTES}-byte output budget`;
+}
+
+function runResult(
+  command: string,
+  args: string[],
+  cwd: string,
+  policy: PackageSmokeCommandPolicy = PACKAGE_SMOKE_COMMAND_POLICIES.ordinary,
+): ReviewedNodeCommandResult {
+  assertClosedPackageSmokeCommandPolicy(policy);
+  const result = runReviewedNodeCommand(command, args, cwd, {
+    timeoutMs: policy.timeoutMs,
+  });
+  if (result.timedOut) fail(formatReviewedNodeOperationBoundFailure(policy, 'timeout'));
+  if (result.outputOverflow) {
+    fail(formatReviewedNodeOperationBoundFailure(policy, 'output-overflow'));
+  }
   return result;
 }
 
@@ -757,8 +834,13 @@ export function formatReviewedNodeCommandFailure(
   );
 }
 
-function run(command: string, args: string[], cwd: string): string {
-  const result = runResult(command, args, cwd);
+function run(
+  command: string,
+  args: string[],
+  cwd: string,
+  policy: PackageSmokeCommandPolicy = PACKAGE_SMOKE_COMMAND_POLICIES.ordinary,
+): string {
+  const result = runResult(command, args, cwd, policy);
   if (result.status !== 0 || result.signal !== null) {
     // Many CLIs (including TypeScript) report diagnostics on stdout. Preserve both
     // channels without argv/environment, and encode them for one bounded terminal-safe
@@ -1835,7 +1917,13 @@ function executableVersion(executable: string, label: string): string {
 }
 
 function nodeCliVersion(nodeExecutable: string, cli: string, label: string): string {
-  const value = runNpmCommand(nodeExecutable, cli, ['--version'], root);
+  const value = runNpmCommand(
+    nodeExecutable,
+    cli,
+    ['--version'],
+    root,
+    PACKAGE_SMOKE_COMMAND_POLICIES.npmVersion,
+  );
   if (!/^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(value)) {
     fail(`${label} returned an invalid version`);
   }
@@ -1847,7 +1935,9 @@ function runNpmCommand(
   npmExecutable: string,
   args: string[],
   cwd: string,
+  policy: PackageSmokeCommandPolicy,
 ): string {
+  assertClosedPackageSmokeCommandPolicy(policy);
   const expected = commandRuntimeAuthority;
   if (expected === undefined) fail('npm command runtime authority is not initialized');
   if (expected.node.executable !== nodeExecutable || expected.npm.cli !== npmExecutable) {
@@ -1861,7 +1951,7 @@ function runNpmCommand(
   };
   assertNpm('pre-command');
   try {
-    return run(nodeExecutable, [npmExecutable, ...args], cwd);
+    return run(nodeExecutable, [npmExecutable, ...args], cwd, policy);
   } finally {
     assertNpm('post-command');
   }
@@ -2025,7 +2115,7 @@ function fsyncDirectoryStable(path: string, label: string): void {
   }
   const descriptor = openSync(
     path,
-    fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW,
+    EXPECTED_DIRECTORY_READ_FLAGS,
   );
   try {
     const opened = fstatSync(descriptor, { bigint: true });
@@ -2183,6 +2273,7 @@ function readRegularFileStable(
   expectedSize: number | undefined,
   label = 'workspace file',
   maxBytes = MAX_WORKSPACE_FILE_BYTES,
+  trustedTestHook?: PackageSmokeRegularFileOpenTestHook,
 ): Buffer {
   const pathBefore = lstatSync(path);
   if (!pathBefore.isFile()) fail(`${label} must be a regular file`);
@@ -2191,8 +2282,7 @@ function readRegularFileStable(
     fail(`${label} changed before it could be read`);
   }
   if (pathBefore.size > maxBytes) fail(`${label} exceeds its byte budget`);
-  const noFollow = process.platform === 'win32' ? 0 : fsConstants.O_NOFOLLOW;
-  const descriptor = openSync(path, fsConstants.O_RDONLY | noFollow);
+  const descriptor = openExpectedRegularFileAfterReview(path, label, trustedTestHook);
   try {
     const before = fstatSync(descriptor);
     if (
@@ -2249,6 +2339,7 @@ function readExactIntentFile(
   expectedValue: string | Buffer,
   expectedMode: 0o444 | 0o644,
   label: string,
+  trustedTestHook?: PackageSmokeRegularFileOpenTestHook,
 ): Buffer {
   if (!isAbsolute(path) || realpathSync(path) !== path) {
     fail(`${label} must be a canonical absolute regular path`);
@@ -2269,6 +2360,7 @@ function readExactIntentFile(
     expected.byteLength,
     label,
     MAX_WORKSPACE_FILE_BYTES,
+    trustedTestHook,
   );
   const after = lstatSync(path);
   if (
@@ -2288,8 +2380,9 @@ export function assertFinalizedHostFile(
   path: string,
   expectedValue: string | Buffer,
   label: string,
+  trustedTestHook?: PackageSmokeRegularFileOpenTestHook,
 ): void {
-  readExactIntentFile(path, expectedValue, 0o444, label);
+  readExactIntentFile(path, expectedValue, 0o444, label, trustedTestHook);
 }
 
 function digestRegularFileStable(
@@ -2297,14 +2390,14 @@ function digestRegularFileStable(
   expectedSize: number,
   label: string,
   maxBytes: number,
+  trustedTestHook?: PackageSmokeRegularFileOpenTestHook,
 ): string {
   const pathBefore = lstatSync(path);
   if (!pathBefore.isFile()) fail(`${label} must be a regular file`);
   if (pathBefore.nlink !== 1) fail(`${label} must not be hard-linked`);
   if (pathBefore.size !== expectedSize) fail(`${label} changed before it could be hashed`);
   if (pathBefore.size > maxBytes) fail(`${label} exceeds its per-file byte budget`);
-  const noFollow = process.platform === 'win32' ? 0 : fsConstants.O_NOFOLLOW;
-  const descriptor = openSync(path, fsConstants.O_RDONLY | noFollow);
+  const descriptor = openExpectedRegularFileAfterReview(path, label, trustedTestHook);
   try {
     const before = fstatSync(descriptor);
     if (
@@ -3241,6 +3334,7 @@ export function assertInstalledRecursivePackageClosure(
 export function fingerprintPackageSmokeWorkspace(
   workspace: string,
   requireFinalizedRoot = false,
+  trustedTestHook?: PackageSmokeRegularFileOpenTestHook,
 ): WorkspaceSeal {
   const canonicalRoot = realpathSync(workspace);
   if (canonicalRoot !== workspace) fail('workspace root is not canonical while sealing');
@@ -3300,6 +3394,7 @@ export function fingerprintPackageSmokeWorkspace(
           stats.size,
           `workspace file ${pathRelative}`,
           MAX_WORKSPACE_FILE_BYTES,
+          trustedTestHook,
         );
         records.push({ type: 'file', digest, size: stats.size, ...common });
       } else {
@@ -3535,9 +3630,11 @@ function prepareConsumer(
   expectedFiles: readonly ExpectedPackageFile[],
   nodeExecutable: string,
   npmExecutable: string,
-  omittedDependencyClasses: readonly ('dev' | 'optional')[],
+  profile: PackageSmokeConsumerProfile,
   npmMajor: number,
 ): void {
+  const { commandPolicy, omittedDependencyClasses } = profile;
+  assertClosedPackageSmokeCommandPolicy(commandPolicy);
   mkdirSync(consumer, { mode: 0o755 });
   writeFileSync(join(consumer, 'package.json'), exactFixtureManifestRaw, {
     flag: 'wx',
@@ -3560,6 +3657,7 @@ function prepareConsumer(
       ...omittedDependencyClasses.map((dependencyClass) => `--omit=${dependencyClass}`),
     ],
     consumer,
+    commandPolicy,
   );
   if (
     canonicalJsonSourceDigest(join(consumer, 'package.json'), 'installed fixture manifest') !==
@@ -6152,7 +6250,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   return packageJson.version;
 }
 
-export function preparePackageSmokeWorkspace(options: {
+function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
   readonly workspace: string;
   readonly nodeExecutable?: string;
   readonly npmExecutable?: string;
@@ -6220,6 +6318,7 @@ export function preparePackageSmokeWorkspace(options: {
     npmExecutable,
     ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactDirectory],
     root,
+    PACKAGE_SMOKE_COMMAND_POLICIES.npmPack,
   );
   const rawPackValue = strictJson(packText, 'npm pack output');
   if (!Array.isArray(rawPackValue) || rawPackValue.length !== 1 || !isRecord(rawPackValue[0])) {
@@ -6257,7 +6356,7 @@ export function preparePackageSmokeWorkspace(options: {
     expectedFiles,
     nodeExecutable,
     npmExecutable,
-    ['dev', 'optional'],
+    PACKAGE_SMOKE_CONSUMER_PROFILES.core,
     npmMajor,
   );
   prepareConsumer(
@@ -6269,7 +6368,7 @@ export function preparePackageSmokeWorkspace(options: {
     expectedFiles,
     nodeExecutable,
     npmExecutable,
-    ['optional'],
+    PACKAGE_SMOKE_CONSUMER_PROFILES.charts,
     npmMajor,
   );
   prepareConsumer(
@@ -6281,7 +6380,7 @@ export function preparePackageSmokeWorkspace(options: {
     expectedFiles,
     nodeExecutable,
     npmExecutable,
-    [],
+    PACKAGE_SMOKE_CONSUMER_PROFILES.full,
     npmMajor,
   );
   writeFileSync(join(workspace, NETWORK_GUARD_FILENAME), NETWORK_AND_WRITE_GUARD, {
@@ -6371,7 +6470,17 @@ export function preparePackageSmokeWorkspace(options: {
   }
 }
 
-export function executePackageSmokeWorkspace(options: {
+export function preparePackageSmokeWorkspace(options: {
+  readonly workspace: string;
+  readonly nodeExecutable?: string;
+  readonly npmExecutable?: string;
+}): PackageSmokePhaseSuccessOutput {
+  return withPackageSmokeCommandRuntime(
+    () => preparePackageSmokeWorkspaceWithinCommandRuntime(options),
+  );
+}
+
+function executePackageSmokeWorkspaceWithinCommandRuntime(options: {
   readonly workspace: string;
   readonly expectedStateDigest: string;
   readonly nodeExecutable?: string;
@@ -6431,6 +6540,16 @@ export function executePackageSmokeWorkspace(options: {
     );
   }
   return phaseOutput('execute', 'passed', state, options.expectedStateDigest);
+}
+
+export function executePackageSmokeWorkspace(options: {
+  readonly workspace: string;
+  readonly expectedStateDigest: string;
+  readonly nodeExecutable?: string;
+}): PackageSmokePhaseSuccessOutput {
+  return withPackageSmokeCommandRuntime(
+    () => executePackageSmokeWorkspaceWithinCommandRuntime(options),
+  );
 }
 
 function runMain(): void {

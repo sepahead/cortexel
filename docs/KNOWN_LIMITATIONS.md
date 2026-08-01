@@ -158,6 +158,24 @@ The machine-readable state of every release gate is in
   canonical sidecar described above. Structural validity is not a tamper-verification claim,
   and detached-bundle integrity remains unverified.
 
+- **The legacy corpus knowledge graph is an experimental inspection view, not a stable
+  evidence artifact.** `corpus.knowledge_graph` validates bounded element-local typed
+  references, advisory epistemic records, stable caller-supplied assertion ids, and
+  discriminated uncalibrated scores, but the legacy envelope has no closed top-level
+  evidence-record inventory that can resolve those references or authenticate a graph
+  snapshot. Its caller-supplied snapshot id is a cache namespace rather than a digest or
+  receipt. The `knowledge-graph-3d` React scene uses a force simulation and is not a
+  deterministic FigureRequest renderer; its geometry is schematic, cannot carry
+  quantitative distance meaning, and has no stable SVG/table artifact or detached
+  verifier. Required DOM companions improve operability but do not establish whole-view
+  accessibility, and a host that hides the honesty caption inside collapsed disclosure
+  does not satisfy Cortexel's visible-caption obligation. A future stable evidence-graph
+  capability must bind a closed evidence inventory, immutable snapshot digest, source
+  revision, stable multigraph assertions and score semantics, then emit a deterministic
+  2D SVG plus a complete canonical evidence table. Optional 3D may consume that same
+  accepted snapshot only as a powerless inspection view; it must not create or strengthen
+  evidence.
+
 - **OutputAuthority is a plan-translation gate, not SVG or scientific certification.**
   Every stable source now declares a closed OutputAuthority evaluator. Immediately before
   serialization, the internal gate compares the final detached, deeply frozen plan with
@@ -364,6 +382,16 @@ The machine-readable state of every release gate is in
   one is introduced, it remains experimental until both real code and certification against
   an immutable NCP release exist — never against moving HEAD.
   *Gates: R049–R059.*
+- **No Engram integration is accepted yet.** Cortexel has not received a durable
+  cross-repository receipt binding an Engram commit, Cortexel package bytes, a closed
+  evidence-graph snapshot, prepare/inspect/execute state, Python wheelhouse authority,
+  result receipt, recovery history, and rendered artifact. Engram must supply element
+  evidence arrays, stable assertion ids, discriminated scores, a closed evidence-record
+  inventory and immutable snapshot identity; Cortexel must never synthesize those from
+  entity ids. Any UI integration must keep the bound honesty caption visibly expanded
+  adjacent to the graph. Until clean-checkout joint verification passes without ambient
+  credentials or package configuration, source compatibility and a legacy adapter do not
+  constitute integration evidence.
 - **Legacy connection model semantics remain a host-authored source claim.** The
   legacy `core/nest` connection graph, weight/delay matrix, delay-distribution,
   and SceneData adapter paths now require complete synapse-model rows and an
@@ -384,28 +412,209 @@ The machine-readable state of every release gate is in
   legacy boundary is separate from the unimplemented FigureRequestV1 NEST
   connection adapter described above, and neither has been certified against the
   pinned real-NEST oracle.
-- **The official NEST v3.10 source denominator is closed; visualization coverage is
-  still zero.**
+- **The complete official NEST v3.10 PyNEST example source tree and selected
+  documentation source scopes are closed; build and visualization denominators
+  remain open.**
   `docs/audit/nest-example-coverage.v1.json` pins NEST v3.10 commit
   `acca9704da248750219a027db99fec6cd1f9052a`, its root tree, documentation
   index, exact default runner and CMake orchestration context. The separately
   digest-bound canonical source artifact closes 112 Python paths (109 regular
   bodies and three orchestration aliases), 98 canonical entrypoint bodies, 92
   definition-only default-runner targets and twelve checked-in PNG/GIF/SVG
-  assets. Its semantic SHA-256 digest binds the pinned Git SHA-1 object identities;
-  it does not independently rehash every source blob. It reads Git objects without
-  importing or executing upstream Python. Documentation references remain selector
-  evidence rather than invented invocations, and runner target definitions remain
-  definitions rather than runtime receipts. The inventory has not classified
-  plotting callsites, figures, panels,
+  assets. The pinned `pynest/examples` tree contains 162 leaves: those 124 rows plus
+  38 auxiliary inputs, documents, and scripts carrying closed structural roles.
+  Every leaf row binds its path bytes, Git mode and blob SHA-1, independently
+  recomputed content SHA-256 and byte length; the semantic digest commits to all of
+  those rows. The auxiliary roles do not classify visualization semantics or close
+  runtime dependencies, and the byte binding is not an independent transport,
+  toolchain, source-execution, or availability receipt. A separate canonical
+  selected-source artifact binds the exact path bytes, Git mode, Git blob SHA-1,
+  content SHA-256 and byte length for 784 unique blobs: all 473
+  `doc/htmldoc` leaves, all 29 public-module-scan PyNEST Python files, all 278
+  direct model/kernel header candidates, and the enumerated build-context files
+  (four of which are outside the preceding scopes). Those are explicit selected
+  scopes, not all Sphinx/CMake build inputs or all possible visualization
+  definitions. Within them, the artifact classifies 146 `BeginUserDocs` blocks,
+  50 unverified historical notebook PNG candidates (38
+  plot-like and twelve formula renders), eighteen active documentation-script
+  figure definitions with seventeen active literal saves, four authored diagram
+  directives in three RST sources, and four public visualization modules. The
+  source scripts use relative save targets whose Python resolution depends on an
+  execution working directory that this source-only audit does not bind; their
+  resolved targets and target presence are therefore not assessed, and no save is
+  equated with a checked-in asset. The `conn_3d` source contains active plotting
+  helpers, but its active top-level figure remains empty because all branch-render
+  invocations and the save call are commented, so that candidate is excluded.
+  Known inline RST plotting recipes, two figure directives inside UserDocs
+  blocks, generated UserDocs/API RST, non-Python files admitted by Sphinx-Gallery
+  copy rules, raw-HTML/video surfaces and remote images are outside the explicit
+  reviewed visualization classifiers. The 107 figure/image and 53 math counts
+  are lexical directive-line counts over static RST; target resolution,
+  reachability and build inclusion are unassessed. Notebook output classification
+  is PNG-only; 12 `text/latex`, 54 `text/plain` and 19 stream outputs are known
+  but not treated as visual-output candidates. Both inventories read Git objects without importing or executing
+  upstream Python. Documentation
+  references remain selector evidence rather than invented invocations, runner
+  target definitions remain definitions rather than runtime receipts, and stored
+  notebook/media bytes remain source assets rather than successful executions.
+  The pinned `conf.py` bytes configure gallery execution with the literal string
+  `"False"` and notebook execution as `"never"`; the inventory did not invoke Sphinx
+  and therefore did not witness those settings controlling a build. `conf.py` may
+  still download and `git apply` an ambient `patch_url`; its recommended
+  requirements contain ranges and unconstrained names rather than a build lock,
+  while external Sphinx,
+  intersphinx, MathJax, PlantUML, Graphviz and Mermaid dependencies are not closed.
+  Network isolation, dependency resolution, complete build-input closure,
+  source-mutation exclusion, acquisition-toolchain reproducibility and
+  reproducible documentation-build authority are therefore not established. The
+  example-source generator performs one blobless structural Git fetch for the pinned
+  commit and trees. It alone pins that initial fetch to Git's documented HTTP/1.1
+  mode as a reliability and transport-negotiation control, not an authenticity
+  boundary; the documentation generator does not make a transport-version claim.
+  Both generators derive their exact tree-selected references before removing the
+  remote, partial-clone configuration, and checked acquisition sidecars, and they
+  prove an exact 137-object commit/tree-only closure before selected-blob import.
+  The example reference set contains 160 unique identities: 159 span all 162
+  example-tree leaves, while one disjoint identity is the external documentation
+  index; four SONATA JSON paths intentionally share one exact blob.
+  A separate shared fixed-host raw-HTTPS boundary retrieves the exact 160 or 784
+  paths with no redirect, proxy, authentication, cookie, or content-coding surface.
+  Exact producer limits are concurrency four, four attempts, a 90-second nonempty-body
+  idle deadline, a five-minute absolute request deadline, and a 15-minute global
+  deadline. Application-body/event limits are bounded, but they are not aggregate
+  header, TLS, DNS, socket/kernel, or hostile wall-clock containment, and event-loop
+  timers cannot preempt synchronous work or a stalled event loop. Each response must
+  reproduce its tree-selected canonical Git blob SHA-1 before exclusive mode-0600
+  staging. No upstream object read can trigger a lazy fetch after network authority
+  is removed.
+  Every Git command is launched by an exact staged supported Node runtime against
+  either canonical protected `/usr/bin/git` or an explicitly acquired exact Git
+  executable, with copied bounded binary input, bounded output/time/status, a closed
+  environment and the reviewed live guardian. HOME must be canonical root-owned
+  `/dev/null` or an empty current-UID mode-0700 directory with the reviewed ACL
+  profile; its identity and emptiness are revalidated after every command, including
+  command failures. This does not close Git's compiled helper or dynamic-library
+  dependency graph, create a retained toolchain/execution receipt, or contain a
+  malicious same-UID process that deliberately escapes the guarded process group.
+  Git exposes no hostile-server input-byte quota for those transport/`index-pack`
+  phases; strict containment requires an external quota/sandbox or custom transport.
+  The
+  selected-source generator initializes a worktree-free blobless partial
+  repository under a
+  current-user-owned temporary root whose permission and special bits are exactly
+  0700 and whose path and descriptor carry either no extended ACL or only Darwin's
+  reviewed deny-only form. Real and effective UIDs must agree. Its resolved ancestor
+  chain must be root- or current-UID-owned, satisfy that same ACL policy, and use
+  sticky entry protection wherever group/other write is present; this excludes
+  ordinary different-UID parent-entry replacement. Darwin uses its native
+  extended-ACL API and admits only the canonical single
+  `group:everyone deny delete` restriction;
+  every allow entry, inheritance flag, additional entry, or unrecognized
+  serialization fails closed. This does not establish filesystem implementation or
+  locality. On Linux, native `libacl` is required on the reviewed ext-family or
+  tmpfs VFS-type allowlist, listed alternate ACL namespaces are rejected
+  separately, and directory default-ACL inspection requires a mounted, readable
+  `/proc/self/fd` whose resolved entry still matches the open descriptor. Missing,
+  unreadable, or mismatched procfs authority fails closed. Linux VFS types with
+  distinct network, stacked, unknown,
+  unsupported, or indeterminate ACL models fail closed, but filesystem magic does
+  not establish backing-device locality or exclude lower-layer stacking. These
+  repeated observations do not establish containment against root or
+  DAC/ownership-bypassing capabilities (including `CAP_FOWNER`), mount-namespace
+  changes, or another process with the current UID during or after
+  acquisition or publication. Additional VFS types require their own reviewed
+  profile and native controls. The ACL helper also requires an OS-administered
+  `/usr/bin/python3` on macOS or Linux. The helper source itself is opened as one
+  bounded no-follow/nonblocking regular file, must match its pinned SHA-256, is
+  executed from those exact copied bytes through stdin, and is rechecked by path,
+  descriptor, bytes, and digest after every run. Linux pathname subjects are opened
+  nonblocking and special files fail closed. The interpreter's absolute `-I -B -S`
+  invocation and closed environment remove ambient `PATH`, user-site, and
+  startup-hook selection, but its version and bytes are not bound by this source
+  inventory; replacement by the trusted OS/root authority remains outside the
+  evidence. The
+  initial blobless Git smart-HTTPS fetch receives
+  a minimal environment and an empty controlled home, excluding ambient Git
+  configuration, `.netrc`, credential helpers, proxies, tracing and exported
+  secrets. After the pinned commit and complete tree closure select the exact 784
+  path/blob identities, the generator removes the Git remote, partial-clone
+  configuration, and checked promisor and reverse-index sidecars. It rejects checkout, sparse,
+  temporary-pack and network-authority residue and requires the local object
+  database to contain exactly the pinned commit plus 136 unique tree objects.
+  It then requests only those selected paths from the fixed
+  `raw.githubusercontent.com` owner/repository/commit namespace over direct TLS,
+  with no redirect, proxy, authentication, cookie or content-coding surface and
+  with bounded concurrency, attempts, idle/absolute/global time and per-blob,
+  successful-total and application-received response-body bytes. This is not a
+  transport-wire-byte quota. GitHub Raw is treated only as an untrusted
+  byte transport: every complete response must reproduce the selected Git blob
+  SHA-1 before it is staged under a current-UID mode-0700 directory as a numeric
+  mode-0600 file. One positional
+  `git hash-object -w --no-filters -- <784 reviewed staged path arguments>`
+  invocation must independently reproduce all identities in order with exact stdout
+  and empty stderr. Staging is removed,
+  lazy fetch remains disabled, every pack is verified, every admitted object is
+  batch-read and independently rehashed from its canonical Git type/length/content
+  preimage, and the final object set must be exactly the 137 structural objects plus
+  the 784 unique selected blobs. A SHA-256 aggregate additionally seals that complete
+  content set across each repository-state snapshot.
+  The builder then rereads, parses, Git-SHA-1-verifies and independently
+  SHA-256-rehashes every admitted blob, and the generated inventory must pass its
+  reviewed pinned semantic validator before any bytes escape. In `--output` mode,
+  publication is exclusive, no-clobber, descriptor-bound, file/directory-fsynced
+  and repeatedly revalidated under primitive 4-KiB output-path and 16-MiB UTF-8
+  content bounds; stdout mode is an ordinary stream. Successful
+  `fsync` calls do not establish persistence across power loss, backing-device
+  behavior, or storage-stack semantics, and the admitted Linux profile includes
+  tmpfs. File publication remains a same-UID-mutable filesystem boundary. That
+  acquisition procedure
+  is not itself a toolchain-bound reproducibility or availability receipt. Public
+  GitHub availability is external, and stock Git does not expose an input-byte
+  quota for the initial commit/tree fetch and its `index-pack` work; strict
+  hostile-server disk containment requires an external quota or sandbox. The raw
+  boundary has exact application-body budgets but does not impose a complete
+  transport-wire-byte quota.
+  Neither artifact inventories
+  built figures, panels,
   overlays, tables, animations, interactive surfaces, stdout reports or explicit
   no-output results. Checked-in assets are not assumed to be emitted outputs.
   Mapping, packaged implementation, rendering, upstream execution and scientific
-  comparison therefore remain independently `not_assessed`, `not_generated` or
+  comparison therefore remain independently `not_assessed`, `not_established` or
   `not_run`; every visualization count is zero and the coverage claim is `none`.
   This mutable audit evidence is outside `contract/`, generated catalogs, the
   package manifest and build identities; `bun run check:ledger` validates the
-  exact artifact bytes, semantic identities, ledger schema and no-transfer states.
+  exact bytes of both artifacts, their semantic identities, the ledger schema and
+  all no-transfer states.
+
+- **The stable catalog does not yet cover every visualization family used by the
+  pinned official examples.** Source inspection of all 109 regular Python bodies in
+  the exact NEST v3.10 example tree finds ordinary line, scatter, histogram, bar,
+  error-bar, filled-band, image/matrix/`pcolormesh`, 2D/3D spatial,
+  multipanel/colorbar/inset, and frame-to-GIF compositions in addition to NEST's
+  raster, voltage, spatial, and pydot helpers. The stable catalog can represent
+  selected individual rasters, traces, distributions, matrices, 2D positions and
+  phase-plane vector fields, trajectories, nullclines, and fixed points, but it has
+  no executable NEST adapters for multimeters, weight
+  recorders, `GetConnections`, or `GetPosition`; no generic response-surface,
+  image-state, error-band, or panel/bundle contract; and no 3D spatial or animation
+  compiler. Official
+  [`if_curve.py`](https://github.com/nest/nest-simulator/blob/acca9704da248750219a027db99fec6cd1f9052a/pynest/examples/if_curve.py)
+  produces a two-dimensional response matrix rather than the current one-dimensional
+  response-curve shape, while
+  [`hh_phaseplane.py`](https://github.com/nest/nest-simulator/blob/acca9704da248750219a027db99fec6cd1f9052a/pynest/examples/hh_phaseplane.py)
+  uses nullclines and a trajectory that stable `neuro.phase_plane` can structurally
+  encode. That representability is not an executable NEST adapter, an authenticated
+  derivation, or executed parity with the pinned example. Weight-matrix heat maps,
+  3D spatial views, GIF generation,
+  and multipanel progress views are likewise visible in the pinned
+  [`plot_weight_matrices.py`](https://github.com/nest/nest-simulator/blob/acca9704da248750219a027db99fec6cd1f9052a/pynest/examples/plot_weight_matrices.py),
+  [`test_3d.py`](https://github.com/nest/nest-simulator/blob/acca9704da248750219a027db99fec6cd1f9052a/pynest/examples/spatial/test_3d.py),
+  [`generate_gif.py`](https://github.com/nest/nest-simulator/blob/acca9704da248750219a027db99fec6cd1f9052a/pynest/examples/pong/generate_gif.py), and
+  [`plot_progress.py`](https://github.com/nest/nest-simulator/blob/acca9704da248750219a027db99fec6cd1f9052a/pynest/examples/sudoku/plot_progress.py).
+  These are semantic gaps rather than style differences. Broad caller-owned display
+  contracts may eventually make every bounded official output representable, but each
+  source-specific adapter must earn its own authority, execution, parity, and scientific
+  evidence. The current audit therefore keeps every downstream numerator at zero.
 
 ## Packaging and release
 
@@ -432,10 +641,39 @@ The machine-readable state of every release gate is in
   clean-room reproducible release receipt exists. `dist/` also remains committed for
   git-dependency consumers rather than being untracked in this change. *Gates:
   R099–R107 remain governed by their evidence-ledger receipts.*
+- **The stable workflow is agent-oriented but not yet frictionless or Python-complete.**
+  The offline Node CLI can catalog/describe skills, validate and render one request, and
+  discover/adapt/render the one executable NEST spike-recorder source. It still requires
+  an installed Node package, has no `doctor`, project initializer, batch manifest,
+  bundle/sidecar writer, detached artifact verifier, PNG/PDF export, or producer-side
+  PyNEST capture helper. Usage errors are not yet one uniform versioned diagnostic
+  envelope with machine-actionable next steps. The separately packaged Python code is
+  an independent strict parser/canonicalizer and explicitly partial semantic reader; it
+  exposes no console command, renderer, NEST adapter, or full validity certificate.
+  A future `cortexel-nest` producer helper should run inside the scientist's PyNEST
+  environment and emit a versioned source-capture record, while rendering and detached
+  verification remain independent of PyNEST. TypeScript and Python must share a closed
+  conformance corpus rather than silently becoming two semantic authorities. Until the
+  packages are published and these paths exist, a source checkout remains part of setup.
 - **Package-smoke authority is not a hostile process sandbox.** Prepared-state v2
-  seals the exact Node executable and npm package tree, but not Node's dynamic
-  libraries, operating-system services, or the TypeScript harness runtime. On the
-  reviewed path, a live detached guardian is the sole process-group signal authority
+  seals the original source Node executable and npm package tree. Prepare and execute
+  each descriptor-acquire those exact Node bytes into one ephemeral, operation-scoped
+  private runtime; source and staged digests must equal the prepared digest, and both
+  authorities are re-bound around every command. Only the staged copy is used as the
+  launcher/control runtime and target executable. The prepared state retains neither
+  its pathname nor its acquisition record. Staging copies only bounded known
+  Homebrew-relative `libnode.<number>.dylib` companions, not a closed dynamic-library
+  dependency inventory, so this still does not bind Node's dynamic libraries,
+  operating-system services, or the TypeScript harness runtime. Ordinary child
+  commands have an exact 300,000 ms bound; only the three closed, sequential
+  cold-cache npm materializations (`core`, `charts`, and `full`) have the shared
+  reviewed-POSIX maximum of 900,000 ms each. These are per-command bounds, not an
+  aggregate phase deadline, network-availability guarantee, or hostile hard deadline.
+  No retry or caller-controlled timeout is admitted, and bound failures identify only
+  a fixed operation label plus the numeric bound. CI's 60-minute job timeout is an
+  outer operational cap; it does not cover the theoretical sum of every sequential
+  per-command maximum and is not a completion receipt. On the reviewed path,
+  a live detached guardian is the sole process-group signal authority
   and the supervisor owns its exclusive control lease. Worker completion and
   guardian-local failures trigger the guardian directly; bounds, handled
   cancellation, and supervisor death close the lease, whose EOF triggers the same
@@ -444,37 +682,58 @@ The machine-readable state of every release gate is in
   guardian exit, then only drains local pipes under a separate bound; neither it nor
   the outer caller signals or probes any numeric identity after the reap. The outer
   caller receives no PID/PGID and has no fallback.
+  Launcher, supervisor, and guardian bind one exact retained FIFO/socket lifetime
+  endpoint through stable `fstat` identity before READY and GO; a reused numeric fd is
+  not authority. The supervisor retains and rechecks its endpoint through the
+  guardian's canonical identity echo, then closes it once without retry.
+  Host-side expected-regular reads use POSIX `O_NOFOLLOW|O_NONBLOCK` before
+  descriptor type/identity proof, so a file-to-FIFO exchange cannot block at
+  `open`; reviewed directory opens additionally require `O_DIRECTORY`.
   This evidence is not an independent kernel receipt that every member was killed.
   Direct guardian death, `EPERM`/`ESRCH`, malformed protocol, or a retained pipe preventing EOF
   fails closed without a later numeric signal. Same-UID guardian discovery/signaling,
   deliberate re-grouping or detachment, inherited-pipe retention, and a
   credential/security-label transition can escape or defeat the group sweep and
-  require external cgroup/sandbox/VM containment.
+  require external cgroup/sandbox/VM containment. A target can also stop the complete
+  group. Because `SIGSTOP` is uncatchable, a stopped guardian cannot consume lease
+  EOF; retained descriptors can then keep the synchronous outer caller blocked beyond
+  both configured timeouts. Neither timeout is a hostile hard deadline.
   The prepared
   workspace's root, parent ancestry, modes, topology, and bytes are change-bound,
   but mode hardening is not a substitute for an externally enforced read-only
   mount against a hostile same-UID actor.
-- **Python package subprocess cleanup is group-bounded.** The macOS/Linux gate
-  requires a dedicated CPython 3.14.x host, default `SIGCHLD`, a single
-  kernel-visible thread, and a fresh
-  non-reaping `waitid(..., WNOWAIT)` child-ownership proof before its sole group
-  signal. It never interprets `ProcessLookupError` as proof of an unreaped zombie,
-  and it performs no numeric signal or `Popen.wait()` after an observation reports
-  `ECHILD`. Its sole raw `waitpid` is a one-way boundary: an exception is terminal,
-  with no retry, second wait, signal, or identity probe after the call begins. Linux
-  requires readable `/proc/self/task`; Darwin requires the supported
-  `libproc` `proc_taskinfo` ABI. Kqueue process readiness is not ownership evidence.
-  Pipe-drain selector failure falls back to direct readiness while the leader remains
-  unreaped; persistent readiness failure is retained and consumes the fixed cleanup
-  deadline before the one-way raw reap.
-  This prevents
-  the reviewed cleanup path from knowingly addressing a PID/PGID after its leader
-  identity was released; it is not an atomic defense against hostile same-process
-  native reaping or an unrelated signal handler racing the last proof. Descendants
-  that detach, regroup, or shed the caller's signal authority remain outside this
-  evidence and require external lifetime containment. Same-UID signaling of the
-  owner, owner death, and unsupported hosts likewise remain outside the boundary;
-  they fail closed where execution can still be controlled.
+- **Python package subprocess cleanup is group-bounded.** The macOS/Linux gate uses
+  a live session/process-group guardian and a non-leader worker that remains the
+  target's immediate parent. The supervisor controls cleanup only by closing an
+  exclusive lease. The guardian publishes a bounded nonce-bound status, then owns
+  the only group signal and self-addresses its own group while its live leader
+  identity still pins the PGID. The worker restores and unblocks
+  `INT`/`TERM`/`HUP` before target launch. Stdout/stderr are always piped; observed
+  bytes share a fixed budget until an error latches, then cleanup drains/discards
+  without claiming a total-throughput count. Capture controls retention. The supervisor
+  drains those pipes before disarming the `Popen` destructor and crossing one raw
+  guardian `waitpid`; it performs no numeric signal, process probe, or second wait
+  afterward. Default `SIGCHLD`, exact single-threaded Python/kernel authority, no active
+  trace/profile callback, and no callable Python signal handler outside the handled
+  cancellation set are preconditions. The supervisor temporarily blocks `SIGCHLD` plus
+  `INT`/`TERM`/`HUP`, restores the caller's exact mask, and the worker unblocks the target's
+  cancellation signals. External
+  reaping, missing/malformed status, direct guardian
+  loss, unexpected exit, and drain uncertainty fail closed without a numeric
+  fallback. Any descriptor-close exception is ambiguous and makes the standalone smoke
+  worker fail-stop with `_exit(70)`, relying on kernel teardown instead of retrying a
+  possibly reused descriptor number. The status-plus-`SIGKILL` observation is not an independent kernel receipt
+  that the guardian delivered the signal: a same-UID target could kill it after the
+  status write and before its self-sweep. This proves only the reviewed same-authority
+  group path. A same-UID target can kill the guardian, detach or regroup, retain
+  output or lease descriptors, stop the complete private group, change credentials or
+  security labels, or signal the supervisor. A stopped guardian cannot consume lease
+  EOF, so the final blocking `waitpid` is not a hostile hard deadline and can
+  hang until an external lifetime primitive resumes or removes the group. Hostile
+  same-process interference, abrupt owner death, kernel failure, and unsupported hosts
+  also remain
+  outside the boundary. Those capabilities require an external cgroup, sandbox, VM,
+  Job Object, or equivalent lifetime primitive.
 - **No package is published.** Nothing has been pushed to npm or PyPI, and no DOI has been
   minted. The npm/PyPI/CI badges in the README are inactive by design. *Gate:
   R108, R134–R155.*

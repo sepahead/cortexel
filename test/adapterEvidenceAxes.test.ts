@@ -8,6 +8,8 @@ import { ADAPTER_IMPLEMENTATIONS_V1 } from '../src/adapters/implementation-inven
 import * as nestPublicAdapter from '../src/adapters/nest/index.js';
 import * as nestRecorderImplementations from '../src/adapters/nest/recorders.js';
 import { lookupSkillCatalogEntry } from '../src/generated/catalog.js';
+import { canonicalDigest, canonicalize } from '../src/core/canonicalize.js';
+import { sha256Digest, utf8ByteLength } from '../src/core/sha256.js';
 import { validateLedger } from '../scripts/check-evidence-ledger.js';
 import {
   deriveAdapterCertificationRequirementV1,
@@ -17,7 +19,10 @@ import {
   resolveAdapterConformanceProfileV1,
 } from '../scripts/lib/adapter-conformance-profile.js';
 import { adapterSourceIdentityProblems } from '../scripts/lib/adapter-source-identity.js';
-import { validateNestExampleAudit } from '../scripts/lib/nest-example-audit.js';
+import {
+  nestExampleAuditSemanticDigest,
+  validateNestExampleAudit,
+} from '../scripts/lib/nest-example-audit.js';
 
 type JsonRecord = Record<string, any>;
 
@@ -665,18 +670,98 @@ describe('adapter certification requirement', () => {
 });
 
 describe('pinned NEST official-example coverage ledger', () => {
-  it('closes the source denominator without transferring visualization evidence', () => {
+  it('closes only the declared source scopes without transferring visualization evidence', () => {
     const schema = readJson('docs/audit/nest-example-coverage.schema.json');
     const source = readJson('docs/audit/nest-example-coverage.v1.json');
     const artifactRaw = readFileSync(
-      path.join(ROOT, 'docs/audit/nest-example-source-inventory.v1.json'),
+      path.join(ROOT, 'docs/audit/nest-example-source-inventory.v2.json'),
       'utf8',
     );
     const artifact = JSON.parse(artifactRaw);
-    const evidence = { value: artifact, rawUtf8: artifactRaw };
+    const historicalArtifactRaw = readFileSync(
+      path.join(ROOT, 'docs/audit/nest-example-source-inventory.v1.json'),
+      'utf8',
+    );
+    const historicalEvidence = {
+      value: JSON.parse(historicalArtifactRaw),
+      rawUtf8: historicalArtifactRaw,
+    };
+    const evidence = {
+      value: artifact,
+      rawUtf8: artifactRaw,
+      predecessor: historicalEvidence,
+    };
+    const documentationArtifactRaw = readFileSync(
+      path.join(ROOT, 'docs/audit/nest-documentation-source-inventory.v1.json'),
+      'utf8',
+    );
+    const documentationArtifact = JSON.parse(documentationArtifactRaw);
+    const documentationEvidence = {
+      value: documentationArtifact,
+      rawUtf8: documentationArtifactRaw,
+    };
 
-    expect(validateNestExampleAudit(source, schema, evidence)).toEqual([]);
-    expect(source.version).toBe('1.0');
+    expect(
+      validateNestExampleAudit(source, schema, evidence, documentationEvidence),
+    ).toEqual([]);
+    expect(validateNestExampleAudit(
+      source,
+      schema,
+      {
+        value: JSON.parse(historicalArtifactRaw),
+        rawUtf8: historicalArtifactRaw,
+        predecessor: historicalEvidence,
+      },
+      documentationEvidence,
+    )).toEqual(expect.arrayContaining([
+      expect.stringContaining('byte length does not match'),
+      expect.stringContaining('closed V2 identity'),
+    ]));
+    expect(validateNestExampleAudit(
+      source,
+      schema,
+      { value: artifact, rawUtf8: artifactRaw },
+      documentationEvidence,
+    )).toEqual(expect.arrayContaining([
+      expect.stringContaining('historical V1 predecessor artifact was not supplied'),
+    ]));
+    expect(validateNestExampleAudit(
+      source,
+      schema,
+      {
+        ...evidence,
+        predecessor: {
+          ...historicalEvidence,
+          rawUtf8: `${historicalArtifactRaw}\n`,
+        },
+      },
+      documentationEvidence,
+    )).toEqual(expect.arrayContaining([
+      expect.stringContaining('historical V1 artifact byte length drifted'),
+      expect.stringContaining('historical V1 artifact bytes drifted'),
+      expect.stringContaining('historical V1 artifact is not canonical JSON'),
+    ]));
+    const historicalSemanticDrift = structuredClone(historicalEvidence.value);
+    historicalSemanticDrift.protocolVersion = 0;
+    expect(validateNestExampleAudit(
+      source,
+      schema,
+      {
+        ...evidence,
+        predecessor: {
+          value: historicalSemanticDrift,
+          rawUtf8: historicalArtifactRaw,
+        },
+      },
+      documentationEvidence,
+    )).toEqual(expect.arrayContaining([
+      expect.stringContaining('historical V1 artifact is not canonical JSON'),
+      expect.stringContaining('historical V1 semantic identity drifted'),
+      expect.stringContaining(
+        'historical V1 digest does not bind its semantic projection',
+      ),
+    ]));
+    expect(source.version).toBe('1.1');
     expect(source.upstreamAuthority).toMatchObject({
       release: 'v3.10',
       commit: 'acca9704da248750219a027db99fec6cd1f9052a',
@@ -694,16 +779,37 @@ describe('pinned NEST official-example coverage ledger', () => {
     expect(source.sourceInventory).toMatchObject({
       state: 'complete',
       artifact: {
+        predecessor: {
+          path: 'docs/audit/nest-example-source-inventory.v1.json',
+          protocolVersion: 1,
+          inventoryDigest:
+            'sha256:cd59e82a8eb5af6d482d3042afdf91b0793865aef75843f5b10da6ee61ba3fe6',
+          artifactSha256:
+            'sha256:1d762db8c60e174f42371308093c0d091937bde2299ed8cfce4217c9e9179c1a',
+          evidenceTransfer: 'none',
+        },
+        producerProfile: {
+          schema: 'cortexel-source-inventory-acquisition-producer-profile.v1',
+          producer: 'scripts/generate-nest-example-source-inventory.ts',
+          profile:
+            'cortexel.nest-example.git-sha1-blobless-structural-137-example-leaves-162-example-unique-blobs-159-acquired-unique-blobs-160-raw-https-selected-reviewed-posix-offline-batch-canonical-object-rehash.v6',
+          harnessRevision: 6,
+          executionEvidence:
+            'profile_declaration_not_independent_execution_receipt',
+        },
         inventoryDigest:
-          'sha256:cd59e82a8eb5af6d482d3042afdf91b0793865aef75843f5b10da6ee61ba3fe6',
-        artifactByteLength: 196576,
+          'sha256:1f039d9b4616ffa2de0c2acb6ca4ef9eaf473185b044a66bd8e6bbea27b1d216',
+        artifactByteLength: 228211,
         artifactSha256:
-          'sha256:1d762db8c60e174f42371308093c0d091937bde2299ed8cfce4217c9e9179c1a',
+          'sha256:a8a7da4c62170a5405da3662dbef2602891c87cadbadd7f897196be6966928cd',
       },
       counts: {
         canonicalEntrypointCount: 98,
         runnerTargetProfileCount: 92,
         checkedInVisualAssetCount: 12,
+        exampleTreeLeafCount: 162,
+        uniqueExampleTreeGitBlobCount: 159,
+        auxiliaryLeafCount: 38,
       },
     });
     expect(artifact.summary).toMatchObject({
@@ -720,6 +826,9 @@ describe('pinned NEST official-example coverage ledger', () => {
         gif: 2,
         svg: 1,
       },
+      exampleTreeLeafCount: 162,
+      uniqueExampleTreeGitBlobCount: 159,
+      auxiliaryLeafCount: 38,
     });
     expect(artifact.invocationProfiles).toHaveLength(92);
     expect(
@@ -727,8 +836,74 @@ describe('pinned NEST official-example coverage ledger', () => {
         ({ profile }: JsonRecord) => profile === 'runner_agg_default',
       ),
     ).toBe(true);
+    expect(source.documentationSelectedSourceInventory).toMatchObject({
+      state: 'complete',
+      artifact: {
+        producerProfile: {
+          schema: 'cortexel-source-inventory-acquisition-producer-profile.v1',
+          producer: 'scripts/generate-nest-documentation-source-inventory.ts',
+          profile:
+            'cortexel.nest-documentation.git-sha1-blobless-structural-137-raw-https-selected-784-reviewed-posix-opaque-offline-object-closure-batch-canonical-object-rehash.v4',
+          harnessRevision: 4,
+          executionEvidence:
+            'profile_declaration_not_independent_execution_receipt',
+        },
+        inventoryDigest:
+          'sha256:bbd9c3b77aac4d6ee64d7b185a5acd85eabeb40c621114126ff210bd7150fcc8',
+        artifactByteLength: 493939,
+        artifactSha256:
+          'sha256:d533a2f96046b484f192ed88ab70fa31d5620d48ebd647c72ec3008998f8f77c',
+      },
+      counts: {
+        uniqueBoundBlobCount: 784,
+        userdocsBlockCount: 146,
+        notebookStoredPngCount: 50,
+        notebookFormulaPngCount: 12,
+        notebookTextLatexDataCount: 12,
+        notebookTextPlainDataCount: 54,
+        notebookStreamOutputCount: 19,
+        userdocsFigureDirectiveCount: 2,
+        scriptFigureFamilyDefinitionCount: 18,
+        scriptActiveSaveCallCount: 17,
+        authoredDiagramSourceCount: 3,
+        authoredDiagramDirectiveCount: 4,
+        publicVisualizationModuleDefinitionCount: 4,
+      },
+    });
+    expect(documentationArtifact.summary).toMatchObject({
+      documentationTreeLeafCount: 473,
+      documentationRstCount: 142,
+      documentationNotebookCount: 8,
+      documentationPythonCount: 13,
+      documentationMediaCount: 282,
+      documentationSupportCount: 28,
+      pynestPublicModuleCandidateCount: 29,
+      userdocsHeaderCandidateCount: 278,
+      userdocsBlockCount: 146,
+      uniqueBoundBlobCount: 784,
+      notebookPngCount: 50,
+      notebookPlotPngCount: 38,
+      notebookFormulaPngCount: 12,
+      notebookTextLatexDataCount: 12,
+      notebookTextPlainDataCount: 54,
+      notebookStreamOutputCount: 19,
+      userdocsFigureDirectiveCount: 2,
+      scriptFigureFamilyCount: 18,
+      scriptActiveSaveCount: 17,
+      authoredDiagramSourceCount: 3,
+      authoredDiagramDirectiveCount: 4,
+      publicVisualizationModuleCount: 4,
+      admittedExecutionBoundVisualOutputCount: 0,
+      coverageClaim: 'none',
+    });
+    expect(documentationArtifact.sourceBlobs).toHaveLength(784);
+    expect(documentationArtifact.userdocsBlocks).toHaveLength(146);
+    expect(documentationArtifact.notebookPngAssets).toHaveLength(50);
+    expect(documentationArtifact.documentationScriptFigures).toHaveLength(18);
+    expect(documentationArtifact.authoredDiagramDirectives).toHaveLength(4);
+    expect(documentationArtifact.publicVisualizationModules).toHaveLength(4);
     expect(source.summary).toMatchObject({
-      inventoriedVisualOutputCount: 0,
+      admittedExecutionBoundVisualOutputCount: 0,
       mappedVisualOutputCount: 0,
       executableVisualOutputCount: 0,
       renderedVisualOutputCount: 0,
@@ -742,18 +917,112 @@ describe('pinned NEST official-example coverage ledger', () => {
       ),
     ).toEqual({
       upstream_source_inventory: 'complete',
-      visual_output_inventory: 'not_generated',
+      documentation_selected_source_inventory: 'complete',
+      execution_bound_visual_output_inventory: 'not_established',
       stable_contract_mapping: 'not_assessed',
       packaged_adapter_implementation: 'not_assessed',
-      renderer_coverage: 'not_assessed',
+      renderer_parity: 'not_assessed',
       upstream_execution: 'not_run',
       scientific_certification: 'not_run',
     });
 
+    const scientificCertificationOverclaim = structuredClone(source);
+    scientificCertificationOverclaim.description =
+      'Scientifically certified complete coverage of every official NEST visualization.';
+    scientificCertificationOverclaim.sourceInventory.limitations =
+      scientificCertificationOverclaim.sourceInventory.limitations.map(
+        (_: unknown, index: number) =>
+          `Certification overclaim ${index}: source inventory proves scientific correctness.`,
+      );
+    scientificCertificationOverclaim.sourceInventory.notes =
+      'Source closure certifies every downstream adapter and rendered figure.';
+    scientificCertificationOverclaim.documentationSelectedSourceInventory.limitations =
+      scientificCertificationOverclaim.documentationSelectedSourceInventory.limitations.map(
+        (_: unknown, index: number) =>
+          `Certification overclaim ${index}: documentation source proves every rendered output.`,
+      );
+    scientificCertificationOverclaim.documentationSelectedSourceInventory.notes =
+      'Documentation source closure is a reproducible build and scientific receipt.';
+    scientificCertificationOverclaim.evidenceAxes =
+      scientificCertificationOverclaim.evidenceAxes.map((axis: JsonRecord) => ({
+        ...axis,
+        notes: 'This axis is scientifically certified despite its machine state.',
+      }));
+    scientificCertificationOverclaim.knownUnsupportedInterfaces =
+      scientificCertificationOverclaim.knownUnsupportedInterfaces.map(
+        (entry: JsonRecord) => ({
+          ...entry,
+          notes: 'This unsupported interface is fully implemented and certified.',
+        }),
+      );
+    scientificCertificationOverclaim.summary.notes =
+      'Cortexel has complete scientifically certified NEST visualization coverage.';
+    const validateShape = new Ajv2020({
+      allErrors: true,
+      strict: true,
+      validateSchema: true,
+    }).compile(schema);
+    expect(
+      validateShape(scientificCertificationOverclaim),
+      JSON.stringify(validateShape.errors),
+    ).toBe(true);
+    expect(
+      validateNestExampleAudit(
+        scientificCertificationOverclaim,
+        schema,
+        evidence,
+        documentationEvidence,
+      ),
+    ).toEqual(expect.arrayContaining([
+      expect.stringContaining('semantic narrative binding drifted'),
+    ]));
+
+    expect(
+      validateNestExampleAudit(
+        source,
+        {},
+        evidence,
+        documentationEvidence,
+      ),
+    ).toEqual(expect.arrayContaining([
+      expect.stringContaining('schema semantic digest drifted'),
+    ]));
+
+    const rewrittenSchema = structuredClone(schema);
+    scientificCertificationOverclaim.semanticBinding.semanticDigest =
+      nestExampleAuditSemanticDigest(scientificCertificationOverclaim);
+    rewrittenSchema.properties.semanticBinding.const.semanticDigest =
+      scientificCertificationOverclaim.semanticBinding.semanticDigest;
+    const validateRewrittenShape = new Ajv2020({
+      allErrors: true,
+      strict: true,
+      validateSchema: true,
+    }).compile(rewrittenSchema);
+    expect(
+      validateRewrittenShape(scientificCertificationOverclaim),
+      JSON.stringify(validateRewrittenShape.errors),
+    ).toBe(true);
+    expect(
+      validateNestExampleAudit(
+        scientificCertificationOverclaim,
+        rewrittenSchema,
+        evidence,
+        documentationEvidence,
+      ),
+    ).toEqual(expect.arrayContaining([
+      expect.stringContaining('semantic-binding metadata drifted'),
+      expect.stringContaining('semantic narrative binding drifted'),
+    ]));
+
     const movingCommit = structuredClone(source);
     movingCommit.upstreamAuthority.commit = 'main';
     expect(
-      validateNestExampleAudit(movingCommit, schema, evidence).length,
+      validateNestExampleAudit(
+        movingCommit,
+        schema,
+        evidence,
+        documentationEvidence,
+      ).length,
     ).toBeGreaterThan(0);
 
     const missingArtifact = validateNestExampleAudit(source, schema);
@@ -764,25 +1033,58 @@ describe('pinned NEST official-example coverage ledger', () => {
     const falsePathCount = structuredClone(source);
     falsePathCount.sourceInventory.counts.regularPythonFileCount = 110;
     expect(
-      validateNestExampleAudit(falsePathCount, schema, evidence).length,
+      validateNestExampleAudit(
+        falsePathCount,
+        schema,
+        evidence,
+        documentationEvidence,
+      ).length,
     ).toBeGreaterThan(0);
 
     const falseLayerState = structuredClone(source);
     falseLayerState.evidenceAxes.find(
-      ({ id }: JsonRecord) => id === 'visual_output_inventory',
+      ({ id }: JsonRecord) => id === 'execution_bound_visual_output_inventory',
     ).state = 'inventoried';
     expect(
-      validateNestExampleAudit(falseLayerState, schema, evidence),
+      validateNestExampleAudit(
+        falseLayerState,
+        schema,
+        evidence,
+        documentationEvidence,
+      ),
     ).toEqual(expect.arrayContaining([
       expect.stringContaining('transferred evidence'),
     ]));
 
+    const predecessorEvidenceTransfer = structuredClone(source);
+    predecessorEvidenceTransfer.sourceInventory.artifact.predecessor
+      .evidenceTransfer = 'all';
+    expect(validateShape(predecessorEvidenceTransfer)).toBe(false);
+    expect(validateShape.errors?.some(
+      ({ instancePath }) => instancePath ===
+        '/sourceInventory/artifact/predecessor',
+    )).toBe(true);
+
     const whitespaceDrift = validateNestExampleAudit(source, schema, {
       value: artifact,
       rawUtf8: `${artifactRaw}\n`,
-    });
+    }, documentationEvidence);
     expect(whitespaceDrift).toEqual(expect.arrayContaining([
       expect.stringContaining('bytes do not match'),
+      expect.stringContaining('not the exact canonical serialization'),
+    ]));
+
+    const documentationWhitespaceDrift = validateNestExampleAudit(
+      source,
+      schema,
+      evidence,
+      {
+        value: documentationArtifact,
+        rawUtf8: `${documentationArtifactRaw}\n`,
+      },
+    );
+    expect(documentationWhitespaceDrift).toEqual(expect.arrayContaining([
+      expect.stringContaining('documentation source artifact bytes do not match'),
       expect.stringContaining('not the exact canonical serialization'),
     ]));
 
@@ -792,7 +1094,7 @@ describe('pinned NEST official-example coverage ledger', () => {
       validateNestExampleAudit(source, schema, {
         value: semanticDrift,
         rawUtf8: artifactRaw,
-      }),
+      }, documentationEvidence),
     ).toEqual(expect.arrayContaining([
       expect.stringContaining('digest does not bind'),
       expect.stringContaining('mismatched identity'),
@@ -801,25 +1103,128 @@ describe('pinned NEST official-example coverage ledger', () => {
     const inventedOutputRows = structuredClone(source);
     inventedOutputRows.outputInventory = { state: 'complete', rows: [] };
     expect(
-      validateNestExampleAudit(inventedOutputRows, schema, evidence).length,
+      validateNestExampleAudit(
+        inventedOutputRows,
+        schema,
+        evidence,
+        documentationEvidence,
+      ).length,
     ).toBeGreaterThan(0);
 
     const prematureCoverageClaim = structuredClone(source);
     prematureCoverageClaim.summary.coverageClaim = 'complete';
     expect(
-      validateNestExampleAudit(prematureCoverageClaim, schema, evidence).length,
+      validateNestExampleAudit(
+        prematureCoverageClaim,
+        schema,
+        evidence,
+        documentationEvidence,
+      ).length,
     ).toBeGreaterThan(0);
 
     const alteredArtifactAuthority = structuredClone(source);
     alteredArtifactAuthority.sourceInventory.artifact.artifactSha256 =
       `sha256:${'0'.repeat(64)}`;
     expect(
-      validateNestExampleAudit(alteredArtifactAuthority, schema, evidence),
+      validateNestExampleAudit(
+        alteredArtifactAuthority,
+        schema,
+        evidence,
+        documentationEvidence,
+      ),
     ).toEqual(
       expect.arrayContaining([
         expect.stringContaining('source-artifact metadata drifted'),
       ]),
     );
+
+    const alteredDocumentationArtifactAuthority = structuredClone(source);
+    alteredDocumentationArtifactAuthority.documentationSelectedSourceInventory
+      .artifact.artifactSha256 = `sha256:${'0'.repeat(64)}`;
+    expect(
+      validateNestExampleAudit(
+        alteredDocumentationArtifactAuthority,
+        schema,
+        evidence,
+        documentationEvidence,
+      ),
+    ).toEqual(expect.arrayContaining([
+      expect.stringContaining('documentation source-artifact metadata drifted'),
+    ]));
+
+    const coordinatedDocumentationOverclaim = structuredClone(documentationArtifact);
+    coordinatedDocumentationOverclaim.buildBoundary.reproducibleBuildReceipt = 'pass';
+    const {
+      inventoryDigest: _discardedDocumentationDigest,
+      ...coordinatedDocumentationCore
+    } = coordinatedDocumentationOverclaim;
+    coordinatedDocumentationOverclaim.inventoryDigest = canonicalDigest({
+      domain:
+        'cortexel-nest-documentation-source-inventory.rfc8785-sha256.v1',
+      inventory: coordinatedDocumentationCore,
+    });
+    const coordinatedDocumentationRaw = canonicalize(
+      coordinatedDocumentationOverclaim,
+    );
+    const coordinatedAudit = structuredClone(source);
+    const coordinatedMetadata =
+      coordinatedAudit.documentationSelectedSourceInventory.artifact;
+    coordinatedMetadata.inventoryDigest =
+      coordinatedDocumentationOverclaim.inventoryDigest;
+    coordinatedMetadata.artifactByteLength = utf8ByteLength(
+      coordinatedDocumentationRaw,
+    );
+    coordinatedMetadata.artifactSha256 = sha256Digest(
+      coordinatedDocumentationRaw,
+    );
+    coordinatedAudit.semanticBinding.semanticDigest =
+      nestExampleAuditSemanticDigest(coordinatedAudit);
+    const coordinatedSchema = structuredClone(schema);
+    const coordinatedSchemaArtifact = coordinatedSchema.properties
+      .documentationSelectedSourceInventory.properties.artifact.properties;
+    coordinatedSchemaArtifact.inventoryDigest.const =
+      coordinatedMetadata.inventoryDigest;
+    coordinatedSchemaArtifact.artifactByteLength.const =
+      coordinatedMetadata.artifactByteLength;
+    coordinatedSchemaArtifact.artifactSha256.const =
+      coordinatedMetadata.artifactSha256;
+    coordinatedSchema.properties.semanticBinding.const.semanticDigest =
+      coordinatedAudit.semanticBinding.semanticDigest;
+    expect(
+      validateNestExampleAudit(
+        coordinatedAudit,
+        coordinatedSchema,
+        evidence,
+        {
+          value: coordinatedDocumentationOverclaim,
+          rawUtf8: coordinatedDocumentationRaw,
+        },
+      ),
+    ).toEqual(expect.arrayContaining([
+      expect.stringContaining('schema semantic digest drifted'),
+      expect.stringContaining('semantic-binding metadata drifted'),
+      expect.stringContaining('semantic narrative binding drifted'),
+      expect.stringContaining('documentation source-artifact metadata drifted'),
+      expect.stringContaining('does not equal the reviewed pinned'),
+      expect.stringContaining('build boundary drifted or overclaims authority'),
+    ]));
+
+    const transferredDocumentationEvidence = structuredClone(documentationArtifact);
+    transferredDocumentationEvidence.evidenceAxes[1].state = 'pass';
+    expect(
+      validateNestExampleAudit(
+        source,
+        schema,
+        evidence,
+        {
+          value: transferredDocumentationEvidence,
+          rawUtf8: documentationArtifactRaw,
+        },
+      ),
+    ).toEqual(expect.arrayContaining([
+      expect.stringContaining('documentation source inventory digest does not bind'),
+      expect.stringContaining('evidence axes drifted or transferred evidence'),
+    ]));
   }, 30_000);
 
   it('keeps mutable audit state outside package semantics and identities', () => {
@@ -839,13 +1244,20 @@ describe('pinned NEST official-example coverage ledger', () => {
     ]));
     expect(manifest.normativeSources).not.toEqual(expect.arrayContaining([
       expect.objectContaining({
+        path: expect.stringContaining('nest-documentation-source-inventory'),
+      }),
+    ]));
+    expect(manifest.normativeSources).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
         path: expect.stringContaining('nest-example-source-inventory'),
       }),
     ]));
     expect(generatedCatalog).not.toContain('NEST_OFFICIAL_EXAMPLE_COVERAGE');
     expect(generatedCatalog).not.toContain('NEST_EXAMPLE_SOURCE_INVENTORY');
+    expect(generatedCatalog).not.toContain('NEST_DOCUMENTATION_SOURCE_INVENTORY');
     expect(generatedPython).not.toContain('NEST_OFFICIAL_EXAMPLE_COVERAGE');
     expect(generatedPython).not.toContain('NEST_EXAMPLE_SOURCE_INVENTORY');
+    expect(generatedPython).not.toContain('NEST_DOCUMENTATION_SOURCE_INVENTORY');
   });
 
   it('does not claim that live PyNEST integration moved to the Python reader', () => {

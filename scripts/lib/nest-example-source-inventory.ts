@@ -2,47 +2,110 @@
  * Deterministic, source-only inventory of the pinned official PyNEST examples.
  *
  * This module never imports PyNEST and never executes an upstream script. It reads
- * immutable Git objects, verifies the pinned authority files, reproduces the
- * documentation and runner selectors, resolves the three orchestration aliases,
+ * exact content-addressed Git objects, verifies the pinned authority files,
+ * reproduces the documentation and runner selectors, resolves the three
+ * orchestration aliases,
  * and emits a closed inventory suitable for later per-output review.
  */
-import { spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, realpathSync } from 'node:fs';
+import { lstatSync, realpathSync } from 'node:fs';
 import path from 'node:path';
+import { types as utilTypes } from 'node:util';
 
 import {
   canonicalDigest,
   canonicalize,
   type JsonValue,
 } from '../../src/core/canonicalize.js';
+import {
+  controlledGitCommandArguments,
+  controlledGitEnvironment,
+  requireOfflineGitReadAuthority,
+  sameOfflineGitObjectDatabase,
+  verifyOfflineGitObjectDatabase,
+  type OfflineGitObjectDatabaseSnapshot,
+  type VerifiedOfflineGitReadAuthority,
+} from './offline-git-object-database.js';
+import {
+  processReviewedGitRuntime,
+  readReviewedGitBlobBatch,
+  runReviewedGitCommand,
+  type ReviewedGitBlobRecord,
+  type ReviewedGitRuntime,
+} from './reviewed-git-command.js';
 
 const POSIX = path.posix;
 const SHA1 = /^[0-9a-f]{40}$/u;
+const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const SAFE_PATH =
   /^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._@+,:=-]+(?:\/[A-Za-z0-9._@+,:=-]+)*$/u;
 const MAX_GIT_OUTPUT_BYTES = 128 * 1024 * 1024;
-const GIT_REPOSITORY_OVERRIDE_ENVIRONMENT = Object.freeze([
-  'GIT_DIR',
-  'GIT_WORK_TREE',
-  'GIT_COMMON_DIR',
-  'GIT_OBJECT_DIRECTORY',
-  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
-  'GIT_INDEX_FILE',
-  'GIT_GRAFT_FILE',
-  'GIT_SHALLOW_FILE',
-  'GIT_NAMESPACE',
-  'GIT_REPLACE_REF_BASE',
-  'GIT_CEILING_DIRECTORIES',
-  'GIT_DISCOVERY_ACROSS_FILESYSTEM',
-] as const);
+const MAX_GIT_BATCH_OUTPUT_BYTES = 512 * 1024 * 1024;
+const NEST_EXAMPLE_UNIQUE_ACQUISITION_BLOB_COUNT = 160;
 const VERIFIED_ACQUISITION_CONTEXT = Symbol('verified NEST inventory acquisition context');
+const VERIFIED_ACQUISITION_CONTEXTS = new WeakMap<
+  object,
+  OfflineGitObjectDatabaseSnapshot
+>();
 
 export const NEST_EXAMPLE_SOURCE_INVENTORY_IDENTITY =
-  'cortexel-nest-example-source-inventory.rfc8785-sha256.v1' as const;
+  'cortexel-nest-example-source-inventory.rfc8785-sha256.v2' as const;
+
+export const NEST_EXAMPLE_RAW_BLOB_REFERENCE_SET_IDENTITY =
+  'cortexel.nest-example.raw-git-blob-reference-set.v1' as const;
+export const PINNED_NEST_EXAMPLE_RAW_BLOB_REFERENCE_SET_DIGEST =
+  'sha256:1c26fad63f624d1e1b1f859ffba5f6b3a5517e89a9992c9517ea2998a50d7a89' as const;
+export const PINNED_NEST_EXAMPLE_RAW_BLOB_TOTAL_BYTE_LENGTH = 19_427_499;
+export const PINNED_NEST_EXAMPLE_RAW_BLOB_MAX_BYTE_LENGTH = 6_339_219;
+
+/** The only intentional content aliasing inside the pinned 162-leaf tree. */
+export const PINNED_NEST_EXAMPLE_SHARED_BLOB_GROUPS = Object.freeze([
+  Object.freeze({
+    gitBlobSha1: '2c63c0851048d8f7bff41ecf0f8cee05f52fd120',
+    paths: Object.freeze([
+      'pynest/examples/sonata_example/300_pointneurons/components/synaptic_models/ExcToExc.json',
+      'pynest/examples/sonata_example/300_pointneurons/components/synaptic_models/ExcToInh.json',
+      'pynest/examples/sonata_example/300_pointneurons/components/synaptic_models/InhToExc.json',
+      'pynest/examples/sonata_example/300_pointneurons/components/synaptic_models/InhToInh.json',
+    ]),
+  }),
+] as const);
+
+/**
+ * Closed declaration for the intended reviewed acquisition-harness procedure.
+ * It identifies the procedure that the current generator requires; the retained
+ * declaration is not an independent receipt that the procedure actually ran.
+ */
+export const NEST_EXAMPLE_ACQUISITION_PRODUCER_PROFILE = Object.freeze({
+  schema: 'cortexel-source-inventory-acquisition-producer-profile.v1',
+  producer: 'scripts/generate-nest-example-source-inventory.ts',
+  profile:
+    'cortexel.nest-example.git-sha1-blobless-structural-137-example-leaves-162-example-unique-blobs-159-acquired-unique-blobs-160-raw-https-selected-reviewed-posix-offline-batch-canonical-object-rehash.v6',
+  harnessRevision: 6,
+  executionEvidence: 'profile_declaration_not_independent_execution_receipt',
+} as const);
+
+const UNDECLARED_ACQUISITION_PRODUCER_PROFILE = Object.freeze({
+  state: 'not_declared',
+} as const);
+
+/** Byte-preserved predecessor identity; it contributes no authority to V2. */
+export const NEST_EXAMPLE_SOURCE_INVENTORY_V1_PREDECESSOR = Object.freeze({
+  path: 'docs/audit/nest-example-source-inventory.v1.json',
+  protocol: 'cortexel-nest-example-source-inventory',
+  protocolVersion: 1,
+  identityAlgorithm:
+    'cortexel-nest-example-source-inventory.rfc8785-sha256.v1',
+  inventoryDigest:
+    'sha256:cd59e82a8eb5af6d482d3042afdf91b0793865aef75843f5b10da6ee61ba3fe6',
+  artifactByteLength: 196_576,
+  artifactSha256:
+    'sha256:1d762db8c60e174f42371308093c0d091937bde2299ed8cfce4217c9e9179c1a',
+  evidenceTransfer: 'none',
+} as const);
 
 /** Exact semantic digest emitted from the pinned NEST v3.10 source authority. */
 export const PINNED_NEST_EXAMPLE_SOURCE_INVENTORY_DIGEST =
-  'sha256:cd59e82a8eb5af6d482d3042afdf91b0793865aef75843f5b10da6ee61ba3fe6' as const;
+  'sha256:1f039d9b4616ffa2de0c2acb6ca4ef9eaf473185b044a66bd8e6bbea27b1d216' as const;
 
 export interface AuthorityFile {
   readonly path: string;
@@ -84,6 +147,17 @@ export interface NestExampleInventoryAuthority {
     readonly supportOrCoordinatedBodyCount: number;
     readonly visualAssetPathEntryCount: number;
     readonly visualAssetCountsByExtension: Readonly<Record<'png' | 'gif' | 'svg', number>>;
+    readonly exampleTreeLeafCount: number;
+    readonly uniqueExampleTreeGitBlobCount: number;
+    readonly auxiliaryLeafCount: number;
+    readonly auxiliaryLeafCountsByRole: Readonly<Record<
+      'build_orchestration' | 'documentation' | 'example_input' | 'runner_orchestration',
+      number
+    >>;
+    readonly sharedGitBlobGroups: readonly {
+      readonly gitBlobSha1: string;
+      readonly paths: readonly string[];
+    }[];
   };
 }
 
@@ -156,6 +230,16 @@ export const PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY:
         gif: 2,
         svg: 1,
       },
+      exampleTreeLeafCount: 162,
+      uniqueExampleTreeGitBlobCount: 159,
+      auxiliaryLeafCount: 38,
+      auxiliaryLeafCountsByRole: {
+        build_orchestration: 1,
+        documentation: 12,
+        example_input: 23,
+        runner_orchestration: 2,
+      },
+      sharedGitBlobGroups: PINNED_NEST_EXAMPLE_SHARED_BLOB_GROUPS,
     },
   } as const);
 
@@ -173,6 +257,8 @@ export interface NestExampleSourcePath {
   readonly pathBytesBase64: string;
   readonly gitMode: '100644' | '100755' | '120000';
   readonly gitBlobSha1: string;
+  readonly byteLength: number;
+  readonly sha256: string;
   readonly kind: 'regular_python' | 'python_symlink';
   readonly role:
     | 'official_entrypoint'
@@ -236,8 +322,31 @@ export interface NestExampleVisualAsset {
   readonly pathBytesBase64: string;
   readonly gitMode: string;
   readonly gitBlobSha1: string;
+  readonly byteLength: number;
+  readonly sha256: string;
   readonly extension: 'png' | 'gif' | 'svg';
   readonly role: 'checked_in_upstream_visual_asset';
+}
+
+export interface NestExampleAuxiliaryLeaf {
+  readonly auxiliaryId: string;
+  readonly path: string;
+  readonly pathBytesBase64: string;
+  readonly gitMode: '100644' | '100755';
+  readonly gitBlobSha1: string;
+  readonly byteLength: number;
+  readonly sha256: string;
+  readonly role:
+    | 'build_orchestration'
+    | 'documentation'
+    | 'example_input'
+    | 'runner_orchestration';
+}
+
+export interface NestExampleTreeLeafReference {
+  readonly path: string;
+  readonly gitMode: '100644' | '100755' | '120000';
+  readonly gitBlobSha1: string;
 }
 
 export interface VerifiedNestExampleAcquisitionContext {
@@ -248,8 +357,9 @@ export interface VerifiedNestExampleAcquisitionContext {
 
 export interface NestExampleSourceInventory {
   readonly protocol: 'cortexel-nest-example-source-inventory';
-  readonly protocolVersion: 1;
+  readonly protocolVersion: 2;
   readonly identityAlgorithm: typeof NEST_EXAMPLE_SOURCE_INVENTORY_IDENTITY;
+  readonly predecessor: typeof NEST_EXAMPLE_SOURCE_INVENTORY_V1_PREDECESSOR;
   readonly upstream: {
     readonly project: 'NEST Simulator';
     readonly release: string;
@@ -259,6 +369,9 @@ export interface NestExampleSourceInventory {
     readonly exampleRoot: string;
   };
   readonly acquisition: {
+    readonly producerProfile:
+      | typeof NEST_EXAMPLE_ACQUISITION_PRODUCER_PROFILE
+      | typeof UNDECLARED_ACQUISITION_PRODUCER_PROFILE;
     readonly repositoryContext:
       | 'caller_supplied_repository_unverified'
       | 'temporary_repository_shape_verified';
@@ -292,6 +405,7 @@ export interface NestExampleSourceInventory {
   readonly entrypoints: readonly NestExampleEntrypoint[];
   readonly invocationProfiles: readonly NestExampleInvocationProfile[];
   readonly visualAssets: readonly NestExampleVisualAsset[];
+  readonly auxiliaryLeaves: readonly NestExampleAuxiliaryLeaf[];
   readonly summary: {
     readonly pythonPathEntryCount: number;
     readonly regularPythonFileCount: number;
@@ -307,6 +421,13 @@ export interface NestExampleSourceInventory {
     readonly runnerAggProfileCount: number;
     readonly visualAssetPathEntryCount: number;
     readonly visualAssetCountsByExtension: Readonly<Record<'png' | 'gif' | 'svg', number>>;
+    readonly exampleTreeLeafCount: number;
+    readonly uniqueExampleTreeGitBlobCount: number;
+    readonly auxiliaryLeafCount: number;
+    readonly auxiliaryLeafCountsByRole: Readonly<Record<
+      NestExampleAuxiliaryLeaf['role'],
+      number
+    >>;
   };
   readonly inventoryDigest: string;
 }
@@ -350,82 +471,40 @@ function compareText(left: string, right: string): number {
 }
 
 function gitEnvironment(): NodeJS.ProcessEnv {
-  const environment: NodeJS.ProcessEnv = {
-    ...process.env,
-    GIT_CONFIG_GLOBAL: '/dev/null',
-    GIT_CONFIG_NOSYSTEM: '1',
-    GIT_CONFIG_COUNT: '0',
-    GIT_NO_REPLACE_OBJECTS: '1',
-    GIT_OPTIONAL_LOCKS: '0',
-    GIT_TERMINAL_PROMPT: '0',
+  return {
+    ...controlledGitEnvironment(),
+    GIT_NO_LAZY_FETCH: '1',
   };
-  for (const name of GIT_REPOSITORY_OVERRIDE_ENVIRONMENT) delete environment[name];
-  return environment;
-}
-
-function gitArgs(repository: string, args: readonly string[]): string[] {
-  return [
-    '--no-replace-objects',
-    '-c',
-    'core.fsmonitor=false',
-    '-c',
-    'core.untrackedCache=false',
-    '-c',
-    'core.ignoreStat=false',
-    '-C',
-    repository,
-    ...args,
-  ];
 }
 
 function gitBuffer(
   repository: string,
   args: readonly string[],
+  reviewedGit: ReviewedGitRuntime,
   maxBuffer = MAX_GIT_OUTPUT_BYTES,
 ): Buffer {
-  const result = spawnSync('git', gitArgs(repository, args), {
-    cwd: repository,
-    env: gitEnvironment(),
-    stdio: ['ignore', 'pipe', 'pipe'],
-    maxBuffer,
-    timeout: 120_000,
-  });
-  if (result.error || result.status !== 0) {
-    const diagnostic = Buffer.isBuffer(result.stderr)
-      ? utf8(result.stderr.subarray(0, 2_000), 'Git diagnostic')
-      : '';
-    fail(`git ${args[0] ?? '<missing>'} failed${diagnostic ? `: ${diagnostic.trim()}` : ''}`);
-  }
+  const result = runReviewedGitCommand(
+    reviewedGit,
+    repository,
+    controlledGitCommandArguments(repository, args),
+    {
+      environment: gitEnvironment(),
+      outputLimitBytes: maxBuffer,
+      timeoutMs: 120_000,
+    },
+  );
   return result.stdout;
 }
 
-function gitText(repository: string, args: readonly string[]): string {
-  return utf8(gitBuffer(repository, args), `git ${args[0] ?? '<missing>'} output`);
-}
-
-function gitOptionalText(
+function gitText(
   repository: string,
   args: readonly string[],
-): { readonly status: 0 | 1; readonly stdout: string } {
-  const result = spawnSync('git', gitArgs(repository, args), {
-    cwd: repository,
-    env: gitEnvironment(),
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    maxBuffer: 1024 * 1024,
-    timeout: 30_000,
-  });
-  if (result.error || (result.status !== 0 && result.status !== 1)) {
-    const diagnostic = result.stderr.slice(0, 2_000).trim();
-    fail(
-      `git ${args[0] ?? '<missing>'} failed` +
-      (diagnostic.length > 0 ? `: ${diagnostic}` : ''),
-    );
-  }
-  return {
-    status: result.status as 0 | 1,
-    stdout: result.stdout,
-  };
+  reviewedGit: ReviewedGitRuntime,
+): string {
+  return utf8(
+    gitBuffer(repository, args, reviewedGit),
+    `git ${args[0] ?? '<missing>'} output`,
+  );
 }
 
 function parseLeafTree(buffer: Buffer): GitLeaf[] {
@@ -481,9 +560,12 @@ function verifyAuthorityFile(entries: readonly GitLeaf[], expected: AuthorityFil
   }
 }
 
-function blob(repository: string, commit: string, objectPath: string): Buffer {
+function blob(
+  bytesByPath: ReadonlyMap<string, Buffer>,
+  objectPath: string,
+): Buffer {
   assertSafeRepositoryPath(objectPath, 'Git blob path');
-  return gitBuffer(repository, ['cat-file', 'blob', `${commit}:${objectPath}`]);
+  return bytesByPath.get(objectPath) ?? fail(`Git blob ${objectPath} bytes are absent`);
 }
 
 function sourceId(commit: string, entry: GitLeaf): string {
@@ -725,7 +807,7 @@ function countExpected(actual: number, expected: number, where: string): void {
 }
 
 function resolveAliases(
-  repository: string,
+  bytesByPath: ReadonlyMap<string, Buffer>,
   authority: NestExampleInventoryAuthority,
   pythonEntries: readonly GitLeaf[],
   sourceIdByPath: ReadonlyMap<string, string>,
@@ -744,7 +826,7 @@ function resolveAliases(
   const aliases: NestExampleAlias[] = [];
   const aliasTargetByPath = new Map<string, string>();
   for (const entry of symlinks) {
-    const raw = blob(repository, authority.commit, entry.path);
+    const raw = blob(bytesByPath, entry.path);
     const targetLiteral = utf8(raw, `symlink target ${entry.path}`);
     if (
       targetLiteral.length === 0 ||
@@ -803,6 +885,319 @@ function membership<T extends string>(
   return order.filter((item) => values.has(item));
 }
 
+function classifyAuxiliaryLeafPath(
+  entryPath: string,
+  authority: NestExampleInventoryAuthority,
+): NestExampleAuxiliaryLeaf['role'] | null {
+  const basename = POSIX.basename(entryPath);
+  if (entryPath === authority.orchestrationCmake.path) {
+    return 'build_orchestration';
+  }
+  if (basename === 'README.rst' || basename === 'README.md') {
+    return 'documentation';
+  }
+  if (entryPath.endsWith('.sh')) return 'runner_orchestration';
+  if (/\.(?:csv|h5|json|music|txt)$/u.test(entryPath)) return 'example_input';
+  return null;
+}
+
+function pinnedExampleTree(
+  repository: string,
+  authority: NestExampleInventoryAuthority,
+  reviewedGit: ReviewedGitRuntime,
+): { readonly allLeaves: readonly GitLeaf[]; readonly exampleLeaves: readonly GitLeaf[] } {
+  assertSha1(authority.commit, 'pinned commit');
+  assertSha1(authority.rootTreeGitSha1, 'pinned root tree');
+  assertSafeRepositoryPath(authority.exampleRoot, 'example root');
+  const resolvedCommit = gitText(
+    repository,
+    ['rev-parse', '--verify', `${authority.commit}^{commit}`],
+    reviewedGit,
+  ).trim();
+  if (resolvedCommit !== authority.commit) {
+    fail(`commit drifted: expected ${authority.commit}, received ${resolvedCommit}`);
+  }
+  const rootTree = gitText(
+    repository,
+    ['rev-parse', '--verify', `${authority.commit}^{tree}`],
+    reviewedGit,
+  ).trim();
+  if (rootTree !== authority.rootTreeGitSha1) {
+    fail(`root tree drifted: expected ${authority.rootTreeGitSha1}, received ${rootTree}`);
+  }
+  const allLeaves = parseLeafTree(gitBuffer(
+    repository,
+    ['ls-tree', '-rz', '--full-tree', authority.commit],
+    reviewedGit,
+  ));
+  verifyAuthorityFile(allLeaves, authority.documentationIndex);
+  verifyAuthorityFile(allLeaves, authority.runner);
+  verifyAuthorityFile(allLeaves, authority.orchestrationCmake);
+  const exampleLeaves = allLeaves.filter((entry) =>
+    entry.path.startsWith(`${authority.exampleRoot}/`));
+  countExpected(
+    exampleLeaves.length,
+    authority.expected.exampleTreeLeafCount,
+    'complete example-tree leaf count',
+  );
+  for (const entry of exampleLeaves) {
+    assertSafeRepositoryPath(entry.path, 'example-tree leaf path');
+    if (
+      entry.type !== 'blob' ||
+      !['100644', '100755', '120000'].includes(entry.mode)
+    ) {
+      fail(`example-tree leaf ${entry.path} has an unsupported type or Git mode`);
+    }
+  }
+  const uniqueIdentities = new Set(exampleLeaves.map((entry) => entry.sha));
+  countExpected(
+    uniqueIdentities.size,
+    authority.expected.uniqueExampleTreeGitBlobCount,
+    'unique example-tree Git blob count',
+  );
+  const sharedBlobGroups = [...uniqueIdentities]
+    .map((gitBlobSha1) => ({
+      gitBlobSha1,
+      paths: exampleLeaves
+        .filter((entry) => entry.sha === gitBlobSha1)
+        .map((entry) => entry.path)
+        .sort(compareText),
+    }))
+    .filter(({ paths }) => paths.length > 1)
+    .sort((left, right) => compareText(left.gitBlobSha1, right.gitBlobSha1));
+  if (!canonicalMatches(sharedBlobGroups, authority.expected.sharedGitBlobGroups)) {
+    fail('shared example-tree Git blob groups drifted from the exact SONATA alias');
+  }
+  return { allLeaves, exampleLeaves };
+}
+
+export function nestExampleTreeLeafReferences(
+  repositoryPath: string,
+  authority: NestExampleInventoryAuthority = PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY,
+  reviewedGit: ReviewedGitRuntime = processReviewedGitRuntime(),
+): readonly NestExampleTreeLeafReference[] {
+  if (!path.isAbsolute(repositoryPath)) fail('repository path must be absolute');
+  const repositoryStat = lstatSync(repositoryPath);
+  if (!repositoryStat.isDirectory() || repositoryStat.isSymbolicLink()) {
+    fail('repository path must be a direct directory');
+  }
+  const repository = realpathSync(repositoryPath);
+  return Object.freeze(
+    pinnedExampleTree(repository, authority, reviewedGit).exampleLeaves.map((entry) =>
+      Object.freeze({
+        path: entry.path,
+        gitMode: entry.mode as NestExampleTreeLeafReference['gitMode'],
+        gitBlobSha1: entry.sha,
+      })),
+  );
+}
+
+export interface NestExampleRawBlobReference {
+  readonly path: string;
+  readonly gitBlobSha1: string;
+}
+
+/**
+ * Derive the exact 160-object raw acquisition set from the pinned tree closure.
+ * Shared example-tree content selects its lexicographically first path, the
+ * external documentation selector remains disjoint, and the final order is by
+ * Git identity then path. The retained digest prevents a caller from silently
+ * substituting another 160-row projection of the same structural repository.
+ */
+export function nestExampleRawBlobReferences(
+  repositoryPath: string,
+  reviewedGit: ReviewedGitRuntime = processReviewedGitRuntime(),
+): readonly NestExampleRawBlobReference[] {
+  const authority = PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY;
+  if (!path.isAbsolute(repositoryPath)) fail('repository path must be absolute');
+  const repositoryStat = lstatSync(repositoryPath);
+  if (!repositoryStat.isDirectory() || repositoryStat.isSymbolicLink()) {
+    fail('repository path must be a direct directory');
+  }
+  const repository = realpathSync(repositoryPath);
+  const { allLeaves, exampleLeaves } = pinnedExampleTree(
+    repository,
+    authority,
+    reviewedGit,
+  );
+  const documentation = objectAt(allLeaves, authority.documentationIndex.path);
+  const byIdentity = new Map<string, NestExampleRawBlobReference>();
+  for (const entry of [...exampleLeaves, documentation]) {
+    const existing = byIdentity.get(entry.sha);
+    if (existing === undefined || compareText(entry.path, existing.path) < 0) {
+      byIdentity.set(entry.sha, Object.freeze({
+        path: entry.path,
+        gitBlobSha1: entry.sha,
+      }));
+    }
+  }
+  const references = Object.freeze(
+    [...byIdentity.values()].sort((left, right) =>
+      compareText(left.gitBlobSha1, right.gitBlobSha1) ||
+        compareText(left.path, right.path)),
+  );
+  if (references.length !== NEST_EXAMPLE_UNIQUE_ACQUISITION_BLOB_COUNT) {
+    fail('raw blob reference denominator drifted from the exact pinned tree');
+  }
+  const digest = canonicalDigest({
+    domain: NEST_EXAMPLE_RAW_BLOB_REFERENCE_SET_IDENTITY,
+    references,
+  });
+  if (digest !== PINNED_NEST_EXAMPLE_RAW_BLOB_REFERENCE_SET_DIGEST) {
+    fail('raw blob reference set drifted from its pinned semantic digest');
+  }
+  return references;
+}
+
+function exactOfflineBlobIdentitySnapshot(
+  identities: readonly string[],
+): readonly string[] {
+  if (
+    !Array.isArray(identities) ||
+    utilTypes.isProxy(identities) ||
+    Object.getPrototypeOf(identities) !== Array.prototype ||
+    identities.length < 1 ||
+    identities.length > NEST_EXAMPLE_UNIQUE_ACQUISITION_BLOB_COUNT
+  ) {
+    fail('offline blob read requires one bounded ordinary identity array');
+  }
+  const snapshot: string[] = [];
+  const expectedEnumerableKeys = new Set<string>();
+  for (let index = 0; index < identities.length; index++) {
+    const descriptor = Object.getOwnPropertyDescriptor(identities, index);
+    if (
+      descriptor === undefined ||
+      !('value' in descriptor) ||
+      descriptor.enumerable !== true ||
+      typeof descriptor.value !== 'string' ||
+      !SHA1.test(descriptor.value)
+    ) {
+      fail(`offline blob identity ${index} is not one own-data Git SHA-1`);
+    }
+    if (
+      index > 0 &&
+      compareText(snapshot[index - 1]!, descriptor.value) >= 0
+    ) {
+      fail('offline blob identities must be strictly sorted and deduplicated');
+    }
+    snapshot.push(descriptor.value);
+    expectedEnumerableKeys.add(String(index));
+  }
+  let enumerableKeyCount = 0;
+  for (const key in identities) {
+    if (enumerableKeyCount >= identities.length) {
+      fail('offline blob identities contain an enumerable extra key');
+    }
+    enumerableKeyCount++;
+    if (key.length > 3 || !expectedEnumerableKeys.has(key)) {
+      fail('offline blob identities contain an enumerable extra key');
+    }
+  }
+  if (enumerableKeyCount !== identities.length) {
+    fail('offline blob identities omit an enumerable index');
+  }
+  return Object.freeze(snapshot);
+}
+
+/**
+ * Read and independently rehash an exact sorted blob set only after configured
+ * remotes are absent. `GIT_NO_LAZY_FETCH=1` is present on both the remote check
+ * and the content batch, so a missing object is a local failure rather than an
+ * implicit promisor transport.
+ */
+export function readNestExampleGitBlobsOffline(
+  offlineReadAuthority: VerifiedOfflineGitReadAuthority,
+  requestedGitBlobSha1s: readonly string[],
+  reviewedGit: ReviewedGitRuntime = processReviewedGitRuntime(),
+): readonly ReviewedGitBlobRecord[] {
+  const repository = requireOfflineGitReadAuthority(
+    offlineReadAuthority,
+    'NEST example offline blob materialization precondition',
+    reviewedGit,
+  );
+  const identities = exactOfflineBlobIdentitySnapshot(requestedGitBlobSha1s);
+  const records = readReviewedGitBlobBatch(
+    reviewedGit,
+    repository,
+    controlledGitCommandArguments(repository, ['cat-file', '--batch']),
+    gitEnvironment(),
+    identities.map((identity) => ({
+      objectName: identity,
+      expectedGitBlobSha1: identity,
+    })),
+    {
+      outputLimitBytes: MAX_GIT_BATCH_OUTPUT_BYTES,
+      timeoutMs: 600_000,
+    },
+  );
+  requireOfflineGitReadAuthority(
+    offlineReadAuthority,
+    'NEST example offline blob materialization postcondition',
+    reviewedGit,
+  );
+  return records;
+}
+
+/** Materialize every unique example-tree blob plus the external docs selector. */
+export function materializeNestExampleTreeBlobs(
+  repositoryPath: string,
+  offlineReadAuthority: VerifiedOfflineGitReadAuthority,
+  authority: NestExampleInventoryAuthority = PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY,
+  reviewedGit: ReviewedGitRuntime = processReviewedGitRuntime(),
+): {
+  readonly exampleTreeLeafCount: number;
+  readonly uniqueExampleTreeGitBlobCount: number;
+  readonly acquiredUniqueGitBlobCount: number;
+  readonly totalUniqueByteLength: number;
+  readonly requestedGitBlobSha1s: readonly string[];
+} {
+  const authorizedRepository = requireOfflineGitReadAuthority(
+    offlineReadAuthority,
+    'NEST example tree materialization precondition',
+    reviewedGit,
+  );
+  if (!path.isAbsolute(repositoryPath)) fail('repository path must be absolute');
+  const repositoryStat = lstatSync(repositoryPath);
+  if (!repositoryStat.isDirectory() || repositoryStat.isSymbolicLink()) {
+    fail('repository path must be a direct directory');
+  }
+  const repository = realpathSync(repositoryPath);
+  if (authorizedRepository !== repository) {
+    fail('offline Git read authority does not bind this materialization repository');
+  }
+  const { allLeaves, exampleLeaves } = pinnedExampleTree(
+    repository,
+    authority,
+    reviewedGit,
+  );
+  const documentation = objectAt(allLeaves, authority.documentationIndex.path);
+  const uniqueByIdentity = new Map<string, GitLeaf>();
+  for (const entry of [documentation, ...exampleLeaves]) {
+    if (!uniqueByIdentity.has(entry.sha)) uniqueByIdentity.set(entry.sha, entry);
+  }
+  const requestedGitBlobSha1s = Object.freeze(
+    [...uniqueByIdentity.keys()].sort(compareText),
+  );
+  const records = readNestExampleGitBlobsOffline(
+    offlineReadAuthority,
+    requestedGitBlobSha1s,
+    reviewedGit,
+  );
+  const result = Object.freeze({
+    exampleTreeLeafCount: exampleLeaves.length,
+    uniqueExampleTreeGitBlobCount: new Set(exampleLeaves.map((entry) => entry.sha)).size,
+    acquiredUniqueGitBlobCount: records.length,
+    totalUniqueByteLength: records.reduce((sum, record) => sum + record.byteLength, 0),
+    requestedGitBlobSha1s,
+  });
+  requireOfflineGitReadAuthority(
+    offlineReadAuthority,
+    'NEST example tree materialization postcondition',
+    reviewedGit,
+  );
+  return result;
+}
+
 /**
  * Verify the bounded repository state used by the generator after its fetch
  * phase. This does not authenticate how the directory was created, so the
@@ -812,71 +1207,21 @@ function membership<T extends string>(
 export function verifyNestExampleOfflineAcquisitionContext(
   repositoryPath: string,
   temporaryRootPath: string,
+  reviewedGit: ReviewedGitRuntime = processReviewedGitRuntime(),
 ): VerifiedNestExampleAcquisitionContext {
-  if (!path.isAbsolute(repositoryPath) || !path.isAbsolute(temporaryRootPath)) {
-    fail('verified acquisition paths must be absolute');
-  }
-  const repositoryStat = lstatSync(repositoryPath);
-  const temporaryRootStat = lstatSync(temporaryRootPath);
-  if (!repositoryStat.isDirectory() || repositoryStat.isSymbolicLink()) {
-    fail('verified acquisition repository must be a direct directory');
-  }
-  if (!temporaryRootStat.isDirectory() || temporaryRootStat.isSymbolicLink()) {
-    fail('verified acquisition temporary root must be a direct directory');
-  }
-  const repository = realpathSync(repositoryPath);
-  const temporaryRoot = realpathSync(temporaryRootPath);
-  if (path.dirname(repository) !== temporaryRoot) {
-    fail('verified acquisition repository must be a direct child of its temporary root');
-  }
-
-  const gitDirectoryText = gitText(
-    repository,
-    ['rev-parse', '--absolute-git-dir'],
-  ).trim();
-  if (!path.isAbsolute(gitDirectoryText) || !existsSync(gitDirectoryText)) {
-    fail('verified acquisition repository has no local absolute Git directory');
-  }
-  const gitDirectoryStat = lstatSync(gitDirectoryText);
-  const gitDirectory = realpathSync(gitDirectoryText);
-  if (
-    !gitDirectoryStat.isDirectory() ||
-    gitDirectoryStat.isSymbolicLink() ||
-    gitDirectory !== path.join(repository, '.git')
-  ) {
-    fail('verified acquisition Git directory is not the repository-local .git directory');
-  }
-  if (gitText(repository, ['remote']).trim().length !== 0) {
-    fail('verified acquisition repository still has a configured remote');
-  }
-  const remoteConfiguration = gitOptionalText(
-    repository,
-    ['config', '--local', '--get-regexp', '^remote\\.'],
+  const snapshot = verifyOfflineGitObjectDatabase(
+    repositoryPath,
+    temporaryRootPath,
+    'NEST example source inventory acquisition',
+    reviewedGit,
   );
-  if (remoteConfiguration.status === 0 || remoteConfiguration.stdout.trim().length !== 0) {
-    fail('verified acquisition repository still has local remote configuration');
-  }
-  const partialClone = gitOptionalText(
-    repository,
-    ['config', '--local', '--get', 'extensions.partialClone'],
-  );
-  if (partialClone.status === 0 || partialClone.stdout.trim().length !== 0) {
-    fail('verified acquisition repository still names a partial-clone remote');
-  }
-  for (const filename of [
-    path.join(gitDirectory, 'objects', 'info', 'alternates'),
-    path.join(gitDirectory, 'objects', 'info', 'http-alternates'),
-  ]) {
-    if (existsSync(filename)) {
-      fail('verified acquisition repository uses an alternate Git object database');
-    }
-  }
-
-  return Object.freeze({
+  const context = Object.freeze({
     [VERIFIED_ACQUISITION_CONTEXT]: true as const,
-    repository,
-    temporaryRoot,
+    repository: snapshot.repository,
+    temporaryRoot: snapshot.temporaryRoot,
   });
+  VERIFIED_ACQUISITION_CONTEXTS.set(context, snapshot);
+  return context;
 }
 
 /**
@@ -888,6 +1233,8 @@ export function buildNestExampleSourceInventory(
   repositoryPath: string,
   authority: NestExampleInventoryAuthority = PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY,
   acquisitionContext?: VerifiedNestExampleAcquisitionContext,
+  acquisitionProducerProfile?: typeof NEST_EXAMPLE_ACQUISITION_PRODUCER_PROFILE,
+  reviewedGit: ReviewedGitRuntime = processReviewedGitRuntime(),
 ): NestExampleSourceInventory {
   if (!path.isAbsolute(repositoryPath)) fail('repository path must be absolute');
   const repositoryStat = lstatSync(repositoryPath);
@@ -896,46 +1243,71 @@ export function buildNestExampleSourceInventory(
   }
   const repository = realpathSync(repositoryPath);
   let verifiedAcquisition = false;
+  let acquisitionSnapshot: OfflineGitObjectDatabaseSnapshot | undefined;
   if (acquisitionContext !== undefined) {
+    acquisitionSnapshot = VERIFIED_ACQUISITION_CONTEXTS.get(acquisitionContext);
     if (
       acquisitionContext[VERIFIED_ACQUISITION_CONTEXT] !== true ||
-      acquisitionContext.repository !== repository
+      acquisitionContext.repository !== repository ||
+      acquisitionSnapshot === undefined
     ) {
       fail('verified acquisition context does not bind this repository');
     }
-    verifyNestExampleOfflineAcquisitionContext(
+    const currentSnapshot = verifyOfflineGitObjectDatabase(
       acquisitionContext.repository,
       acquisitionContext.temporaryRoot,
+      'NEST example source inventory acquisition',
+      reviewedGit,
     );
+    if (!sameOfflineGitObjectDatabase(acquisitionSnapshot, currentSnapshot)) {
+      fail('verified acquisition repository identity changed before inventory reads');
+    }
     verifiedAcquisition = true;
   }
-  assertSha1(authority.commit, 'pinned commit');
-  assertSha1(authority.rootTreeGitSha1, 'pinned root tree');
-  assertSafeRepositoryPath(authority.exampleRoot, 'example root');
-
-  const resolvedCommit = gitText(
-    repository,
-    ['rev-parse', '--verify', `${authority.commit}^{commit}`],
-  ).trim();
-  if (resolvedCommit !== authority.commit) {
-    fail(`commit drifted: expected ${authority.commit}, received ${resolvedCommit}`);
-  }
-  const rootTree = gitText(
-    repository,
-    ['rev-parse', '--verify', `${authority.commit}^{tree}`],
-  ).trim();
-  if (rootTree !== authority.rootTreeGitSha1) {
+  if (
+    acquisitionProducerProfile !== undefined &&
+    (acquisitionProducerProfile !== NEST_EXAMPLE_ACQUISITION_PRODUCER_PROFILE ||
+      !verifiedAcquisition)
+  ) {
     fail(
-      `root tree drifted: expected ${authority.rootTreeGitSha1}, received ${rootTree}`,
+      'acquisition producer profile is unsupported or lacks verified repository authority',
     );
   }
-
-  const leaves = parseLeafTree(
-    gitBuffer(repository, ['ls-tree', '-rz', '--full-tree', authority.commit]),
+  const { allLeaves: leaves, exampleLeaves } = pinnedExampleTree(
+    repository,
+    authority,
+    reviewedGit,
   );
-  verifyAuthorityFile(leaves, authority.documentationIndex);
-  verifyAuthorityFile(leaves, authority.runner);
-  verifyAuthorityFile(leaves, authority.orchestrationCmake);
+  const documentationEntry = objectAt(leaves, authority.documentationIndex.path);
+  const uniqueAcquisitionEntries = new Map<string, GitLeaf>();
+  for (const entry of [documentationEntry, ...exampleLeaves]) {
+    if (!uniqueAcquisitionEntries.has(entry.sha)) {
+      uniqueAcquisitionEntries.set(entry.sha, entry);
+    }
+  }
+  const batchRecords = readReviewedGitBlobBatch(
+    reviewedGit,
+    repository,
+    controlledGitCommandArguments(repository, ['cat-file', '--batch']),
+    { ...gitEnvironment(), GIT_NO_LAZY_FETCH: '1' },
+    [...uniqueAcquisitionEntries.values()].map((entry) => ({
+      objectName: entry.sha,
+      expectedGitBlobSha1: entry.sha,
+    })),
+    { outputLimitBytes: MAX_GIT_BATCH_OUTPUT_BYTES, timeoutMs: 600_000 },
+  );
+  const recordByGitIdentity = new Map<string, ReviewedGitBlobRecord>(
+    batchRecords.map((record) => [record.gitBlobSha1, record]),
+  );
+  if (recordByGitIdentity.size !== uniqueAcquisitionEntries.size) {
+    fail('batched Git blob inventory does not preserve every unique identity');
+  }
+  const bytesByPath = new Map<string, Buffer>();
+  for (const entry of [documentationEntry, ...exampleLeaves]) {
+    const record = recordByGitIdentity.get(entry.sha) ??
+      fail(`batched Git blob ${entry.path} is absent`);
+    bytesByPath.set(entry.path, record.copyBytes());
+  }
 
   const pythonEntries = leaves.filter(
     (entry) =>
@@ -985,7 +1357,7 @@ export function buildNestExampleSourceInventory(
     pythonEntries.map((entry) => [entry.path, sourceId(authority.commit, entry)]),
   );
   const { aliases, aliasTargetByPath } = resolveAliases(
-    repository,
+    bytesByPath,
     authority,
     pythonEntries,
     sourceIdByPath,
@@ -994,14 +1366,14 @@ export function buildNestExampleSourceInventory(
   const regularPythonPathSet = new Set(regularPythonEntries.map((entry) => entry.path));
   const docs = deriveDocumentationSelection(
     utf8(
-      blob(repository, authority.commit, authority.documentationIndex.path),
+      blob(bytesByPath, authority.documentationIndex.path),
       'documentation index',
     ),
     regularPythonPathSet,
     authority,
   );
   const runnerSource = utf8(
-    blob(repository, authority.commit, authority.runner.path),
+    blob(bytesByPath, authority.runner.path),
     'example runner',
   );
   assertRunnerSource(runnerSource, authority);
@@ -1042,6 +1414,8 @@ export function buildNestExampleSourceInventory(
 
   const aliasPathSet = new Set(aliases.map((alias) => alias.aliasPath));
   const sourcePaths: NestExampleSourcePath[] = pythonEntries.map((entry) => {
+    const content = recordByGitIdentity.get(entry.sha) ??
+      fail(`source content for ${entry.path} is absent`);
     const aliasTarget = aliasTargetByPath.get(entry.path);
     const canonicalPath = aliasTarget ?? entry.path;
     const entrySourceId = sourceIdByPath.get(entry.path);
@@ -1074,6 +1448,8 @@ export function buildNestExampleSourceInventory(
       pathBytesBase64: entry.pathBytesBase64,
       gitMode: entry.mode as NestExampleSourcePath['gitMode'],
       gitBlobSha1: entry.sha,
+      byteLength: content.byteLength,
+      sha256: content.sha256,
       kind: entry.mode === '120000' ? 'python_symlink' : 'regular_python',
       role,
       canonicalSourceId,
@@ -1166,11 +1542,8 @@ export function buildNestExampleSourceInventory(
   invocationProfiles.sort((left, right) =>
     compareText(left.invocationId, right.invocationId));
 
-  const assetEntries = leaves.filter(
-    (entry) =>
-      entry.path.startsWith(`${authority.exampleRoot}/`) &&
-      /\.(?:png|gif|svg)$/u.test(entry.path),
-  );
+  const assetEntries = exampleLeaves.filter((entry) =>
+    /\.(?:png|gif|svg)$/u.test(entry.path));
   for (const entry of assetEntries) {
     assertSafeRepositoryPath(entry.path, 'visual-asset path');
   }
@@ -1179,6 +1552,8 @@ export function buildNestExampleSourceInventory(
     if (entry.type !== 'blob' || !['100644', '100755'].includes(entry.mode)) {
       return fail(`visual asset ${entry.path} is not a regular Git blob`);
     }
+    const content = recordByGitIdentity.get(entry.sha) ??
+      fail(`visual-asset content for ${entry.path} is absent`);
     const extension = POSIX.extname(entry.path).slice(1) as 'png' | 'gif' | 'svg';
     assetCounts[extension]++;
     return {
@@ -1192,6 +1567,8 @@ export function buildNestExampleSourceInventory(
       pathBytesBase64: entry.pathBytesBase64,
       gitMode: entry.mode,
       gitBlobSha1: entry.sha,
+      byteLength: content.byteLength,
+      sha256: content.sha256,
       extension,
       role: 'checked_in_upstream_visual_asset',
     };
@@ -1209,10 +1586,74 @@ export function buildNestExampleSourceInventory(
     );
   }
 
+  const pythonPathSet = new Set(pythonEntries.map((entry) => entry.path));
+  const assetPathSet = new Set(assetEntries.map((entry) => entry.path));
+  const auxiliaryEntries = exampleLeaves.filter((entry) =>
+    !pythonPathSet.has(entry.path) && !assetPathSet.has(entry.path));
+  const auxiliaryCounts: Record<NestExampleAuxiliaryLeaf['role'], number> = {
+    build_orchestration: 0,
+    documentation: 0,
+    example_input: 0,
+    runner_orchestration: 0,
+  };
+  const auxiliaryLeaves: NestExampleAuxiliaryLeaf[] = auxiliaryEntries.map((entry) => {
+    if (entry.type !== 'blob' || !['100644', '100755'].includes(entry.mode)) {
+      return fail(`auxiliary leaf ${entry.path} is not a regular Git blob`);
+    }
+    const role = classifyAuxiliaryLeafPath(entry.path, authority);
+    if (role === null) {
+      return fail(`auxiliary leaf ${entry.path} has no closed role classification`);
+    }
+    auxiliaryCounts[role]++;
+    const content = recordByGitIdentity.get(entry.sha) ??
+      fail(`auxiliary content for ${entry.path} is absent`);
+    return {
+      auxiliaryId: identity('cortexel.nest-example.auxiliary-leaf.v1', {
+        commit: authority.commit,
+        path: entry.path,
+        gitMode: entry.mode,
+        gitBlobSha1: entry.sha,
+        role,
+      }),
+      path: entry.path,
+      pathBytesBase64: entry.pathBytesBase64,
+      gitMode: entry.mode as NestExampleAuxiliaryLeaf['gitMode'],
+      gitBlobSha1: entry.sha,
+      byteLength: content.byteLength,
+      sha256: content.sha256,
+      role,
+    };
+  });
+  countExpected(
+    auxiliaryLeaves.length,
+    authority.expected.auxiliaryLeafCount,
+    'auxiliary leaf count',
+  );
+  for (const role of Object.keys(auxiliaryCounts) as NestExampleAuxiliaryLeaf['role'][]) {
+    countExpected(
+      auxiliaryCounts[role],
+      authority.expected.auxiliaryLeafCountsByRole[role],
+      `${role} auxiliary leaf count`,
+    );
+  }
+  const completeTreePaths = [
+    ...sourcePaths.map((entry) => entry.path),
+    ...visualAssets.map((entry) => entry.path),
+    ...auxiliaryLeaves.map((entry) => entry.path),
+  ];
+  if (
+    new Set(completeTreePaths).size !== exampleLeaves.length ||
+    completeTreePaths.length !== exampleLeaves.length ||
+    exampleLeaves.some((entry) => !completeTreePaths.includes(entry.path))
+  ) {
+    fail('Python, visual-asset, and auxiliary rows do not partition the example tree');
+  }
+
   const core = {
     protocol: 'cortexel-nest-example-source-inventory' as const,
-    protocolVersion: 1 as const,
+    protocolVersion: 2 as const,
     identityAlgorithm: NEST_EXAMPLE_SOURCE_INVENTORY_IDENTITY,
+    predecessor: NEST_EXAMPLE_SOURCE_INVENTORY_V1_PREDECESSOR,
     upstream: {
       project: authority.project,
       release: authority.release,
@@ -1222,6 +1663,8 @@ export function buildNestExampleSourceInventory(
       exampleRoot: authority.exampleRoot,
     },
     acquisition: {
+      producerProfile: acquisitionProducerProfile ??
+        UNDECLARED_ACQUISITION_PRODUCER_PROFILE,
       repositoryContext: verifiedAcquisition
         ? 'temporary_repository_shape_verified' as const
         : 'caller_supplied_repository_unverified' as const,
@@ -1263,6 +1706,7 @@ export function buildNestExampleSourceInventory(
     entrypoints,
     invocationProfiles,
     visualAssets,
+    auxiliaryLeaves,
     summary: {
       pythonPathEntryCount: pythonEntries.length,
       regularPythonFileCount: regularPythonEntries.length,
@@ -1282,15 +1726,32 @@ export function buildNestExampleSourceInventory(
           profile.profile === 'runner_agg_default').length,
       visualAssetPathEntryCount: visualAssets.length,
       visualAssetCountsByExtension: assetCounts,
+      exampleTreeLeafCount: exampleLeaves.length,
+      uniqueExampleTreeGitBlobCount:
+        new Set(exampleLeaves.map((entry) => entry.sha)).size,
+      auxiliaryLeafCount: auxiliaryLeaves.length,
+      auxiliaryLeafCountsByRole: auxiliaryCounts,
     },
   };
-  return {
+  const inventory = {
     ...core,
     inventoryDigest: canonicalDigest({
       domain: NEST_EXAMPLE_SOURCE_INVENTORY_IDENTITY,
       inventory: core,
     }),
   };
+  if (acquisitionSnapshot !== undefined && acquisitionContext !== undefined) {
+    const currentSnapshot = verifyOfflineGitObjectDatabase(
+      acquisitionContext.repository,
+      acquisitionContext.temporaryRoot,
+      'NEST example source inventory acquisition',
+      reviewedGit,
+    );
+    if (!sameOfflineGitObjectDatabase(acquisitionSnapshot, currentSnapshot)) {
+      fail('verified acquisition repository identity changed during inventory reads');
+    }
+  }
+  return inventory;
 }
 
 export function canonicalNestExampleSourceInventory(
@@ -1322,6 +1783,49 @@ function canonicalMatches(left: unknown, right: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+function exactDataKeys(
+  record: UnknownRecord,
+  expectedKeys: readonly string[],
+  label: string,
+  problems: string[],
+): boolean {
+  let keys: readonly (string | symbol)[];
+  try {
+    keys = Reflect.ownKeys(record);
+  } catch {
+    problems.push(`${label} members cannot be inspected safely`);
+    return false;
+  }
+  const actual: string[] = [];
+  for (const key of keys) {
+    if (typeof key !== 'string') {
+      problems.push(`${label} must not contain symbol members`);
+      return false;
+    }
+    let descriptor: PropertyDescriptor | undefined;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(record, key);
+    } catch {
+      problems.push(`${label}.${key} cannot be inspected safely`);
+      return false;
+    }
+    if (
+      descriptor === undefined ||
+      !descriptor.enumerable ||
+      !Object.prototype.hasOwnProperty.call(descriptor, 'value')
+    ) {
+      problems.push(`${label}.${key} must be an enumerable data property`);
+      return false;
+    }
+    actual.push(key);
+  }
+  if (!canonicalMatches(actual.sort(), [...expectedKeys].sort())) {
+    problems.push(`${label} does not have its exact closed member set`);
+    return false;
+  }
+  return true;
 }
 
 function validationIdentity(
@@ -1358,8 +1862,9 @@ function validateSortedUniqueField(
 
 /**
  * Pure verification of a checked-in source inventory. This establishes only the
- * pinned source/selector denominator; it does not inspect source bodies, execute
- * NEST, inventory emitted outputs, or certify a Cortexel mapping.
+ * pinned source/selector denominator and its retained content digests. It does
+ * not execute NEST, close runtime dependencies, classify every visualization
+ * definition, inventory emitted outputs, or certify a Cortexel mapping.
  */
 export function validateNestExampleSourceInventory(
   value: unknown,
@@ -1367,6 +1872,25 @@ export function validateNestExampleSourceInventory(
   const problems: string[] = [];
   const inventory = unknownRecord(value);
   if (inventory === null) return ['source inventory root must be an object'];
+  exactDataKeys(inventory, [
+    'protocol',
+    'protocolVersion',
+    'identityAlgorithm',
+    'predecessor',
+    'upstream',
+    'acquisition',
+    'authorityFiles',
+    'documentationSelector',
+    'runnerSelector',
+    'sourcePaths',
+    'aliases',
+    'entrypoints',
+    'invocationProfiles',
+    'visualAssets',
+    'auxiliaryLeaves',
+    'summary',
+    'inventoryDigest',
+  ], 'source inventory root', problems);
 
   const {
     inventoryDigest,
@@ -1401,19 +1925,30 @@ export function validateNestExampleSourceInventory(
     problems.push('source inventory upstream authority does not equal the closed pin');
   }
   if (!canonicalMatches(inventory.acquisition, {
+    producerProfile: NEST_EXAMPLE_ACQUISITION_PRODUCER_PROFILE,
     repositoryContext: 'temporary_repository_shape_verified',
     upstreamCodeExecutedByInventoryBuilder: false,
     inventoryReadAuthority:
       'local_git_object_database_no_configured_remote_or_alternates',
   })) {
-    problems.push('checked-in source inventory lacks the verified offline acquisition shape');
+    problems.push(
+      'checked-in source inventory lacks the closed acquisition producer profile or verified offline acquisition shape',
+    );
   }
   if (
     inventory.protocol !== 'cortexel-nest-example-source-inventory' ||
-    inventory.protocolVersion !== 1 ||
+    inventory.protocolVersion !== 2 ||
     inventory.identityAlgorithm !== NEST_EXAMPLE_SOURCE_INVENTORY_IDENTITY
   ) {
-    problems.push('source inventory protocol identity is not the closed V1 identity');
+    problems.push('source inventory protocol identity is not the closed V2 identity');
+  }
+  if (!canonicalMatches(
+    inventory.predecessor,
+    NEST_EXAMPLE_SOURCE_INVENTORY_V1_PREDECESSOR,
+  )) {
+    problems.push(
+      'source inventory V1 predecessor identity drifted or transferred evidence',
+    );
   }
 
   const sources = records(inventory.sourcePaths);
@@ -1421,15 +1956,65 @@ export function validateNestExampleSourceInventory(
   const entrypoints = records(inventory.entrypoints);
   const invocations = records(inventory.invocationProfiles);
   const assets = records(inventory.visualAssets);
+  const auxiliary = records(inventory.auxiliaryLeaves);
   validateSortedUniqueField(sources, 'path', 'sourcePaths', problems);
   validateSortedUniqueField(aliases, 'aliasPath', 'aliases', problems);
   validateSortedUniqueField(entrypoints, 'canonicalPath', 'entrypoints', problems);
   validateSortedUniqueField(invocations, 'invocationId', 'invocationProfiles', problems);
   validateSortedUniqueField(assets, 'path', 'visualAssets', problems);
+  validateSortedUniqueField(auxiliary, 'path', 'auxiliaryLeaves', problems);
+
+  const contentByGitIdentity = new Map<string, string>();
+  const validateLeafContent = (
+    row: UnknownRecord,
+    label: string,
+  ): void => {
+    if (
+      !Number.isSafeInteger(row.byteLength) ||
+      typeof row.byteLength !== 'number' ||
+      row.byteLength < 0 ||
+      row.byteLength > MAX_GIT_BATCH_OUTPUT_BYTES ||
+      typeof row.sha256 !== 'string' ||
+      !SHA256.test(row.sha256) ||
+      typeof row.gitBlobSha1 !== 'string' ||
+      !SHA1.test(row.gitBlobSha1)
+    ) {
+      problems.push(`${label} has invalid independently bound content metadata`);
+      return;
+    }
+    const binding = `${String(row.byteLength)}:${row.sha256}`;
+    const existing = contentByGitIdentity.get(row.gitBlobSha1);
+    if (existing !== undefined && existing !== binding) {
+      problems.push(`${label} disagrees with another path sharing its Git blob identity`);
+    } else {
+      contentByGitIdentity.set(row.gitBlobSha1, binding);
+    }
+  };
 
   const sourceById = new Map<string, UnknownRecord>();
   const sourceByPath = new Map<string, UnknownRecord>();
+  const sourceRoles = new Set([
+    'official_entrypoint',
+    'support_module',
+    'coordinated_component',
+    'orchestration_alias',
+  ]);
   for (const source of sources) {
+    exactDataKeys(source, [
+      'sourceId',
+      'path',
+      'pathBytesBase64',
+      'gitMode',
+      'gitBlobSha1',
+      'byteLength',
+      'sha256',
+      'kind',
+      'role',
+      'canonicalSourceId',
+      'selectorMembership',
+      'canonicalSelectorMembership',
+    ], `source ${JSON.stringify(source.path)}`, problems);
+    validateLeafContent(source, `source ${JSON.stringify(source.path)}`);
     const pathValue = source.path;
     const idValue = source.sourceId;
     if (typeof pathValue !== 'string' || typeof idValue !== 'string') continue;
@@ -1456,6 +2041,13 @@ export function validateNestExampleSourceInventory(
     }
     const symlink = source.gitMode === '120000';
     if (
+      !pathValue.startsWith(
+        `${PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.exampleRoot}/`,
+      ) ||
+      !pathValue.endsWith('.py') ||
+      !SAFE_PATH.test(pathValue) ||
+      !['100644', '100755', '120000'].includes(String(source.gitMode)) ||
+      !sourceRoles.has(String(source.role)) ||
       (symlink &&
         (source.kind !== 'python_symlink' ||
           source.role !== 'orchestration_alias')) ||
@@ -1534,7 +2126,20 @@ export function validateNestExampleSourceInventory(
     }
   }
 
+  const assetCounts = { png: 0, gif: 0, svg: 0 };
   for (const asset of assets) {
+    exactDataKeys(asset, [
+      'assetId',
+      'path',
+      'pathBytesBase64',
+      'gitMode',
+      'gitBlobSha1',
+      'byteLength',
+      'sha256',
+      'extension',
+      'role',
+    ], `visual asset ${JSON.stringify(asset.path)}`, problems);
+    validateLeafContent(asset, `visual asset ${JSON.stringify(asset.path)}`);
     const expectedId = validationIdentity('cortexel.nest-example.visual-asset.v1', {
       commit: PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.commit,
       path: asset.path as JsonValue,
@@ -1551,6 +2156,95 @@ export function validateNestExampleSourceInventory(
     ) {
       problems.push(`visual asset ${JSON.stringify(asset.path)} path bytes are not bound exactly`);
     }
+    const extension = typeof asset.path === 'string'
+      ? POSIX.extname(asset.path).slice(1)
+      : '';
+    if (
+      typeof asset.path !== 'string' ||
+      !asset.path.startsWith(
+        `${PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.exampleRoot}/`,
+      ) ||
+      !SAFE_PATH.test(asset.path) ||
+      !['png', 'gif', 'svg'].includes(extension) ||
+      asset.extension !== extension ||
+      asset.role !== 'checked_in_upstream_visual_asset' ||
+      !['100644', '100755'].includes(String(asset.gitMode))
+    ) {
+      problems.push(`visual asset ${JSON.stringify(asset.path)} is not a closed classified row`);
+    } else {
+      assetCounts[extension as keyof typeof assetCounts]++;
+    }
+  }
+
+  const auxiliaryRoles = new Set([
+    'build_orchestration',
+    'documentation',
+    'example_input',
+    'runner_orchestration',
+  ]);
+  const auxiliaryCounts: Record<NestExampleAuxiliaryLeaf['role'], number> = {
+    build_orchestration: 0,
+    documentation: 0,
+    example_input: 0,
+    runner_orchestration: 0,
+  };
+  for (const leaf of auxiliary) {
+    exactDataKeys(leaf, [
+      'auxiliaryId',
+      'path',
+      'pathBytesBase64',
+      'gitMode',
+      'gitBlobSha1',
+      'byteLength',
+      'sha256',
+      'role',
+    ], `auxiliary leaf ${JSON.stringify(leaf.path)}`, problems);
+    validateLeafContent(leaf, `auxiliary leaf ${JSON.stringify(leaf.path)}`);
+    const expectedId = validationIdentity(
+      'cortexel.nest-example.auxiliary-leaf.v1',
+      {
+        commit: PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.commit,
+        path: leaf.path as JsonValue,
+        gitMode: leaf.gitMode as JsonValue,
+        gitBlobSha1: leaf.gitBlobSha1 as JsonValue,
+        role: leaf.role as JsonValue,
+      },
+    );
+    if (leaf.auxiliaryId !== expectedId) {
+      problems.push(`auxiliary leaf ${JSON.stringify(leaf.path)} has a mismatched identity`);
+    }
+    const classifiedRole = typeof leaf.path === 'string'
+      ? classifyAuxiliaryLeafPath(
+          leaf.path,
+          PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY,
+        )
+      : null;
+    if (
+      typeof leaf.path !== 'string' ||
+      typeof leaf.pathBytesBase64 !== 'string' ||
+      Buffer.from(leaf.path, 'utf8').toString('base64') !== leaf.pathBytesBase64 ||
+      !leaf.path.startsWith(
+        `${PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.exampleRoot}/`,
+      ) ||
+      !SAFE_PATH.test(leaf.path) ||
+      !auxiliaryRoles.has(String(leaf.role)) ||
+      classifiedRole !== leaf.role ||
+      !['100644', '100755'].includes(String(leaf.gitMode))
+    ) {
+      problems.push(`auxiliary leaf ${JSON.stringify(leaf.path)} is not a closed classified row`);
+    } else {
+      auxiliaryCounts[leaf.role as NestExampleAuxiliaryLeaf['role']]++;
+    }
+  }
+
+  if (!canonicalMatches(assetCounts, { png: 9, gif: 2, svg: 1 })) {
+    problems.push('visual-asset rows do not derive the exact extension counts');
+  }
+  if (!canonicalMatches(
+    auxiliaryCounts,
+    PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.expected.auxiliaryLeafCountsByRole,
+  )) {
+    problems.push('auxiliary rows do not derive the exact closed role counts');
   }
 
   const expectedSummary = {
@@ -1568,6 +2262,15 @@ export function validateNestExampleSourceInventory(
     runnerAggProfileCount: 92,
     visualAssetPathEntryCount: 12,
     visualAssetCountsByExtension: { png: 9, gif: 2, svg: 1 },
+    exampleTreeLeafCount: 162,
+    uniqueExampleTreeGitBlobCount: 159,
+    auxiliaryLeafCount: 38,
+    auxiliaryLeafCountsByRole: {
+      build_orchestration: 1,
+      documentation: 12,
+      example_input: 23,
+      runner_orchestration: 2,
+    },
   };
   if (!canonicalMatches(inventory.summary, expectedSummary)) {
     problems.push('source inventory summary does not equal the closed pinned counts');
@@ -1577,10 +2280,55 @@ export function validateNestExampleSourceInventory(
     aliases.length !== 3 ||
     entrypoints.length !== 98 ||
     invocations.length !== 92 ||
-    assets.length !== 12
+    assets.length !== 12 ||
+    auxiliary.length !== 38
   ) {
     problems.push('source inventory row cardinalities do not equal the closed pinned denominator');
   }
+  const completeLeafRows = [...sources, ...assets, ...auxiliary];
+  const completeLeafPaths = completeLeafRows.map((row) => row.path);
+  const sharedBlobGroups = [...contentByGitIdentity.keys()]
+    .map((gitBlobSha1) => ({
+      gitBlobSha1,
+      paths: completeLeafRows
+        .filter((row) => row.gitBlobSha1 === gitBlobSha1)
+        .map((row) => row.path)
+        .filter((entryPath): entryPath is string => typeof entryPath === 'string')
+        .sort(compareText),
+    }))
+    .filter(({ paths }) => paths.length > 1)
+    .sort((left, right) => compareText(left.gitBlobSha1, right.gitBlobSha1));
+  if (
+    completeLeafRows.length !== 162 ||
+    new Set(completeLeafPaths).size !== 162 ||
+    contentByGitIdentity.size !== 159
+  ) {
+    problems.push(
+      'source, visual-asset, and auxiliary rows do not form the exact disjoint 162-leaf/159-blob denominator',
+    );
+  }
+  if (!canonicalMatches(sharedBlobGroups, PINNED_NEST_EXAMPLE_SHARED_BLOB_GROUPS)) {
+    problems.push('shared Git blob rows do not equal the exact four-path SONATA alias');
+  }
 
-  return [...new Set(problems)].sort().slice(0, 64);
+  const unique = [...new Set(problems)].sort();
+  // Envelope identity and authority failures must survive the bounded
+  // diagnostic projection even when a historical or hostile payload also
+  // produces hundreds of row-local errors. Otherwise the most actionable
+  // reason for rejection can disappear solely because later details sort
+  // ahead of it.
+  const priority = [
+    'source inventory is not RFC 8785 canonicalizable JSON',
+    'source inventory digest does not bind its complete semantic projection',
+    'source inventory digest does not equal the reviewed pinned NEST v3.10 inventory',
+    'source inventory upstream authority does not equal the closed pin',
+    'checked-in source inventory lacks the closed acquisition producer profile or verified offline acquisition shape',
+    'source inventory protocol identity is not the closed V2 identity',
+    'source inventory V1 predecessor identity drifted or transferred evidence',
+  ].filter((problem) => unique.includes(problem));
+  const prioritized = new Set(priority);
+  return [
+    ...priority,
+    ...unique.filter((problem) => !prioritized.has(problem)),
+  ].slice(0, 64);
 }

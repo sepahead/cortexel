@@ -2,8 +2,10 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -75,8 +77,12 @@ describe('evidence ledger — the committed ledger', () => {
 
   it('uses the symlink-refusing release reader at the standalone CLI boundary', () => {
     if (process.platform === 'win32') return;
-    const repository = mkdtempSync(path.join(tmpdir(), 'cortexel-ledger-cli-'));
-    const outside = mkdtempSync(path.join(tmpdir(), 'cortexel-ledger-outside-'));
+    const repository = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'cortexel-ledger-cli-')),
+    );
+    const outside = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'cortexel-ledger-outside-')),
+    );
     try {
       const release = path.join(repository, 'docs', 'release');
       mkdirSync(release, { recursive: true });
@@ -90,6 +96,45 @@ describe('evidence ledger — the committed ledger', () => {
     } finally {
       rmSync(repository, { recursive: true, force: true });
       rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('requires the exact retained NEST V1 predecessor bytes at the CLI boundary', () => {
+    const repository = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'cortexel-ledger-predecessor-')),
+    );
+    const relativePaths = [
+      'docs/release/evidence-ledger.v1.json',
+      'docs/release/evidence-ledger.schema.json',
+      'docs/audit/nest-example-coverage.v1.json',
+      'docs/audit/nest-example-coverage.schema.json',
+      'docs/audit/nest-example-source-inventory.v1.json',
+      'docs/audit/nest-example-source-inventory.v2.json',
+      'docs/audit/nest-documentation-source-inventory.v1.json',
+    ];
+    try {
+      for (const relativePath of relativePaths) {
+        const target = path.join(repository, relativePath);
+        mkdirSync(path.dirname(target), { recursive: true });
+        writeFileSync(target, readFileSync(path.resolve(relativePath)));
+      }
+      expect(runEvidenceLedgerCli([], repository)).toBe(0);
+
+      const predecessorPath = path.join(
+        repository,
+        'docs/audit/nest-example-source-inventory.v1.json',
+      );
+      const predecessorBytes = readFileSync(predecessorPath);
+      unlinkSync(predecessorPath);
+      expect(runEvidenceLedgerCli([], repository)).toBe(1);
+
+      writeFileSync(predecessorPath, Buffer.concat([
+        predecessorBytes,
+        Buffer.from('\n', 'utf8'),
+      ]));
+      expect(runEvidenceLedgerCli([], repository)).toBe(1);
+    } finally {
+      rmSync(repository, { recursive: true, force: true });
     }
   });
 

@@ -5,7 +5,6 @@
  * contact a registry. It verifies only repository-owned metadata and local git facts.
  * Signing, branch, remote, and publication policy remain owner/CI responsibilities.
  */
-import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import path from 'node:path';
@@ -26,6 +25,14 @@ import {
   type ReleaseVerificationInput,
 } from './lib/release-identity.js';
 import { readDirectRepositoryFile } from './lib/direct-repository-file.js';
+import {
+  controlledGitCommandArguments,
+  controlledGitEnvironment,
+} from './lib/offline-git-object-database.js';
+import {
+  processReviewedGitRuntime,
+  runReviewedGitCommand,
+} from './lib/reviewed-git-command.js';
 import { parseJsonSourceStrict } from './lib/strict-json-source.js';
 
 export const REPOSITORY_ROOT = path.resolve(
@@ -37,69 +44,57 @@ export const REPOSITORY_ROOT = path.resolve(
 export const readDirectReleaseFile = readDirectRepositoryFile;
 
 /**
- * Git is part of the release trust boundary. Inherit only process-launch essentials;
- * repository redirection, alternate object databases, replacement objects, injected
- * config, pathspec modes, and diff helpers must not come from the caller's environment.
+ * Git is part of the release trust boundary. The reviewed runtime closes ambient
+ * process configuration, bounds the command, and disables lazy network fetches.
+ * This verifier still inspects the caller's local repository: its own config,
+ * .git indirection/object alternates, and same-UID mutation are not authenticated
+ * or contained by this command boundary.
  */
-function releaseGitEnvironment(): NodeJS.ProcessEnv {
-  const environment: NodeJS.ProcessEnv = {};
-  for (const key of [
-    'PATH',
-    'PATHEXT',
-    'SystemRoot',
-    'SYSTEMROOT',
-    'WINDIR',
-    'TMPDIR',
-    'TMP',
-    'TEMP',
-  ]) {
-    if (process.env[key] !== undefined) environment[key] = process.env[key];
-  }
-  environment.LC_ALL = 'C';
-  environment.LANG = 'C';
-  environment.GIT_CONFIG_NOSYSTEM = '1';
-  environment.GIT_CONFIG_COUNT = '0';
-  environment.GIT_NO_REPLACE_OBJECTS = '1';
-  environment.GIT_OPTIONAL_LOCKS = '0';
-  environment.GIT_TERMINAL_PROMPT = '0';
-  return environment;
-}
-
-function releaseGitArgs(root: string, args: readonly string[]): string[] {
-  return [
-    '--no-replace-objects',
-    '-c',
-    'core.fsmonitor=false',
-    '-c',
-    'core.untrackedCache=false',
-    '-c',
-    'core.ignoreStat=false',
-    '-C',
-    root,
-    ...args,
-  ];
-}
+const RELEASE_GIT_DEFAULT_OUTPUT_BYTES = 1024 * 1024;
+const RELEASE_GIT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
+const RELEASE_GIT_TIMEOUT_MS = 30_000;
+const ALL_GIT_EXIT_STATUSES = Object.freeze(
+  Array.from({ length: 256 }, (_, status) => status),
+);
 
 function gitOutput(root: string, args: readonly string[]): string | null {
-  const result = spawnSync('git', releaseGitArgs(root, args), {
-    cwd: root,
-    env: releaseGitEnvironment(),
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  if (result.status !== 0 || result.error) return null;
-  return result.stdout.trim();
+  const output = gitRawBuffer(root, args);
+  if (output === null) return null;
+  try {
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
+      .decode(output)
+      .trim();
+  } catch {
+    return null;
+  }
 }
 
-function gitRawBuffer(root: string, args: readonly string[], maxBytes = 1024 * 1024): Buffer | null {
-  const result = spawnSync('git', releaseGitArgs(root, args), {
-    cwd: root,
-    env: releaseGitEnvironment(),
-    maxBuffer: maxBytes + 1,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  if (result.status !== 0 || result.error || result.stdout.length > maxBytes) return null;
-  return result.stdout;
+function gitRawBuffer(
+  root: string,
+  args: readonly string[],
+  maxBytes = RELEASE_GIT_DEFAULT_OUTPUT_BYTES,
+): Buffer | null {
+  if (
+    !Number.isSafeInteger(maxBytes) ||
+    maxBytes < 1 ||
+    maxBytes > RELEASE_GIT_MAX_OUTPUT_BYTES
+  ) return null;
+  try {
+    const result = runReviewedGitCommand(
+      processReviewedGitRuntime(),
+      root,
+      controlledGitCommandArguments(root, args),
+      {
+        environment: { ...controlledGitEnvironment(), GIT_NO_LAZY_FETCH: '1' },
+        outputLimitBytes: maxBytes,
+        requireEmptyStderr: false,
+        timeoutMs: RELEASE_GIT_TIMEOUT_MS,
+      },
+    );
+    return Buffer.from(result.stdout);
+  } catch {
+    return null;
+  }
 }
 
 function gitRawOutput(root: string, args: readonly string[]): string | null {
@@ -113,13 +108,22 @@ function gitRawOutput(root: string, args: readonly string[]): string | null {
 }
 
 function gitExit(root: string, args: readonly string[]): number | null {
-  const result = spawnSync('git', releaseGitArgs(root, args), {
-    cwd: root,
-    env: releaseGitEnvironment(),
-    stdio: ['ignore', 'ignore', 'ignore'],
-  });
-  if (result.error || result.status === null) return null;
-  return result.status;
+  try {
+    return runReviewedGitCommand(
+      processReviewedGitRuntime(),
+      root,
+      controlledGitCommandArguments(root, args),
+      {
+        acceptedStatuses: ALL_GIT_EXIT_STATUSES,
+        environment: { ...controlledGitEnvironment(), GIT_NO_LAZY_FETCH: '1' },
+        outputLimitBytes: RELEASE_GIT_DEFAULT_OUTPUT_BYTES,
+        requireEmptyStderr: false,
+        timeoutMs: RELEASE_GIT_TIMEOUT_MS,
+      },
+    ).status;
+  } catch {
+    return null;
+  }
 }
 
 const LEDGER_FILE = 'docs/release/evidence-ledger.v1.json';

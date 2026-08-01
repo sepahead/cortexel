@@ -1854,13 +1854,15 @@ export const AstrocyteParamsSchema = z
   });
 export type AstrocyteParams = z.infer<typeof AstrocyteParamsSchema>;
 
-// Corpus knowledge-graph. This is the bounded, evidence-carrying projection of
+// Corpus knowledge-graph. This is the bounded, evidence-shaped projection of
 // Engram's CorpusEntityGraphResponse: papers, canonical models, and lineage
 // families. It is intentionally NOT the much broader per-paper ontology. Every
-// node/edge is traceable to at least one typed evidence record, every assertion
-// has a stable id, and every score is explicitly uncalibrated and discriminated.
-// The whole projection is derived/advisory; raw paper-local evidence belongs in
-// a separate future skill rather than weakening this contract.
+// node/edge carries at least one typed evidence-reference record, but this legacy
+// envelope has no closed inventory that can resolve or authenticate those references.
+// Every assertion has a caller-supplied stable id and every score is explicitly
+// uncalibrated and discriminated. The whole projection is derived/advisory; raw
+// paper-local evidence belongs in a separate future skill rather than weakening
+// this contract.
 export const CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS = [
   'paper',
   'model',

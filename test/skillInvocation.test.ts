@@ -748,7 +748,7 @@ describe('validateSkillInvocation', () => {
     }
   });
 
-  it('binds corpus graph source, immutable snapshot, and scope into provenance', () => {
+  it('binds corpus graph source, declared snapshot namespace, and scope into provenance', () => {
     for (const [key, value] of [
       ['graph_source', 'different-source'],
       ['graph_snapshot_id', 'different-snapshot'],

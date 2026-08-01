@@ -1,5 +1,5 @@
 /**
- * Closed source strings for the package-smoke reviewed-Node lifecycle.
+ * Closed source strings for the reusable reviewed-POSIX command lifecycle.
  *
  * Production authority is deliberately asymmetric:
  *
@@ -17,49 +17,53 @@
  * containment.
  */
 
-export const REVIEWED_NODE_COMMAND_RESULT_SCHEMA =
-  'cortexel-package-smoke-command.v2' as const;
-export const REVIEWED_NODE_COMMAND_HANDSHAKE_SCHEMA =
-  'cortexel-package-smoke-command-handshake.v2' as const;
-export const REVIEWED_NODE_TARGET_COMPLETION_SCHEMA =
-  'cortexel-package-smoke-target-completion.v2' as const;
-export const REVIEWED_NODE_WORKER_READY_SCHEMA =
-  'cortexel-package-smoke-worker-ready.v1' as const;
-export const REVIEWED_NODE_GUARDIAN_READY_SCHEMA =
-  'cortexel-package-smoke-guardian-ready.v1' as const;
-export const REVIEWED_NODE_GUARDIAN_SWEEP_INTENT_SCHEMA =
-  'cortexel-package-smoke-guardian-sweep-intent.v1' as const;
-export const REVIEWED_NODE_COMMAND_TEST_HOOK_SCHEMA =
-  'cortexel-package-smoke-command-test-hook.v2' as const;
+export const REVIEWED_POSIX_COMMAND_RESULT_SCHEMA =
+  'cortexel-reviewed-posix-command.v3' as const;
+export const REVIEWED_POSIX_COMMAND_HANDSHAKE_SCHEMA =
+  'cortexel-reviewed-posix-command-handshake.v1' as const;
+export const REVIEWED_POSIX_TARGET_COMPLETION_SCHEMA =
+  'cortexel-reviewed-posix-target-completion.v1' as const;
+export const REVIEWED_POSIX_WORKER_READY_SCHEMA =
+  'cortexel-reviewed-posix-worker-ready.v1' as const;
+export const REVIEWED_POSIX_GUARDIAN_READY_SCHEMA =
+  'cortexel-reviewed-posix-guardian-ready.v2' as const;
+export const REVIEWED_POSIX_LIFETIME_AUTHORITY_SCHEMA =
+  'cortexel-reviewed-posix-lifetime-authority.v1' as const;
+export const REVIEWED_POSIX_GUARDIAN_SWEEP_INTENT_SCHEMA =
+  'cortexel-reviewed-posix-guardian-sweep-intent.v1' as const;
+export const REVIEWED_POSIX_COMMAND_TEST_HOOK_SCHEMA =
+  'cortexel-reviewed-posix-command-test-hook.v1' as const;
 
-export const REVIEWED_NODE_SUPERVISOR_PAYLOAD_ENV =
-  'CORTEXEL_PACKAGE_SMOKE_SUPERVISOR_PAYLOAD' as const;
-export const REVIEWED_NODE_GUARDIAN_PAYLOAD_ENV =
-  'CORTEXEL_PACKAGE_SMOKE_GUARDIAN_PAYLOAD' as const;
-export const REVIEWED_NODE_WORKER_PAYLOAD_ENV =
-  'CORTEXEL_PACKAGE_SMOKE_WORKER_PAYLOAD' as const;
-export const REVIEWED_NODE_TEST_HOOK_ENV =
-  'CORTEXEL_PACKAGE_SMOKE_TRUSTED_COMMAND_TEST_HOOK' as const;
+export const REVIEWED_POSIX_SUPERVISOR_PAYLOAD_ENV =
+  'CORTEXEL_REVIEWED_POSIX_SUPERVISOR_PAYLOAD' as const;
+export const REVIEWED_POSIX_GUARDIAN_PAYLOAD_ENV =
+  'CORTEXEL_REVIEWED_POSIX_GUARDIAN_PAYLOAD' as const;
+export const REVIEWED_POSIX_WORKER_PAYLOAD_ENV =
+  'CORTEXEL_REVIEWED_POSIX_WORKER_PAYLOAD' as const;
+export const REVIEWED_POSIX_TEST_HOOK_ENV =
+  'CORTEXEL_REVIEWED_POSIX_TRUSTED_COMMAND_TEST_HOOK' as const;
+export const REVIEWED_POSIX_LIFETIME_AUTHORITY_ENV =
+  'CORTEXEL_REVIEWED_POSIX_LIFETIME_AUTHORITY' as const;
 
-export const REVIEWED_NODE_ARM_TIMEOUT_MS = 5_000;
-export const REVIEWED_NODE_GATE_TIMEOUT_MS = 7_000;
-export const REVIEWED_NODE_SETTLEMENT_TIMEOUT_MS = 5_000;
-export const REVIEWED_NODE_PIPE_DRAIN_TIMEOUT_MS = 2_000;
-export const REVIEWED_NODE_TEST_HOOK_TIMEOUT_MS = 4_000;
-export const REVIEWED_NODE_SUPERVISOR_SCHEDULER_MARGIN_MS = 3_000;
-export const REVIEWED_NODE_SUPERVISOR_GRACE_MS =
-  REVIEWED_NODE_ARM_TIMEOUT_MS +
-  REVIEWED_NODE_SETTLEMENT_TIMEOUT_MS +
-  REVIEWED_NODE_PIPE_DRAIN_TIMEOUT_MS +
-  REVIEWED_NODE_TEST_HOOK_TIMEOUT_MS +
-  REVIEWED_NODE_SUPERVISOR_SCHEDULER_MARGIN_MS;
+export const REVIEWED_POSIX_ARM_TIMEOUT_MS = 5_000;
+export const REVIEWED_POSIX_GATE_TIMEOUT_MS = 7_000;
+export const REVIEWED_POSIX_SETTLEMENT_TIMEOUT_MS = 5_000;
+export const REVIEWED_POSIX_PIPE_DRAIN_TIMEOUT_MS = 2_000;
+export const REVIEWED_POSIX_TEST_HOOK_TIMEOUT_MS = 4_000;
+export const REVIEWED_POSIX_SUPERVISOR_SCHEDULER_MARGIN_MS = 3_000;
+export const REVIEWED_POSIX_SUPERVISOR_GRACE_MS =
+  REVIEWED_POSIX_ARM_TIMEOUT_MS +
+  REVIEWED_POSIX_SETTLEMENT_TIMEOUT_MS +
+  REVIEWED_POSIX_PIPE_DRAIN_TIMEOUT_MS +
+  REVIEWED_POSIX_TEST_HOOK_TIMEOUT_MS +
+  REVIEWED_POSIX_SUPERVISOR_SCHEDULER_MARGIN_MS;
 
-export const REVIEWED_NODE_TARGET_WORKER_SOURCE = String.raw`'use strict';
+export const REVIEWED_POSIX_TARGET_WORKER_SOURCE = String.raw`'use strict';
 const childProcess = require('node:child_process');
 const fs = require('node:fs');
-const payloadName = ${JSON.stringify(REVIEWED_NODE_WORKER_PAYLOAD_ENV)};
-const readySchema = ${JSON.stringify(REVIEWED_NODE_WORKER_READY_SCHEMA)};
-const completionSchema = ${JSON.stringify(REVIEWED_NODE_TARGET_COMPLETION_SCHEMA)};
+const payloadName = ${JSON.stringify(REVIEWED_POSIX_WORKER_PAYLOAD_ENV)};
+const readySchema = ${JSON.stringify(REVIEWED_POSIX_WORKER_READY_SCHEMA)};
+const completionSchema = ${JSON.stringify(REVIEWED_POSIX_TARGET_COMPLETION_SCHEMA)};
 let payload;
 try {
   payload = JSON.parse(process.env[payloadName] || 'null');
@@ -67,12 +71,14 @@ try {
     ? Object.keys(payload).sort()
     : [];
   if (
-    JSON.stringify(keys) !== '["args","cwd","environment"]' ||
+    JSON.stringify(keys) !== '["args","cwd","environment","hasStdin","targetExecutable"]' ||
     !Array.isArray(payload.args) ||
     typeof payload.cwd !== 'string' ||
     !payload.environment ||
     typeof payload.environment !== 'object' ||
-    Array.isArray(payload.environment)
+    Array.isArray(payload.environment) ||
+    typeof payload.hasStdin !== 'boolean' ||
+    typeof payload.targetExecutable !== 'string'
   ) {
     throw new Error('invalid worker payload');
   }
@@ -85,7 +91,7 @@ let gate = '';
 let started = false;
 let published = false;
 let target = null;
-const gateTimer = setTimeout(() => process.exit(70), ${REVIEWED_NODE_GATE_TIMEOUT_MS});
+const gateTimer = setTimeout(() => process.exit(70), ${REVIEWED_POSIX_GATE_TIMEOUT_MS});
 const publishCompletion = (status, signal, spawnError) => {
   if (published) return;
   const validStatus = Number.isInteger(status) && status >= 0 && status <= 255;
@@ -117,11 +123,14 @@ const startTarget = () => {
   started = true;
   clearTimeout(gateTimer);
   try {
-    target = childProcess.spawn(process.execPath, payload.args, {
+    target = childProcess.spawn(payload.targetExecutable, payload.args, {
       cwd: payload.cwd,
       detached: false,
       env: payload.environment,
-      stdio: ['ignore', 'inherit', 'inherit'],
+      // Descriptor 4 is an outer-host-authored, unlinked, read-only input spool.
+      // The reviewed control plane passes it through without reading it, and the
+      // worker publishes it as target stdin only after the complete GO gate.
+      stdio: [payload.hasStdin ? 4 : 'ignore', 'inherit', 'inherit'],
       windowsHide: true,
     });
   } catch {
@@ -152,16 +161,17 @@ try {
 }
 `;
 
-export const REVIEWED_NODE_GUARDIAN_SOURCE = String.raw`'use strict';
+export const REVIEWED_POSIX_GUARDIAN_SOURCE = String.raw`'use strict';
 const childProcess = require('node:child_process');
 const fs = require('node:fs');
-const payloadName = ${JSON.stringify(REVIEWED_NODE_GUARDIAN_PAYLOAD_ENV)};
-const workerPayloadName = ${JSON.stringify(REVIEWED_NODE_WORKER_PAYLOAD_ENV)};
-const workerSource = ${JSON.stringify(REVIEWED_NODE_TARGET_WORKER_SOURCE)};
-const workerReadySchema = ${JSON.stringify(REVIEWED_NODE_WORKER_READY_SCHEMA)};
-const targetCompletionSchema = ${JSON.stringify(REVIEWED_NODE_TARGET_COMPLETION_SCHEMA)};
-const guardianReadySchema = ${JSON.stringify(REVIEWED_NODE_GUARDIAN_READY_SCHEMA)};
-const sweepIntentSchema = ${JSON.stringify(REVIEWED_NODE_GUARDIAN_SWEEP_INTENT_SCHEMA)};
+const payloadName = ${JSON.stringify(REVIEWED_POSIX_GUARDIAN_PAYLOAD_ENV)};
+const workerPayloadName = ${JSON.stringify(REVIEWED_POSIX_WORKER_PAYLOAD_ENV)};
+const workerSource = ${JSON.stringify(REVIEWED_POSIX_TARGET_WORKER_SOURCE)};
+const workerReadySchema = ${JSON.stringify(REVIEWED_POSIX_WORKER_READY_SCHEMA)};
+const targetCompletionSchema = ${JSON.stringify(REVIEWED_POSIX_TARGET_COMPLETION_SCHEMA)};
+const guardianReadySchema = ${JSON.stringify(REVIEWED_POSIX_GUARDIAN_READY_SCHEMA)};
+const sweepIntentSchema = ${JSON.stringify(REVIEWED_POSIX_GUARDIAN_SWEEP_INTENT_SCHEMA)};
+const lifetimeAuthoritySchema = ${JSON.stringify(REVIEWED_POSIX_LIFETIME_AUTHORITY_SCHEMA)};
 
 let sweepStarted = false;
 let worker = null;
@@ -172,6 +182,56 @@ let gate = '';
 let workerProtocol = Buffer.alloc(0);
 let armTimer = null;
 let gateTimer = null;
+
+const normalizeLifetimeAuthority = (value) => {
+  const keys = value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.keys(value).sort()
+    : [];
+  const integerKeys = ['dev', 'gid', 'ino', 'mode', 'nlink', 'rdev', 'uid'];
+  if (
+    JSON.stringify(keys) !==
+      '["dev","gid","ino","kind","mode","nlink","rdev","schema","uid"]' ||
+    value.schema !== lifetimeAuthoritySchema ||
+    !['fifo', 'socket'].includes(value.kind) ||
+    integerKeys.some((key) =>
+      typeof value[key] !== 'string' ||
+      !/^(?:0|-?[1-9][0-9]*)$/.test(value[key]))
+  ) {
+    return null;
+  }
+  return {
+    dev: value.dev,
+    gid: value.gid,
+    ino: value.ino,
+    kind: value.kind,
+    mode: value.mode,
+    nlink: value.nlink,
+    rdev: value.rdev,
+    schema: lifetimeAuthoritySchema,
+    uid: value.uid,
+  };
+};
+const inspectLifetimeAuthority = (descriptor) => {
+  const stat = fs.fstatSync(descriptor, { bigint: true });
+  const fifo = stat.isFIFO();
+  const socket = stat.isSocket();
+  if (Number(fifo) + Number(socket) !== 1) {
+    throw new Error('guardian lifetime descriptor is not a pipe endpoint');
+  }
+  return {
+    dev: stat.dev.toString(),
+    gid: stat.gid.toString(),
+    ino: stat.ino.toString(),
+    kind: fifo ? 'fifo' : 'socket',
+    mode: stat.mode.toString(),
+    nlink: stat.nlink.toString(),
+    rdev: stat.rdev.toString(),
+    schema: lifetimeAuthoritySchema,
+    uid: stat.uid.toString(),
+  };
+};
+const sameLifetimeAuthority = (left, right) =>
+  left !== null && right !== null && JSON.stringify(left) === JSON.stringify(right);
 
 const beginSweep = (reason, completion = null) => {
   if (sweepStarted) return;
@@ -206,6 +266,18 @@ const beginSweep = (reason, completion = null) => {
   }
   setInterval(() => {}, 1000);
 };
+
+// Install terminal-state handlers before consulting any fallible authority.
+// Every failure below therefore converges on the same still-live, self-addressed
+// group sweep; no parent ever has to address this PID or PGID.
+process.stdin.once('end', () => beginSweep('supervisor_lease_closed'));
+process.stdin.once('error', () => beginSweep('supervisor_lease_closed'));
+for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
+  process.on(signal, () => beginSweep('guardian_signal'));
+}
+process.on('uncaughtException', () => beginSweep('guardian_exception'));
+process.on('unhandledRejection', () => beginSweep('guardian_exception'));
+
 const validCompletion = (value) => {
   const keys = value && typeof value === 'object' && !Array.isArray(value)
     ? Object.keys(value).sort()
@@ -255,6 +327,7 @@ const acceptWorkerFrame = (raw) => {
     clearTimeout(armTimer);
     const ready = Buffer.from(JSON.stringify({
       guardianPid: process.pid,
+      lifetimeAuthority: payload.lifetimeAuthority,
       schema: guardianReadySchema,
       workerPid: worker.pid,
     }) + '\n', 'utf8');
@@ -269,7 +342,7 @@ const acceptWorkerFrame = (raw) => {
     }
     gateTimer = setTimeout(
       () => beginSweep('gate_timeout'),
-      ${REVIEWED_NODE_GATE_TIMEOUT_MS},
+      ${REVIEWED_POSIX_GATE_TIMEOUT_MS},
     );
     return;
   }
@@ -330,14 +403,6 @@ process.stdin.on('data', (chunk) => {
     });
   }
 });
-process.stdin.once('end', () => beginSweep('supervisor_lease_closed'));
-process.stdin.once('error', () => beginSweep('supervisor_lease_closed'));
-for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
-  process.on(signal, () => beginSweep('guardian_signal'));
-}
-process.on('uncaughtException', () => beginSweep('guardian_exception'));
-process.on('unhandledRejection', () => beginSweep('guardian_exception'));
-
 let payload;
 try {
   payload = JSON.parse(process.env[payloadName] || 'null');
@@ -345,12 +410,16 @@ try {
     ? Object.keys(payload).sort()
     : [];
   if (
-    JSON.stringify(keys) !== '["args","cwd","environment"]' ||
+    JSON.stringify(keys) !==
+      '["args","cwd","environment","hasStdin","lifetimeAuthority","targetExecutable"]' ||
     !Array.isArray(payload.args) ||
     typeof payload.cwd !== 'string' ||
     !payload.environment ||
     typeof payload.environment !== 'object' ||
-    Array.isArray(payload.environment)
+    Array.isArray(payload.environment) ||
+    typeof payload.hasStdin !== 'boolean' ||
+    normalizeLifetimeAuthority(payload.lifetimeAuthority) === null ||
+    typeof payload.targetExecutable !== 'string'
   ) {
     throw new Error('invalid guardian payload');
   }
@@ -359,17 +428,44 @@ try {
 }
 delete process.env[payloadName];
 if (!sweepStarted) {
+  payload.lifetimeAuthority = normalizeLifetimeAuthority(payload.lifetimeAuthority);
+  try {
+    // The numeric slot is not authority: Node can reuse a closed inherited slot
+    // for an internal FIFO/socket before this source runs. Bind the exact kernel
+    // object sealed by the outer launcher and retained by the supervisor.
+    const observedLifetime = inspectLifetimeAuthority(5);
+    if (!sameLifetimeAuthority(payload.lifetimeAuthority, observedLifetime)) {
+      throw new Error('guardian lifetime descriptor identity mismatch');
+    }
+  } catch {
+    beginSweep('invalid_lifetime_channel');
+  }
+}
+if (!sweepStarted) {
   const workerPayload = JSON.stringify({
     args: payload.args,
     cwd: payload.cwd,
     environment: payload.environment,
+    hasStdin: payload.hasStdin,
+    targetExecutable: payload.targetExecutable,
   });
   try {
     worker = childProcess.spawn(process.execPath, ['-e', workerSource], {
       cwd: payload.cwd,
       detached: false,
       env: { ...process.env, [workerPayloadName]: workerPayload },
-      stdio: ['pipe', 'inherit', 'inherit', 'pipe'],
+      // Guardian descriptor 4 is a pass-through capability. Neither guardian nor
+      // worker JavaScript reads it before the worker's exact GO frame.
+      stdio: [
+        'pipe',
+        'inherit',
+        'inherit',
+        'pipe',
+        payload.hasStdin ? 4 : 'ignore',
+        // Never propagate the outer-held guardian lifetime descriptor to the
+        // worker or target. A detached descendant therefore cannot pin it.
+        'ignore',
+      ],
       windowsHide: true,
     });
   } catch {
@@ -379,7 +475,7 @@ if (!sweepStarted) {
 if (!sweepStarted && worker) {
   armTimer = setTimeout(
     () => beginSweep('worker_ready_timeout'),
-    ${REVIEWED_NODE_ARM_TIMEOUT_MS},
+    ${REVIEWED_POSIX_ARM_TIMEOUT_MS},
   );
   worker.stdio[3].on('data', captureWorkerProtocol);
   worker.stdio[3].once('end', () => {
@@ -391,24 +487,98 @@ if (!sweepStarted && worker) {
 }
 `;
 
-export const REVIEWED_NODE_SUPERVISOR_SOURCE = String.raw`'use strict';
+export const REVIEWED_POSIX_SUPERVISOR_SOURCE = String.raw`'use strict';
 const childProcess = require('node:child_process');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
-const payloadName = ${JSON.stringify(REVIEWED_NODE_SUPERVISOR_PAYLOAD_ENV)};
-const guardianPayloadName = ${JSON.stringify(REVIEWED_NODE_GUARDIAN_PAYLOAD_ENV)};
-const testHookPayloadName = ${JSON.stringify(REVIEWED_NODE_TEST_HOOK_ENV)};
-const guardianSource = ${JSON.stringify(REVIEWED_NODE_GUARDIAN_SOURCE)};
-const resultSchema = ${JSON.stringify(REVIEWED_NODE_COMMAND_RESULT_SCHEMA)};
-const handshakeSchema = ${JSON.stringify(REVIEWED_NODE_COMMAND_HANDSHAKE_SCHEMA)};
-const guardianReadySchema = ${JSON.stringify(REVIEWED_NODE_GUARDIAN_READY_SCHEMA)};
-const sweepIntentSchema = ${JSON.stringify(REVIEWED_NODE_GUARDIAN_SWEEP_INTENT_SCHEMA)};
-const completionSchema = ${JSON.stringify(REVIEWED_NODE_TARGET_COMPLETION_SCHEMA)};
-const testHookSchema = ${JSON.stringify(REVIEWED_NODE_COMMAND_TEST_HOOK_SCHEMA)};
+const payloadName = ${JSON.stringify(REVIEWED_POSIX_SUPERVISOR_PAYLOAD_ENV)};
+const guardianPayloadName = ${JSON.stringify(REVIEWED_POSIX_GUARDIAN_PAYLOAD_ENV)};
+const testHookPayloadName = ${JSON.stringify(REVIEWED_POSIX_TEST_HOOK_ENV)};
+const lifetimeAuthorityPayloadName = ${JSON.stringify(REVIEWED_POSIX_LIFETIME_AUTHORITY_ENV)};
+const guardianSource = ${JSON.stringify(REVIEWED_POSIX_GUARDIAN_SOURCE)};
+const resultSchema = ${JSON.stringify(REVIEWED_POSIX_COMMAND_RESULT_SCHEMA)};
+const handshakeSchema = ${JSON.stringify(REVIEWED_POSIX_COMMAND_HANDSHAKE_SCHEMA)};
+const guardianReadySchema = ${JSON.stringify(REVIEWED_POSIX_GUARDIAN_READY_SCHEMA)};
+const sweepIntentSchema = ${JSON.stringify(REVIEWED_POSIX_GUARDIAN_SWEEP_INTENT_SCHEMA)};
+const completionSchema = ${JSON.stringify(REVIEWED_POSIX_TARGET_COMPLETION_SCHEMA)};
+const testHookSchema = ${JSON.stringify(REVIEWED_POSIX_COMMAND_TEST_HOOK_SCHEMA)};
+const lifetimeAuthoritySchema = ${JSON.stringify(REVIEWED_POSIX_LIFETIME_AUTHORITY_SCHEMA)};
+
+const normalizeLifetimeAuthority = (value) => {
+  const keys = value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.keys(value).sort()
+    : [];
+  const integerKeys = ['dev', 'gid', 'ino', 'mode', 'nlink', 'rdev', 'uid'];
+  if (
+    JSON.stringify(keys) !==
+      '["dev","gid","ino","kind","mode","nlink","rdev","schema","uid"]' ||
+    value.schema !== lifetimeAuthoritySchema ||
+    !['fifo', 'socket'].includes(value.kind) ||
+    integerKeys.some((key) =>
+      typeof value[key] !== 'string' ||
+      !/^(?:0|-?[1-9][0-9]*)$/.test(value[key]))
+  ) {
+    return null;
+  }
+  return {
+    dev: value.dev,
+    gid: value.gid,
+    ino: value.ino,
+    kind: value.kind,
+    mode: value.mode,
+    nlink: value.nlink,
+    rdev: value.rdev,
+    schema: lifetimeAuthoritySchema,
+    uid: value.uid,
+  };
+};
+const inspectLifetimeAuthority = (descriptor) => {
+  const stat = fs.fstatSync(descriptor, { bigint: true });
+  const fifo = stat.isFIFO();
+  const socket = stat.isSocket();
+  if (Number(fifo) + Number(socket) !== 1) {
+    throw new Error('supervisor lifetime descriptor is not a pipe endpoint');
+  }
+  return {
+    dev: stat.dev.toString(),
+    gid: stat.gid.toString(),
+    ino: stat.ino.toString(),
+    kind: fifo ? 'fifo' : 'socket',
+    mode: stat.mode.toString(),
+    nlink: stat.nlink.toString(),
+    rdev: stat.rdev.toString(),
+    schema: lifetimeAuthoritySchema,
+    uid: stat.uid.toString(),
+  };
+};
+const sameLifetimeAuthority = (left, right) =>
+  left !== null && right !== null && JSON.stringify(left) === JSON.stringify(right);
 
 let payload;
 let trustedTestHook = null;
+let lifetimeAuthority = null;
 try {
   payload = JSON.parse(process.env[payloadName] || 'null');
+  const payloadKeys = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? Object.keys(payload).sort()
+    : [];
+  if (
+    JSON.stringify(payloadKeys) !==
+      '["args","cwd","environment","hasStdin","outputLimitBytes","targetExecutable","timeoutMs"]' ||
+    !Array.isArray(payload.args) ||
+    typeof payload.cwd !== 'string' ||
+    !payload.environment ||
+    typeof payload.environment !== 'object' ||
+    Array.isArray(payload.environment) ||
+    typeof payload.hasStdin !== 'boolean' ||
+    !Number.isSafeInteger(payload.outputLimitBytes) ||
+    payload.outputLimitBytes < 1 ||
+    typeof payload.targetExecutable !== 'string' ||
+    !Number.isSafeInteger(payload.timeoutMs) ||
+    payload.timeoutMs < 1
+  ) {
+    throw new Error('invalid supervisor payload');
+  }
   const rawTestHook = process.env[testHookPayloadName];
   if (rawTestHook !== undefined) {
     trustedTestHook = JSON.parse(rawTestHook);
@@ -428,6 +598,15 @@ try {
       throw new Error('invalid trusted command test hook');
     }
   }
+  lifetimeAuthority = normalizeLifetimeAuthority(
+    JSON.parse(process.env[lifetimeAuthorityPayloadName] || 'null'),
+  );
+  if (
+    lifetimeAuthority === null ||
+    !sameLifetimeAuthority(lifetimeAuthority, inspectLifetimeAuthority(6))
+  ) {
+    throw new Error('invalid supervisor lifetime authority');
+  }
 } catch {
   fs.writeSync(1, JSON.stringify({
     guardianSweepIntentCount: 0,
@@ -436,19 +615,28 @@ try {
     signal: null,
     spawnError: 'invalid supervisor payload',
     status: null,
-    stderrBase64: '',
-    stdoutBase64: '',
+    stderrBytes: 0,
+    stderrSha256: 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    stdoutBytes: 0,
+    stdoutSha256: 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
     timedOut: false,
   }) + '\n');
   process.exit(0);
 }
 delete process.env[payloadName];
 delete process.env[testHookPayloadName];
+delete process.env[lifetimeAuthorityPayloadName];
 
-const chunks = { stdout: [], stderr: [] };
+const outputDescriptors = { stdout: 4, stderr: 5 };
+const outputBytes = { stdout: 0, stderr: 0 };
+const outputDigests = {
+  stdout: crypto.createHash('sha256'),
+  stderr: crypto.createHash('sha256'),
+};
 let capturedBytes = 0;
 let outputOverflow = false;
 let timedOut = false;
+let hardStopCause = null;
 let settled = false;
 let handshakePublished = false;
 let goSent = false;
@@ -491,8 +679,6 @@ const finish = (status, signal, spawnError, guardianSweepIntentCount) => {
   if (settled) return;
   settled = true;
   clearTimers();
-  const stdoutBase64 = Buffer.concat(chunks.stdout).toString('base64');
-  const stderrBase64 = Buffer.concat(chunks.stderr).toString('base64');
   fs.writeSync(1, JSON.stringify({
     guardianSweepIntentCount,
     outputOverflow,
@@ -500,10 +686,15 @@ const finish = (status, signal, spawnError, guardianSweepIntentCount) => {
     signal,
     spawnError,
     status,
-    stderrBase64,
-    stdoutBase64,
+    stderrBytes: outputBytes.stderr,
+    stderrSha256: 'sha256:' + outputDigests.stderr.digest('hex'),
+    stdoutBytes: outputBytes.stdout,
+    stdoutSha256: 'sha256:' + outputDigests.stdout.digest('hex'),
     timedOut,
   }) + '\n');
+  // The outer launcher's lease must not keep a completed supervisor alive.
+  // Guardian death and stream drain have already been established here.
+  process.stdin.destroy();
 };
 const closeSupervisorLease = () => {
   if (controlClosed || guardianExited || settled) return;
@@ -521,7 +712,23 @@ const closeSupervisorLease = () => {
   }
   settlementTimer = setTimeout(() => {
     if (!guardianExited && !settled) terminalFailure('guardian exit timeout');
-  }, ${REVIEWED_NODE_SETTLEMENT_TIMEOUT_MS});
+  }, ${REVIEWED_POSIX_SETTLEMENT_TIMEOUT_MS});
+};
+// Node serializes these callbacks on one event loop. Latch the first hard-stop
+// observation and freeze output capture at that boundary: a timeout can never
+// later become an overflow (or vice versa) while guardian shutdown is pending.
+const requestHardStop = (cause) => {
+  if (
+    hardStopCause !== null || settled || guardianExited || controlClosed ||
+    protocolFailed || cancellationStarted
+  ) {
+    return;
+  }
+  hardStopCause = cause;
+  timedOut = cause === 'timeout';
+  outputOverflow = cause === 'output_overflow';
+  clearTimeout(commandTimer);
+  closeSupervisorLease();
 };
 const failProtocol = (reason = 'unspecified protocol error') => {
   if (protocolFailed) return;
@@ -545,6 +752,13 @@ const cancelSupervisor = (exitCode) => {
   }
   closeSupervisorLease();
 };
+// The exact outer launcher owns this additional supervisor-lifetime lease. If
+// the launcher is killed by its synchronous caller, EOF forces cancellation;
+// unref keeps an otherwise completed supervisor from waiting on an open lease.
+process.stdin.once('end', () => cancelSupervisor(70));
+process.stdin.once('error', () => cancelSupervisor(70));
+process.stdin.on('data', () => cancelSupervisor(70));
+if (typeof process.stdin.unref === 'function') process.stdin.unref();
 for (const [signal, exitCode] of [['SIGTERM', 143], ['SIGINT', 130], ['SIGHUP', 129]]) {
   process.on(signal, () => cancelSupervisor(exitCode));
 }
@@ -552,17 +766,29 @@ process.on('uncaughtException', () => cancelSupervisor(70));
 process.on('unhandledRejection', () => cancelSupervisor(70));
 
 const capture = (stream) => (chunk) => {
-  if (settled || outputOverflow) return;
+  if (settled || hardStopCause !== null || controlClosed) return;
   const remaining = payload.outputLimitBytes - capturedBytes;
+  const admitted = chunk.length > remaining ? chunk.subarray(0, Math.max(remaining, 0)) : chunk;
+  let offset = 0;
+  while (offset < admitted.length) {
+    const written = fs.writeSync(
+      outputDescriptors[stream],
+      admitted,
+      offset,
+      admitted.length - offset,
+    );
+    if (written <= 0) throw new Error('reviewed output spool made no forward progress');
+    offset += written;
+  }
+  if (admitted.length > 0) {
+    outputDigests[stream].update(admitted);
+    outputBytes[stream] += admitted.length;
+    capturedBytes += admitted.length;
+  }
   if (chunk.length > remaining) {
-    if (remaining > 0) chunks[stream].push(chunk.subarray(0, remaining));
-    capturedBytes += Math.max(remaining, 0);
-    outputOverflow = true;
-    closeSupervisorLease();
+    requestHardStop('output_overflow');
     return;
   }
-  chunks[stream].push(chunk);
-  capturedBytes += chunk.length;
 };
 const validCompletion = (value) => {
   const keys = value && typeof value === 'object' && !Array.isArray(value)
@@ -631,7 +857,7 @@ const stopAtReadyHook = (phase) => {
   publishTestHookAtomically(ready);
   testHookTimer = setTimeout(
     () => cancelSupervisor(70),
-    ${REVIEWED_NODE_TEST_HOOK_TIMEOUT_MS},
+    ${REVIEWED_POSIX_TEST_HOOK_TIMEOUT_MS},
   );
   return true;
 };
@@ -665,8 +891,7 @@ const publishHandshakeAndGo = () => {
   clearTimeout(commandTimer);
   commandTimer = setTimeout(() => {
     if (guardianExited || settled) return;
-    timedOut = true;
-    closeSupervisorLease();
+    requestHardStop('timeout');
   }, payload.timeoutMs);
   guardian.stdin.write('GO\n', (error) => {
     if (error) {
@@ -690,30 +915,51 @@ const acceptGuardianFrame = (raw) => {
       : [];
     const normalized = value && {
       guardianPid: value.guardianPid,
+      lifetimeAuthority: normalizeLifetimeAuthority(value.lifetimeAuthority),
       schema: value.schema,
       workerPid: value.workerPid,
     };
     const canonical = Buffer.from(JSON.stringify(normalized) + '\n', 'utf8');
     if (
-      JSON.stringify(keys) !== '["guardianPid","schema","workerPid"]' ||
+      JSON.stringify(keys) !==
+        '["guardianPid","lifetimeAuthority","schema","workerPid"]' ||
       value.schema !== guardianReadySchema ||
       !Number.isSafeInteger(value.guardianPid) ||
       value.guardianPid !== guardian.pid ||
       !Number.isSafeInteger(value.workerPid) ||
       value.workerPid <= 1 ||
+      !sameLifetimeAuthority(normalized.lifetimeAuthority, lifetimeAuthority) ||
       !raw.equals(canonical)
     ) {
+      const failedPredicates = [
+        JSON.stringify(keys) ===
+          '["guardianPid","lifetimeAuthority","schema","workerPid"]'
+          ? null : 'exact_keys',
+        value && value.schema === guardianReadySchema ? null : 'schema',
+        value && Number.isSafeInteger(value.guardianPid) ? null : 'guardian_integer',
+        value && value.guardianPid === guardian.pid ? null : 'guardian_spawn_binding',
+        value && Number.isSafeInteger(value.workerPid) && value.workerPid > 1
+          ? null : 'worker_integer_domain',
+        sameLifetimeAuthority(normalized.lifetimeAuthority, lifetimeAuthority)
+          ? null : 'lifetime_authority',
+        raw.equals(canonical) ? null : 'canonical_frame',
+      ].filter((predicate) => predicate !== null);
       failProtocol(
-        'guardian READY frame is invalid ' +
-          JSON.stringify({
-            canonical: raw.equals(canonical),
-            expectedGuardianPid: guardian.pid,
-            guardianPid: value && value.guardianPid,
-            keys,
-            schema: value && value.schema,
-            workerPid: value && value.workerPid,
-          }),
+        'guardian READY frame failed closed predicates: ' +
+          failedPredicates.join(','),
       );
+      return;
+    }
+    try {
+      if (!sameLifetimeAuthority(lifetimeAuthority, inspectLifetimeAuthority(6))) {
+        throw new Error('supervisor lifetime descriptor identity changed');
+      }
+      // Close exactly once only after the guardian has echoed the bound identity
+      // and the retained supervisor endpoint still names that same kernel object.
+      // A close exception is ambiguous; never retry or address the numeric slot.
+      fs.closeSync(6);
+    } catch {
+      failProtocol('guardian lifetime descriptor revalidation/close failed');
       return;
     }
     guardianReady = normalized;
@@ -732,6 +978,7 @@ const acceptGuardianFrame = (raw) => {
     'guardian_exception',
     'guardian_signal',
     'invalid_control',
+    'invalid_lifetime_channel',
     'invalid_payload',
     'status_channel_error',
     'supervisor_lease_closed',
@@ -786,13 +1033,33 @@ const guardianPayload = JSON.stringify({
   args: payload.args,
   cwd: payload.cwd,
   environment: payload.environment,
+  hasStdin: payload.hasStdin,
+  lifetimeAuthority,
+  targetExecutable: payload.targetExecutable,
 });
 try {
   guardian = childProcess.spawn(process.execPath, ['-e', guardianSource], {
     cwd: payload.cwd,
+    // POSIX Node documents detached children as leaders of a new session and
+    // process group. Successful sweeping requires that contract. If it were to
+    // fail silently, a still-live process PID cannot concurrently identify an
+    // unrelated extant PGID/SID; kill(-selfPID) therefore fails closed rather
+    // than aliasing another group. The non-detached regression exercises this.
     detached: true,
     env: { ...process.env, [guardianPayloadName]: guardianPayload },
-    stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
+    // Descriptor 3 is the outer host's input spool; guardian descriptor 4 merely
+    // propagates it toward the gated worker without exposing it as control stdin.
+    stdio: [
+      'pipe',
+      'pipe',
+      'pipe',
+      'pipe',
+      payload.hasStdin ? 3 : 'ignore',
+      // Supervisor descriptor 6 is the exact outer-host pipe identity. Retain it
+      // through the guardian's bound READY frame, recheck it, then close it once;
+      // the guardian alone retains the write capability during target execution.
+      6,
+    ],
     windowsHide: true,
   });
 } catch {
@@ -805,9 +1072,8 @@ if (!guardian || !Number.isSafeInteger(guardian.pid)) {
   // command timeout begins only after the exact GO frame is sent.
   commandTimer = setTimeout(() => {
     if (guardianExited || settled) return;
-    timedOut = true;
-    closeSupervisorLease();
-  }, ${REVIEWED_NODE_ARM_TIMEOUT_MS});
+    requestHardStop('timeout');
+  }, ${REVIEWED_POSIX_ARM_TIMEOUT_MS});
   guardian.stdout.on('data', capture('stdout'));
   guardian.stderr.on('data', capture('stderr'));
   guardian.stdio[3].on('data', captureGuardianProtocol);
@@ -889,9 +1155,192 @@ if (!guardian || !Number.isSafeInteger(guardian.pid)) {
           guardian.stdio[3].destroy();
           terminalFailure('guardian pipes did not reach bounded EOF after exit');
         }
-      }, ${REVIEWED_NODE_PIPE_DRAIN_TIMEOUT_MS});
+      }, ${REVIEWED_POSIX_PIPE_DRAIN_TIMEOUT_MS});
     }
     finalizeGuardian();
+  });
+}
+`;
+
+/**
+ * Exact-Node adapter around the asynchronous supervisor.
+ *
+ * The launcher's stdout is both the outer caller's ordinary protocol pipe and
+ * the guardian's exclusive lifetime capability. The supervisor passes a
+ * duplicate straight to the guardian and closes its own copy. Thus even a
+ * runtime such as Bun that does not expose fd>2 spawnSync output cannot return
+ * until both launcher and guardian close this standard stdout endpoint.
+ */
+export const REVIEWED_POSIX_OUTER_LAUNCHER_SOURCE = String.raw`'use strict';
+const childProcess = require('node:child_process');
+const fs = require('node:fs');
+const supervisorSource = ${JSON.stringify(REVIEWED_POSIX_SUPERVISOR_SOURCE)};
+const supervisorPayloadName = ${JSON.stringify(REVIEWED_POSIX_SUPERVISOR_PAYLOAD_ENV)};
+const lifetimeAuthorityPayloadName = ${JSON.stringify(REVIEWED_POSIX_LIFETIME_AUTHORITY_ENV)};
+const lifetimeAuthoritySchema = ${JSON.stringify(REVIEWED_POSIX_LIFETIME_AUTHORITY_SCHEMA)};
+const protocolLimit = 65536;
+let supervisor = null;
+let stdoutBytes = 0;
+let stderrBytes = 0;
+let stdoutChunks = [];
+let stderrChunks = [];
+let overflow = false;
+let completed = false;
+let outerLifetimeAuthority = null;
+
+const inspectLifetimeAuthority = (descriptor) => {
+  const stat = fs.fstatSync(descriptor, { bigint: true });
+  const fifo = stat.isFIFO();
+  const socket = stat.isSocket();
+  if (Number(fifo) + Number(socket) !== 1) {
+    throw new Error('outer lifetime descriptor is not a pipe endpoint');
+  }
+  return {
+    dev: stat.dev.toString(),
+    gid: stat.gid.toString(),
+    ino: stat.ino.toString(),
+    kind: fifo ? 'fifo' : 'socket',
+    mode: stat.mode.toString(),
+    nlink: stat.nlink.toString(),
+    rdev: stat.rdev.toString(),
+    schema: lifetimeAuthoritySchema,
+    uid: stat.uid.toString(),
+  };
+};
+const sameLifetimeAuthority = (left, right) =>
+  left !== null && right !== null && JSON.stringify(left) === JSON.stringify(right);
+
+const cancel = () => {
+  if (!supervisor || !supervisor.stdin || supervisor.stdin.destroyed) return;
+  try {
+    supervisor.stdin.end();
+  } catch {
+    try { supervisor.stdin.destroy(); } catch {}
+  }
+};
+const capture = (channel) => (chunk) => {
+  const current = channel === 'stdout' ? stdoutBytes : stderrBytes;
+  const remaining = Math.max(protocolLimit - current, 0);
+  const admitted = chunk.length > remaining ? chunk.subarray(0, remaining) : chunk;
+  if (admitted.length > 0) {
+    if (channel === 'stdout') {
+      stdoutChunks.push(admitted);
+      stdoutBytes += admitted.length;
+    } else {
+      stderrChunks.push(admitted);
+      stderrBytes += admitted.length;
+    }
+  }
+  if (chunk.length > remaining) {
+    overflow = true;
+    cancel();
+  }
+};
+const writeAll = (descriptor, chunks) => {
+  for (const chunk of chunks) {
+    let offset = 0;
+    while (offset < chunk.length) {
+      const count = fs.writeSync(descriptor, chunk, offset, chunk.length - offset);
+      if (count <= 0) throw new Error('outer launcher protocol write made no progress');
+      offset += count;
+    }
+  }
+};
+const failureKind = (error) => {
+  const candidate = error && (error.code || error.name);
+  return typeof candidate === 'string' && /^[A-Za-z0-9_]+$/.test(candidate)
+    ? candidate.slice(0, 64)
+    : 'unknown';
+};
+const failClosed = (reason = 'unknown') => {
+  if (completed) return;
+  completed = true;
+  cancel();
+  try {
+    fs.writeSync(
+      2,
+      'reviewed POSIX outer launcher failed closed (' + String(reason).slice(0, 96) + ')\n',
+    );
+  } catch {}
+  process.exitCode = 70;
+};
+process.on('uncaughtException', (error) => failClosed('uncaught_' + failureKind(error)));
+process.on('unhandledRejection', (error) => failClosed('rejection_' + failureKind(error)));
+
+try {
+  const outerPayload = JSON.parse(process.env[supervisorPayloadName] || 'null');
+  if (!outerPayload || typeof outerPayload.hasStdin !== 'boolean') {
+    throw new Error('invalid outer payload');
+  }
+  outerLifetimeAuthority = inspectLifetimeAuthority(1);
+  supervisor = childProcess.spawn(process.execPath, ['-e', supervisorSource], {
+    cwd: process.cwd(),
+    detached: false,
+    env: {
+      ...process.env,
+      [lifetimeAuthorityPayloadName]: JSON.stringify(outerLifetimeAuthority),
+    },
+    // fd0 is a launcher-lifetime lease. fd1/fd2 are bounded protocol pipes.
+    // fds3-5 are opaque host spool capabilities. fd6 duplicates this launcher's
+    // standard stdout directly into the guardian lifetime chain.
+    // Node closes an additional host stdio slot declared as "ignore", whereas
+    // Bun currently materializes it. Forward numeric fd 3 only when the sealed
+    // payload declares an input spool; otherwise create an ignored supervisor
+    // slot and never address the outer process's intentionally absent fd 3.
+    stdio: ['pipe', 'pipe', 'pipe', outerPayload.hasStdin ? 3 : 'ignore', 4, 5, 1],
+    windowsHide: true,
+  });
+} catch (error) {
+  failClosed('supervisor_spawn_' + failureKind(error));
+}
+if (supervisor) {
+  // A fast supervisor can close its stdin before the outer launcher observes
+  // child close. Node may surface that ordinary writer-end teardown as EPIPE or
+  // ECONNRESET even though this launcher never writes command data. Do not let
+  // an unhandled stream error overwrite the supervisor's terminal status. If
+  // the endpoint is lost early, its EOF is itself the supervisor cancellation
+  // lease and the supervisor must still exit nonzero.
+  supervisor.stdin.on('error', () => {});
+  supervisor.stdout.on('data', capture('stdout'));
+  supervisor.stderr.on('data', capture('stderr'));
+  supervisor.once('error', (error) => failClosed('supervisor_' + failureKind(error)));
+  supervisor.once('close', (status, signal) => {
+    if (completed) return;
+    let lifetimeStable = false;
+    try {
+      lifetimeStable = sameLifetimeAuthority(
+        outerLifetimeAuthority,
+        inspectLifetimeAuthority(1),
+      );
+    } catch {
+      lifetimeStable = false;
+    }
+    if (!lifetimeStable) {
+      completed = true;
+      try {
+        fs.writeSync(2, 'reviewed POSIX outer lifetime authority changed\n');
+      } catch {}
+      process.exitCode = 70;
+      return;
+    }
+    completed = true;
+    const clean = !overflow && status === 0 && signal === null;
+    try {
+      writeAll(1, stdoutChunks);
+      writeAll(2, stderrChunks);
+      if (!clean && stderrChunks.length === 0) {
+        const diagnostic = Buffer.from(
+          'reviewed POSIX outer launcher observed supervisor failure ' +
+            '(status ' + String(status) + ', signal ' + String(signal) + ')\n',
+          'utf8',
+        );
+        writeAll(2, [diagnostic]);
+      }
+    } catch {
+      process.exitCode = 70;
+      return;
+    }
+    process.exitCode = clean ? 0 : 70;
   });
 }
 `;

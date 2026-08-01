@@ -1,82 +1,4 @@
-import { R as Result, S as SemanticValidatorId, D as DisclosureId, U as UncertaintyKind } from './errors-DOfZeMp8.js';
-
-/**
- * GENERATED FILE — DO NOT EDIT.
- *
- * Produced by scripts/generate-contract.ts from contract/registries/budget-profiles.v1.json.
- * Edit the normative source and run `bun run generate`.
- * `bun run check:generated` fails if this file drifts from its source.
- */
-declare const BUDGET_PROFILE_IDS: readonly ["standard", "agent"];
-type BudgetProfileId = (typeof BUDGET_PROFILE_IDS)[number];
-
-/**
- * Resource limits.
- *
- * The numbers live in `contract/registries/budget-profiles.v1.json` and are
- * GENERATED into `src/generated/budgets.ts`. This module is the typed door to
- * them; it holds no numbers of its own, because a limit that exists in two places
- * eventually exists at two values.
- *
- * The distinction that matters:
- *
- *   A HARD LIMIT protects the process. Input above it FAILS.
- *   A DISPLAY BUDGET controls representation. Every current stable skill selects
- *   only `none`, so input above it is refused. A future compiler may compact only
- *   through a named deterministic policy introduced with complete bound output.
- *
- * Confusing the two is how a library ends up silently truncating a dataset and
- * calling the result a figure.
- */
-
-interface BudgetLimits {
-    readonly rawInputBytes: number;
-    readonly jsonDepth: number;
-    readonly jsonTotalNodes: number;
-    readonly jsonStringLength: number;
-    readonly jsonNumberTokenLength: number;
-    readonly jsonObjectKeys: number;
-    readonly jsonArrayItems: number;
-    readonly observationsPerSeries: number;
-    readonly observationsPerRequest: number;
-    readonly graphNodes: number;
-    readonly graphEdges: number;
-    readonly matrixCells: number;
-    readonly pairwiseOperations: number;
-    readonly visibleMarks: number;
-    readonly svgTextNodes: number;
-    readonly svgBytes: number;
-    readonly sidecarBytes: number;
-    readonly returnedTableRows: number;
-    readonly safeRepairOperations: number;
-    readonly errorRecords: number;
-}
-declare const DEFAULT_PROFILE: BudgetProfileId;
-/** Resolve an untrusted profile id without coercion, prototype lookup, or throwing. */
-declare function tryGetBudgetLimits(profile?: unknown): BudgetLimits | undefined;
-declare function getBudgetLimits(profile?: BudgetProfileId): BudgetLimits;
-interface ResolvedBudgetProfile {
-    readonly profile: BudgetProfileId;
-    readonly limits: BudgetLimits;
-}
-/**
- * Select the component-wise tighter of two published profiles.
- *
- * Profiles are deliberately ordered resource envelopes. If a future registry adds two
- * incomparable profiles, this returns `undefined` rather than silently mixing them under
- * a misleading profile id. The generator/test suite then has to establish an explicit
- * composition contract first.
- */
-declare function trySelectTighterBudgetProfile(hostProfile: unknown, requestedProfile: unknown): ResolvedBudgetProfile | undefined;
-/**
- * Lower a limit. There is intentionally no way to RAISE one from here.
- *
- * A host that genuinely needs a larger ceiling must construct a separately named
- * internal profile after an explicit risk review, and the artifact it produces
- * records that non-standard profile and cannot claim default conformance. An
- * untrusted caller can never widen a bound by asking nicely.
- */
-declare function restrictLimits(base: BudgetLimits, overrides: Partial<BudgetLimits>): BudgetLimits;
+import { R as Result, S as SemanticValidatorId, D as DisclosureId, U as UncertaintyKind } from './errors-DOfZeMp8.cjs';
 
 /**
  * The raw-JSON boundary.
@@ -108,8 +30,25 @@ type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
 interface JsonObject {
     [key: string]: JsonValue;
 }
+/**
+ * The complete authority the raw JSON parser consumes.
+ *
+ * Keep this seven-field boundary independent from the generated visualization
+ * budget registry. A public `BudgetLimits` value is a structural superset, while
+ * private protocols can own a tighter parser profile without creating a runtime
+ * dependency on generated contract output.
+ */
+interface JsonParseLimits {
+    readonly rawInputBytes: number;
+    readonly jsonDepth: number;
+    readonly jsonTotalNodes: number;
+    readonly jsonStringLength: number;
+    readonly jsonNumberTokenLength: number;
+    readonly jsonObjectKeys: number;
+    readonly jsonArrayItems: number;
+}
 interface ParseOptions {
-    readonly limits: BudgetLimits;
+    readonly limits: JsonParseLimits;
     /** Reject a leading UTF-8 BOM. Identical in TypeScript and Python. */
     readonly allowBom?: boolean;
 }
@@ -352,4 +291,4 @@ interface LegacyMapEntry {
 /** Every pre-1.0 id has a deterministic outcome here. There is no fall-through. */
 declare const LEGACY_SKILL_MAP: Readonly<Record<string, LegacyMapEntry>>;
 
-export { type AdapterCatalogEntry as A, type BudgetProfileId as B, DEFAULT_PROFILE as D, EXPERIMENTAL_CAPABILITY_IDS as E, type JsonValue as J, type LegacyMapEntry as L, REMOVED_CAPABILITY_IDS as R, type StableSkillId as S, SKILL_CATALOG as a, STABLE_SKILL_IDS as b, type SkillCatalogEntry as c, type BudgetLimits as d, LEGACY_SKILL_MAP as e, type ResolvedBudgetProfile as f, getBudgetLimits as g, trySelectTighterBudgetProfile as h, isStableSkillId as i, lookupSkillCatalogEntry as l, parseJsonStrict as p, restrictLimits as r, tryGetBudgetLimits as t };
+export { type AdapterCatalogEntry as A, EXPERIMENTAL_CAPABILITY_IDS as E, type JsonValue as J, type LegacyMapEntry as L, REMOVED_CAPABILITY_IDS as R, type StableSkillId as S, SKILL_CATALOG as a, STABLE_SKILL_IDS as b, type SkillCatalogEntry as c, LEGACY_SKILL_MAP as d, isStableSkillId as i, lookupSkillCatalogEntry as l, parseJsonStrict as p };

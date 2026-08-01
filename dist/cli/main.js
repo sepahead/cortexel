@@ -4,7 +4,7 @@ import {
 } from "../chunk-WBBRHXEW.js";
 import {
   parseJsonStrict
-} from "../chunk-DUFAYC5C.js";
+} from "../chunk-ARN3SAJ7.js";
 import {
   AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
   SKILL_AUTHORING,

@@ -1,10 +1,12 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   chmodSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -173,7 +175,9 @@ interface EvidenceRepositoryFixture {
 function createEvidenceRepositoryFixture(
   packageOverrides: Record<string, unknown> = {},
 ): EvidenceRepositoryFixture {
-  const repository = mkdtempSync(path.join(tmpdir(), 'cortexel-release-evidence-'));
+  const repository = realpathSync(
+    mkdtempSync(path.join(tmpdir(), 'cortexel-release-evidence-')),
+  );
   const git = (...args: string[]): string => execFileSync(
     'git',
     args,
@@ -425,7 +429,7 @@ describe('release identity — committed development metadata', () => {
     expect(result.problems).toContain(
       'release stamping is unavailable: FigureArtifactV1 permits only release=false and sourceRevision="unreleased-worktree"',
     );
-  });
+  }, 180_000);
 
   it('derives the stamping refusal from the normative artifact schema', () => {
     const schema = parseJsonSourceStrict(
@@ -634,7 +638,9 @@ describe('release identity — pure final-release gate', () => {
   });
 
   it('does not let assume-unchanged hide modified publication bytes from the clean-tree gate', () => {
-    const repository = mkdtempSync(path.join(tmpdir(), 'cortexel-release-git-'));
+    const repository = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'cortexel-release-git-')),
+    );
     const git = (...args: string[]): void => {
       execFileSync('git', args, { cwd: repository, stdio: 'ignore' });
     };
@@ -657,10 +663,12 @@ describe('release identity — pure final-release gate', () => {
     } finally {
       rmSync(repository, { recursive: true, force: true });
     }
-  });
+  }, 180_000);
 
   it('does not let a local Git exclude hide an untracked file that npm would pack', () => {
-    const repository = mkdtempSync(path.join(tmpdir(), 'cortexel-release-ignore-'));
+    const repository = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'cortexel-release-ignore-')),
+    );
     const git = (...args: string[]): void => {
       execFileSync('git', args, { cwd: repository, stdio: 'ignore' });
     };
@@ -689,10 +697,12 @@ describe('release identity — pure final-release gate', () => {
     } finally {
       rmSync(repository, { recursive: true, force: true });
     }
-  });
+  }, 180_000);
 
   it('requires a closed nonempty package files allowlist even for an otherwise clean tree', () => {
-    const repository = mkdtempSync(path.join(tmpdir(), 'cortexel-release-files-'));
+    const repository = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'cortexel-release-files-')),
+    );
     const git = (...args: string[]): void => {
       execFileSync('git', args, { cwd: repository, stdio: 'ignore' });
     };
@@ -712,11 +722,15 @@ describe('release identity — pure final-release gate', () => {
     } finally {
       rmSync(repository, { recursive: true, force: true });
     }
-  });
+  }, 180_000);
 
   it('does not inherit Git repository redirection from a hostile caller environment', () => {
-    const dirtyRepository = mkdtempSync(path.join(tmpdir(), 'cortexel-release-dirty-'));
-    const cleanRepository = mkdtempSync(path.join(tmpdir(), 'cortexel-release-clean-'));
+    const dirtyRepository = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'cortexel-release-dirty-')),
+    );
+    const cleanRepository = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'cortexel-release-clean-')),
+    );
     const initialize = (repository: string, contents: string): string => {
       const git = (...args: string[]): string => execFileSync(
         'git',
@@ -751,12 +765,16 @@ describe('release identity — pure final-release gate', () => {
       rmSync(dirtyRepository, { recursive: true, force: true });
       rmSync(cleanRepository, { recursive: true, force: true });
     }
-  });
+  }, 180_000);
 
   it('does not follow a release-authority file or parent-directory symlink', () => {
     if (process.platform === 'win32') return;
-    const repository = mkdtempSync(path.join(tmpdir(), 'cortexel-release-symlink-'));
-    const outside = mkdtempSync(path.join(tmpdir(), 'cortexel-release-outside-'));
+    const repository = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'cortexel-release-symlink-')),
+    );
+    const outside = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'cortexel-release-outside-')),
+    );
     try {
       writeFileSync(path.join(outside, 'metadata.json'), '{"external":true}\n');
       symlinkSync(path.join(outside, 'metadata.json'), path.join(repository, 'metadata.json'));
@@ -766,6 +784,12 @@ describe('release identity — pure final-release gate', () => {
       symlinkSync(outside, path.join(repository, 'indirect'), 'dir');
       expect(() => readDirectReleaseFile(repository, 'indirect/metadata.json'))
         .toThrow('release metadata path is a symbolic link: indirect');
+
+      writeFileSync(path.join(repository, 'direct.json'), '{}\n');
+      const repositoryAlias = path.join(outside, 'repository-alias');
+      symlinkSync(repository, repositoryAlias, 'dir');
+      expect(() => readDirectReleaseFile(repositoryAlias, 'direct.json'))
+        .toThrow('release repository root must be a direct directory');
     } finally {
       rmSync(repository, { recursive: true, force: true });
       rmSync(outside, { recursive: true, force: true });
@@ -777,6 +801,244 @@ describe('release identity — pure final-release gate', () => {
       expect(() => readDirectReleaseFile(ROOT, relative)).toThrow(/unsafe release metadata path/u);
     }
   });
+
+  it('rejects hostile path objects and oversized paths without invoking traps', () => {
+    let trapCount = 0;
+    const hostilePath = new Proxy(Object.create(null) as object, {
+      get: () => {
+        trapCount += 1;
+        throw new Error('must not execute');
+      },
+    });
+    expect(() => readDirectReleaseFile(
+      ROOT,
+      hostilePath as never,
+    )).toThrow(/bounded primitive strings/u);
+    expect(trapCount).toBe(0);
+    expect(() => readDirectReleaseFile(
+      ROOT,
+      'a'.repeat(4_097),
+    )).toThrow(/bounded primitive strings/u);
+  });
+
+  it('fails boundedly if a reviewed regular leaf becomes a FIFO before open', () => {
+    if (process.platform === 'win32') return;
+    const repository = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'cortexel-release-fifo-race-')),
+    );
+    try {
+      const target = path.join(repository, 'metadata.json');
+      writeFileSync(target, '{}\n', 'utf8');
+      const script = path.join(repository, 'fifo-race.mjs');
+      writeFileSync(script, String.raw`
+        import { spawnSync } from 'node:child_process';
+        import fs from 'node:fs';
+        import { syncBuiltinESMExports } from 'node:module';
+        import { pathToFileURL } from 'node:url';
+
+        const [repository, modulePath] = process.argv.slice(2);
+        const target = repository + '/metadata.json';
+        const backup = repository + '/metadata.original';
+        const originalLstat = fs.lstatSync;
+        let replaced = false;
+        fs.lstatSync = (filename, options) => {
+          const observed = originalLstat(filename, options);
+          if (filename === target && !replaced) {
+            replaced = true;
+            fs.renameSync(target, backup);
+            const fifo = spawnSync('/usr/bin/mkfifo', [target], {
+              stdio: ['ignore', 'pipe', 'pipe'],
+            });
+            if (fifo.error || fifo.status !== 0) {
+              throw new Error('mkfifo fixture failed');
+            }
+          }
+          return observed;
+        };
+        syncBuiltinESMExports();
+        const { readDirectRepositoryFile } = await import(
+          pathToFileURL(modulePath).href + '?fifo-race=' + Date.now()
+        );
+        let message = '';
+        try {
+          readDirectRepositoryFile(repository, 'metadata.json');
+        } catch (error) {
+          message = error instanceof Error ? error.message : String(error);
+        }
+        if (!replaced) throw new Error('FIFO race hook was not reached');
+        if (!message.includes('not a regular file')) {
+          throw new Error('FIFO replacement did not fail as a non-regular file');
+        }
+        process.stdout.write(JSON.stringify({ message }));
+      `, 'utf8');
+      const result = spawnSync(
+        'node',
+        [
+          '--import',
+          'tsx',
+          script,
+          repository,
+          path.resolve('scripts/lib/direct-repository-file.ts'),
+        ],
+        {
+          cwd: ROOT,
+          encoding: 'utf8',
+          env: {
+            LANG: 'C',
+            LC_ALL: 'C',
+            PATH: process.env.PATH,
+          },
+          maxBuffer: 64 * 1024,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 5_000,
+        },
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.status, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        message: expect.stringContaining('not a regular file'),
+      });
+    } finally {
+      rmSync(repository, { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  it('rejects files larger than the caller-owned byte bound', () => {
+    const repository = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'cortexel-release-bound-')),
+    );
+    try {
+      writeFileSync(path.join(repository, 'metadata.json'), '{}\n');
+      expect(() => readDirectReleaseFile(repository, 'metadata.json', 2))
+        .toThrow('release metadata file exceeds its 2-byte bound');
+      expect(() => readDirectReleaseFile(repository, 'metadata.json', 0))
+        .toThrow('release metadata byte bound is invalid');
+    } finally {
+      rmSync(repository, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects multiply linked release-authority files', () => {
+    if (process.platform === 'win32') return;
+    const repository = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'cortexel-release-hardlink-')),
+    );
+    try {
+      const target = path.join(repository, 'metadata.json');
+      writeFileSync(target, '{}\n');
+      linkSync(target, path.join(repository, 'metadata-alias.json'));
+      expect(() => readDirectReleaseFile(repository, 'metadata.json'))
+        .toThrow('release metadata path is not a regular file: metadata.json');
+    } finally {
+      rmSync(repository, { recursive: true, force: true });
+    }
+  });
+
+  it('reports read and ambiguous-close failures together without retrying close', () => {
+    if (process.platform === 'win32') return;
+    const repository = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'cortexel-release-close-ambiguity-')),
+    );
+    try {
+      const target = path.join(repository, 'metadata.json');
+      writeFileSync(target, '{}\n', 'utf8');
+      const script = path.join(repository, 'close-ambiguity.mjs');
+      writeFileSync(script, String.raw`
+        import fs from 'node:fs';
+        import { syncBuiltinESMExports } from 'node:module';
+        import { pathToFileURL } from 'node:url';
+
+        const [repository, modulePath] = process.argv.slice(2);
+        const target = repository + '/metadata.json';
+        const targetStat = fs.lstatSync(target, { bigint: true });
+        const originalClose = fs.closeSync;
+        const originalFstat = fs.fstatSync;
+        const originalRead = fs.readSync;
+        const targetDescriptors = new Set();
+        const closeAttempts = [];
+
+        const identifiesTarget = (descriptor) => {
+          try {
+            const stat = originalFstat(descriptor, { bigint: true });
+            return stat.dev === targetStat.dev && stat.ino === targetStat.ino;
+          } catch {
+            return false;
+          }
+        };
+        fs.readSync = (descriptor, ...args) => {
+          if (identifiesTarget(descriptor)) {
+            targetDescriptors.add(descriptor);
+            throw new Error('injected release metadata read failure');
+          }
+          return originalRead(descriptor, ...args);
+        };
+        fs.closeSync = (descriptor) => {
+          if (targetDescriptors.has(descriptor)) {
+            closeAttempts.push(descriptor);
+            originalClose(descriptor);
+            throw new Error('injected ambiguous release metadata close');
+          }
+          return originalClose(descriptor);
+        };
+        syncBuiltinESMExports();
+        const { readDirectRepositoryFile } = await import(
+          pathToFileURL(modulePath).href + '?close-ambiguity=' + Date.now()
+        );
+        let observed;
+        try {
+          readDirectRepositoryFile(repository, 'metadata.json');
+          throw new Error('fault injection unexpectedly succeeded');
+        } catch (error) {
+          observed = {
+            aggregate: error instanceof AggregateError,
+            errors: error instanceof AggregateError
+              ? error.errors.map((entry) => entry instanceof Error ? entry.message : String(entry))
+              : [],
+            message: error instanceof Error ? error.message : String(error),
+          };
+        }
+        if (closeAttempts.length !== 1 || new Set(closeAttempts).size !== 1) {
+          throw new Error('ambiguous descriptor close was retried');
+        }
+        process.stdout.write(JSON.stringify({ ...observed, closeAttempts }));
+      `, 'utf8');
+      const result = spawnSync(
+        'node',
+        [
+          '--import',
+          'tsx',
+          script,
+          repository,
+          path.resolve('scripts/lib/direct-repository-file.ts'),
+        ],
+        {
+          cwd: ROOT,
+          encoding: 'utf8',
+          env: {
+            LANG: 'C',
+            LC_ALL: 'C',
+            PATH: process.env.PATH,
+          },
+          maxBuffer: 64 * 1024,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 5_000,
+        },
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.status, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        aggregate: true,
+        closeAttempts: [expect.any(Number)],
+        errors: [
+          'injected release metadata read failure',
+          'release metadata descriptor close is uncertain',
+        ],
+        message: 'release metadata read failed and descriptor cleanup is uncertain',
+      });
+    } finally {
+      rmSync(repository, { recursive: true, force: true });
+    }
+  }, 15_000);
 
   it('admits the realizable tested-candidate A then evidence-authorization B construction', () => {
     const fixture = createEvidenceRepositoryFixture();
@@ -808,7 +1070,7 @@ describe('release identity — pure final-release gate', () => {
     } finally {
       rmSync(fixture.repository, { recursive: true, force: true });
     }
-  });
+  }, 180_000);
 
   it('rejects fabricated, non-ancestor, and mixed PASS source baselines', () => {
     const fixture = createEvidenceRepositoryFixture();
@@ -857,7 +1119,7 @@ describe('release identity — pure final-release gate', () => {
     } finally {
       rmSync(fixture.repository, { recursive: true, force: true });
     }
-  });
+  }, 180_000);
 
   it('detects source drift introduced through a merge after the tested candidate', () => {
     const fixture = createEvidenceRepositoryFixture();
@@ -881,7 +1143,7 @@ describe('release identity — pure final-release gate', () => {
     } finally {
       rmSync(fixture.repository, { recursive: true, force: true });
     }
-  });
+  }, 180_000);
 
   it('pins immutable ledger claims and uses a top-anchored evidence whitelist', () => {
     const fixture = createEvidenceRepositoryFixture();
@@ -919,7 +1181,7 @@ describe('release identity — pure final-release gate', () => {
     } finally {
       rmSync(fixture.repository, { recursive: true, force: true });
     }
-  });
+  }, 180_000);
 
   it('binds receipt bytes and rejects executable or symbolic-link evidence', () => {
     const digestFixture = createEvidenceRepositoryFixture();
@@ -970,7 +1232,7 @@ describe('release identity — pure final-release gate', () => {
     } finally {
       rmSync(symlinkFixture.repository, { recursive: true, force: true });
     }
-  });
+  }, 180_000);
 
   it('proves version-scoped evidence stays outside the npm and executable surfaces', () => {
     const packaged = createEvidenceRepositoryFixture({
@@ -989,7 +1251,7 @@ describe('release identity — pure final-release gate', () => {
     } finally {
       rmSync(packaged.repository, { recursive: true, force: true });
     }
-  });
+  }, 180_000);
 
   it('applies release-blocking ledger gates to final 1.x releases', () => {
     const version = '1.0.0';

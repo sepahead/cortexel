@@ -2,59 +2,90 @@
 /**
  * Fetch and verify the pinned official PyNEST source inventory.
  *
- * The upstream commit is fetched into a fresh temporary Git repository. The
- * remote is then removed and all inventory work is performed against the local
- * object database without checking out or executing upstream code.
+ * The upstream structural commit/tree closure is fetched into a fresh temporary
+ * Git repository. After its Git remote is removed, exact tree-selected paths
+ * are retrieved through a separately bounded raw-HTTPS boundary, independently
+ * rehashed, imported, and then read from an exact offline object closure. No
+ * checkout is created and upstream code is never executed.
  *
  * Usage:
  *   tsx scripts/generate-nest-example-source-inventory.ts
  *   tsx scripts/generate-nest-example-source-inventory.ts --output inventory.json
  */
-import { spawnSync } from 'node:child_process';
 import {
-  closeSync,
-  existsSync,
-  fsyncSync,
-  linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
-  openSync,
+  readdirSync,
   realpathSync,
   rmSync,
-  unlinkSync,
-  writeSync,
 } from 'node:fs';
-import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   buildNestExampleSourceInventory,
   canonicalNestExampleSourceInventory,
+  materializeNestExampleTreeBlobs,
+  NEST_EXAMPLE_ACQUISITION_PRODUCER_PROFILE,
+  nestExampleRawBlobReferences,
+  PINNED_NEST_EXAMPLE_RAW_BLOB_MAX_BYTE_LENGTH,
+  PINNED_NEST_EXAMPLE_RAW_BLOB_TOTAL_BYTE_LENGTH,
   PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY,
+  validateNestExampleSourceInventory,
   verifyNestExampleOfflineAcquisitionContext,
 } from './lib/nest-example-source-inventory.js';
-
-const GIT_REPOSITORY_OVERRIDE_ENVIRONMENT = Object.freeze([
-  'GIT_DIR',
-  'GIT_WORK_TREE',
-  'GIT_COMMON_DIR',
-  'GIT_OBJECT_DIRECTORY',
-  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
-  'GIT_INDEX_FILE',
-  'GIT_GRAFT_FILE',
-  'GIT_SHALLOW_FILE',
-  'GIT_NAMESPACE',
-  'GIT_REPLACE_REF_BASE',
-  'GIT_CEILING_DIRECTORIES',
-  'GIT_DISCOVERY_ACROSS_FILESYSTEM',
-] as const);
+import { publishNewExclusiveAuditFile } from './lib/exclusive-audit-publication.js';
+import {
+  controlledGitCommandArguments,
+  controlledGitEnvironment,
+  deriveOfflineGitStructuralObjectSetWithAuthority,
+  removeGitAcquisitionSidecars,
+  requireExactOfflineGitObjectSetWithAuthority,
+  verifyOfflineGitReadAuthority,
+} from './lib/offline-git-object-database.js';
+import {
+  downloadPinnedRawGitBlobsWithBoundary,
+  productionPinnedRawGitBlobBoundary,
+  type PinnedRawGitBlobLimits,
+} from './lib/pinned-raw-git-blob-acquisition.js';
+import {
+  requireExactPrivateDirectoryAuthority,
+  requireProtectedDirectoryEntryChain,
+} from './lib/posix-acl-authority.js';
+import {
+  createReviewedGitRuntime,
+  disposeReviewedGitRuntime,
+  runReviewedGitCommand,
+  type ReviewedGitRuntime,
+} from './lib/reviewed-git-command.js';
 
 interface ParsedArguments {
   readonly output: string | null;
   readonly help: boolean;
 }
+
+const PINNED_UNIQUE_REACHABLE_TREE_OBJECT_COUNT = 136;
+const RAW_SOURCE_LIMITS: PinnedRawGitBlobLimits = Object.freeze({
+  expectedReferenceCount: 160,
+  concurrency: 4,
+  attempts: 4,
+  blobByteLimit: PINNED_NEST_EXAMPLE_RAW_BLOB_MAX_BYTE_LENGTH,
+  successfulByteLimit: PINNED_NEST_EXAMPLE_RAW_BLOB_TOTAL_BYTE_LENGTH,
+  receivedBodyByteLimit: 96 * 1024 * 1024,
+  idleTimeoutMs: 90_000,
+  absoluteTimeoutMs: 5 * 60_000,
+  globalTimeoutMs: 15 * 60_000,
+  dataEventLimit: 65_536,
+  retryDelayMs: Object.freeze([250, 1_000, 3_000]),
+});
+const RAW_SOURCE_REQUEST_AUTHORITY = Object.freeze({
+  owner: 'nest',
+  repository: 'nest-simulator',
+  commit: PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.commit,
+  userAgent: 'cortexel-nest-example-inventory/1',
+});
 
 function usage(): string {
   return [
@@ -63,7 +94,7 @@ function usage(): string {
     '  tsx scripts/generate-nest-example-source-inventory.ts --output <new-file.json>',
     '',
     'The output file must not already exist. Without --output, canonical JSON is',
-    'written to stdout. The command fetches only the immutable pinned NEST commit',
+    'written to stdout. The command fetches only the exact reviewed NEST commit',
     'and never executes upstream code.',
   ].join('\n');
 }
@@ -94,85 +125,188 @@ function parseArguments(argv: readonly string[]): ParsedArguments {
   return { output, help };
 }
 
-function gitEnvironment(): NodeJS.ProcessEnv {
-  const environment: NodeJS.ProcessEnv = {
-    ...process.env,
-    GIT_CONFIG_GLOBAL: '/dev/null',
-    GIT_CONFIG_NOSYSTEM: '1',
-    GIT_CONFIG_COUNT: '0',
-    GIT_NO_REPLACE_OBJECTS: '1',
-    GIT_OPTIONAL_LOCKS: '0',
-    GIT_TERMINAL_PROMPT: '0',
-  };
-  for (const name of GIT_REPOSITORY_OVERRIDE_ENVIRONMENT) delete environment[name];
-  return environment;
+function gitEnvironment(hooksDirectory: string): NodeJS.ProcessEnv {
+  return controlledGitEnvironment(
+    path.join(path.dirname(hooksDirectory), 'empty-git-home'),
+  );
 }
 
-function git(repository: string, args: readonly string[], timeout: number): string {
-  const result = spawnSync(
-    'git',
-    [
-      '--no-replace-objects',
-      '-c',
-      'core.fsmonitor=false',
-      '-c',
-      'core.untrackedCache=false',
-      '-C',
-      repository,
-      ...args,
-    ],
+function git(
+  reviewedGit: ReviewedGitRuntime,
+  repository: string,
+  args: readonly string[],
+  timeout: number,
+  hooksDirectory: string,
+  noLazyFetch = false,
+): string {
+  const result = runReviewedGitCommand(
+    reviewedGit,
+    repository,
+    controlledGitCommandArguments(repository, args, hooksDirectory),
     {
-      cwd: repository,
-      encoding: 'utf8',
-      env: gitEnvironment(),
-      maxBuffer: 128 * 1024 * 1024,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout,
+      environment: {
+        ...gitEnvironment(hooksDirectory),
+        ...(noLazyFetch ? { GIT_NO_LAZY_FETCH: '1' } : {}),
+      },
+      outputLimitBytes: 128 * 1024 * 1024,
+      timeoutMs: timeout,
     },
   );
-  if (result.error || result.status !== 0) {
-    const diagnostic = result.stderr.slice(0, 2_000).trim();
-    throw new Error(
-      `git ${args[0] ?? '<missing>'} failed` +
-      (diagnostic.length > 0 ? `: ${diagnostic}` : ''),
-    );
+  try {
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
+      .decode(result.stdout);
+  } catch {
+    throw new Error(`git ${args[0] ?? '<missing>'} output is not UTF-8`);
   }
-  return result.stdout;
 }
 
-function fetchPinnedRepository(): {
+function assertEmptyDirectDirectory(directory: string, label: string): void {
+  const stat = lstatSync(directory);
+  if (
+    !stat.isDirectory() ||
+    stat.isSymbolicLink() ||
+    realpathSync(directory) !== directory ||
+    readdirSync(directory).length !== 0
+  ) {
+    throw new Error(`${label} must remain an empty direct directory`);
+  }
+}
+
+function importSelectedSourceBlobs(
+  reviewedGit: ReviewedGitRuntime,
+  repository: string,
+  hooksDirectory: string,
+  references: readonly { readonly gitBlobSha1: string }[],
+  stagedPaths: readonly string[],
+): void {
+  const result = runReviewedGitCommand(
+    reviewedGit,
+    repository,
+    controlledGitCommandArguments(
+      repository,
+      ['hash-object', '-w', '--no-filters', '--', ...stagedPaths],
+      hooksDirectory,
+    ),
+    {
+      environment: { ...gitEnvironment(hooksDirectory), GIT_NO_LAZY_FETCH: '1' },
+      outputLimitBytes: 64 * 1024,
+      requireEmptyStderr: true,
+      timeoutMs: 120_000,
+    },
+  );
+  let stdout: string;
+  try {
+    stdout = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
+      .decode(result.stdout);
+  } catch {
+    throw new Error('git hash-object output is not UTF-8');
+  }
+  const expectedStdout = `${references.map(
+    ({ gitBlobSha1 }) => gitBlobSha1,
+  ).join('\n')}\n`;
+  if (stdout !== expectedStdout) {
+    throw new Error('git hash-object did not reproduce the selected blob identities');
+  }
+}
+
+async function fetchPinnedRepository(): Promise<{
   readonly repository: string;
   readonly acquisitionContext:
     ReturnType<typeof verifyNestExampleOfflineAcquisitionContext>;
+  readonly reviewedGit: ReviewedGitRuntime;
   readonly cleanup: () => void;
-} {
-  const temporaryRoot = mkdtempSync(
-    path.join(tmpdir(), 'cortexel-nest-example-inventory-'),
+}> {
+  const temporaryParent = realpathSync(tmpdir());
+  requireProtectedDirectoryEntryChain(
+    temporaryParent,
+    'acquisition temporary-parent authority',
   );
+  const temporaryRoot = realpathSync(mkdtempSync(
+    path.join(temporaryParent, 'cortexel-nest-example-inventory-'),
+  ));
   const repository = path.join(temporaryRoot, 'repository');
-  mkdirSync(repository, { mode: 0o700 });
+  const emptyTemplate = path.join(temporaryRoot, 'empty-git-template');
+  const emptyHooks = path.join(temporaryRoot, 'empty-git-hooks');
+  const emptyHome = path.join(temporaryRoot, 'empty-git-home');
+  const selectedBlobStaging = path.join(temporaryRoot, 'selected-blob-staging');
+  let reviewedGit: ReviewedGitRuntime | null = null;
+  let cleanup: (() => void) | null = null;
   let complete = false;
   try {
-    git(repository, ['init', '--quiet'], 30_000);
+    mkdirSync(repository, { mode: 0o700 });
+    mkdirSync(emptyTemplate, { mode: 0o700 });
+    mkdirSync(emptyHooks, { mode: 0o700 });
+    mkdirSync(emptyHome, { mode: 0o700 });
+    mkdirSync(selectedBlobStaging, { mode: 0o700 });
+    requireExactPrivateDirectoryAuthority(
+      temporaryRoot,
+      'acquisition temporary-root authority before Git',
+    );
+    reviewedGit = createReviewedGitRuntime(temporaryRoot);
+    const acquiredRuntime = reviewedGit;
+    cleanup = retryableOrderedCleanup(
+      () => disposeReviewedGitRuntime(acquiredRuntime),
+      () => rmSync(temporaryRoot, { recursive: true, force: true }),
+    );
+    assertEmptyDirectDirectory(emptyTemplate, 'Git template authority');
+    assertEmptyDirectDirectory(emptyHooks, 'Git hook authority');
+    assertEmptyDirectDirectory(emptyHome, 'Git home authority');
     git(
+      reviewedGit,
+      repository,
+      [
+        'init',
+        '--quiet',
+        '--object-format=sha1',
+        `--template=${emptyTemplate}`,
+      ],
+      30_000,
+      emptyHooks,
+    );
+    git(
+      reviewedGit,
       repository,
       ['remote', 'add', 'origin', PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.repository],
       30_000,
+      emptyHooks,
     );
     git(
+      reviewedGit,
+      repository,
+      ['config', '--local', 'remote.origin.promisor', 'true'],
+      30_000,
+      emptyHooks,
+    );
+    git(
+      reviewedGit,
+      repository,
+      ['config', '--local', 'remote.origin.partialclonefilter', 'blob:none'],
+      30_000,
+      emptyHooks,
+    );
+    git(
+      reviewedGit,
       repository,
       [
+        '-c',
+        'http.version=HTTP/1.1',
         'fetch',
         '--quiet',
         '--depth=1',
         '--filter=blob:none',
         '--no-tags',
+        '--no-write-commit-graph',
+        '--no-write-fetch-head',
+        '--no-recurse-submodules',
+        '--refmap=',
         'origin',
         PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.commit,
       ],
       600_000,
+      emptyHooks,
     );
     const resolved = git(
+      reviewedGit,
       repository,
       [
         'rev-parse',
@@ -180,6 +314,8 @@ function fetchPinnedRepository(): {
         `${PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.commit}^{commit}`,
       ],
       30_000,
+      emptyHooks,
+      true,
     ).trim();
     if (resolved !== PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.commit) {
       throw new Error(
@@ -187,111 +323,194 @@ function fetchPinnedRepository(): {
         `${PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.commit}, received ${resolved}`,
       );
     }
-    const requiredBlobPaths = [
-      PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.documentationIndex.path,
-      PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.runner.path,
-      PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.orchestrationCmake.path,
-      ...Object.keys(PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.aliases),
+    const selectedReferences = nestExampleRawBlobReferences(
+      repository,
+      reviewedGit,
+    );
+    const expectedBlobIdentities = selectedReferences.map(
+      ({ gitBlobSha1 }) => gitBlobSha1,
+    );
+    // Remove every Git transport/configuration path before the separately
+    // bounded raw-HTTPS body acquisition. Raw requests reproduce the exact
+    // tree-derived Git blob identities and never continue a failed smart-fetch
+    // repository branch.
+    git(
+      reviewedGit,
+      repository,
+      ['remote', 'remove', 'origin'],
+      30_000,
+      emptyHooks,
+      true,
+    );
+    removeGitAcquisitionSidecars(
+      repository,
+      'NEST example post-fetch acquisition-sidecar cleanup',
+    );
+    const structuralReadAuthority = verifyOfflineGitReadAuthority(
+      repository,
+      temporaryRoot,
+      'NEST example structural-only offline-read transition',
+      reviewedGit,
+    );
+    const structuralObjects = deriveOfflineGitStructuralObjectSetWithAuthority(
+      structuralReadAuthority,
+      PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.commit,
+      PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.rootTreeGitSha1,
+      'NEST example pinned structural object derivation',
+      reviewedGit,
+    );
+    if (structuralObjects.length !==
+      PINNED_UNIQUE_REACHABLE_TREE_OBJECT_COUNT + 1) {
+      throw new Error('pinned example Git structural-object count drifted');
+    }
+    requireExactOfflineGitObjectSetWithAuthority(
+      structuralReadAuthority,
+      structuralObjects,
+      'NEST example initial structural-only object closure',
+      reviewedGit,
+    );
+    requireExactPrivateDirectoryAuthority(
+      selectedBlobStaging,
+      'NEST example raw-source staging authority before download',
+    );
+    const stagedPaths = await downloadPinnedRawGitBlobsWithBoundary(
+      selectedReferences,
+      selectedBlobStaging,
+      RAW_SOURCE_REQUEST_AUTHORITY,
+      productionPinnedRawGitBlobBoundary(RAW_SOURCE_LIMITS),
+    );
+    requireExactPrivateDirectoryAuthority(
+      selectedBlobStaging,
+      'NEST example raw-source staging authority after download',
+    );
+    // Raw HTTPS is not Git remote authority. Revalidate the still-structural
+    // object database immediately before the sole controlled mutation.
+    requireExactOfflineGitObjectSetWithAuthority(
+      structuralReadAuthority,
+      structuralObjects,
+      'NEST example pre-import structural-only object closure',
+      reviewedGit,
+    );
+    importSelectedSourceBlobs(
+      reviewedGit,
+      repository,
+      emptyHooks,
+      selectedReferences,
+      stagedPaths,
+    );
+    rmSync(selectedBlobStaging, { recursive: true });
+    const offlineReadAuthority = verifyOfflineGitReadAuthority(
+      repository,
+      temporaryRoot,
+      'NEST example post-import offline-read transition',
+      reviewedGit,
+    );
+    const completeObjectClosure = [
+      ...structuralObjects,
+      ...expectedBlobIdentities.map((identity) => ({
+        identity,
+        objectType: 'blob' as const,
+      })),
     ];
-    // Materializing these six bounded text blobs is part of the fetch phase. The
-    // inventory itself needs no other file contents: all source and asset
-    // identities come from the complete Git tree.
-    for (const blobPath of requiredBlobPaths) {
-      git(
-        repository,
-        [
-          'cat-file',
-          'blob',
-          `${PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.commit}:${blobPath}`,
-        ],
-        120_000,
-      );
+    requireExactOfflineGitObjectSetWithAuthority(
+      offlineReadAuthority,
+      completeObjectClosure,
+      'NEST example pre-materialization complete object closure',
+      reviewedGit,
+    );
+    const materialized = materializeNestExampleTreeBlobs(
+      repository,
+      offlineReadAuthority,
+      PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY,
+      reviewedGit,
+    );
+    if (
+      materialized.exampleTreeLeafCount !== 162 ||
+      materialized.uniqueExampleTreeGitBlobCount !== 159 ||
+      materialized.acquiredUniqueGitBlobCount !== 160 ||
+      materialized.totalUniqueByteLength !==
+        PINNED_NEST_EXAMPLE_RAW_BLOB_TOTAL_BYTE_LENGTH
+    ) {
+      throw new Error('materialized example-tree blob denominator drifted');
     }
-
-    // From here on, the inventory has no configured network source. A lazy object
-    // read therefore fails instead of silently reaching back to GitHub.
-    git(repository, ['remote', 'remove', 'origin'], 30_000);
-    for (const blobPath of requiredBlobPaths) {
-      git(
-        repository,
-        [
-          'cat-file',
-          '-e',
-          `${PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY.commit}:${blobPath}`,
-        ],
-        30_000,
-      );
+    if (
+      materialized.requestedGitBlobSha1s.length !==
+        expectedBlobIdentities.length ||
+      materialized.requestedGitBlobSha1s.some((identity, index) =>
+        identity !== expectedBlobIdentities[index])
+    ) {
+      throw new Error('offline materialization changed the raw acquisition identity set');
     }
+    requireExactOfflineGitObjectSetWithAuthority(
+      offlineReadAuthority,
+      completeObjectClosure,
+      'NEST example structural-plus-complete-tree object closure',
+      reviewedGit,
+    );
+    assertEmptyDirectDirectory(emptyTemplate, 'Git template authority');
+    assertEmptyDirectDirectory(emptyHooks, 'Git hook authority');
+    assertEmptyDirectDirectory(emptyHome, 'Git home authority');
     const acquisitionContext = verifyNestExampleOfflineAcquisitionContext(
       repository,
       temporaryRoot,
+      reviewedGit,
     );
     complete = true;
     return {
       repository,
       acquisitionContext,
-      cleanup: () => rmSync(temporaryRoot, { recursive: true, force: true }),
+      reviewedGit,
+      cleanup,
     };
   } finally {
-    if (!complete) rmSync(temporaryRoot, { recursive: true, force: true });
-  }
-}
-
-function writeNewFileSafely(requestedPath: string, content: string): void {
-  const target = path.resolve(requestedPath);
-  const parent = path.dirname(target);
-  const basename = path.basename(target);
-  if (basename === '.' || basename === '..' || basename.length === 0) {
-    throw new Error('output path must name a file');
-  }
-  const parentStat = lstatSync(parent);
-  if (!parentStat.isDirectory() || parentStat.isSymbolicLink()) {
-    throw new Error('output parent must be a direct directory');
-  }
-  if (realpathSync(parent) !== parent) {
-    throw new Error('output parent path must not traverse symbolic links');
-  }
-  if (existsSync(target)) throw new Error('output file already exists');
-
-  const staged = path.join(
-    parent,
-    `.${basename}.cortexel-${process.pid}-${randomBytes(12).toString('hex')}.tmp`,
-  );
-  let descriptor: number | null = null;
-  let stagedExists = false;
-  try {
-    descriptor = openSync(staged, 'wx', 0o600);
-    stagedExists = true;
-    const bytes = Buffer.from(content, 'utf8');
-    let offset = 0;
-    while (offset < bytes.length) {
-      const written = writeSync(descriptor, bytes, offset, bytes.length - offset);
-      if (written <= 0) {
-        throw new Error('output staging write made no forward progress');
-      }
-      offset += written;
-    }
-    fsyncSync(descriptor);
-    closeSync(descriptor);
-    descriptor = null;
-
-    // link(2) is an atomic no-clobber publication: an existing target produces
-    // EEXIST rather than being overwritten. The staged name is then removed.
-    linkSync(staged, target);
-    unlinkSync(staged);
-    stagedExists = false;
-  } finally {
-    if (descriptor !== null) closeSync(descriptor);
-    if (stagedExists) {
-      try {
-        unlinkSync(staged);
-      } catch {
-        // Preserve the original failure. The randomized 0600 staging file is
-        // harmless and remains in the caller-selected output directory.
-      }
+    if (!complete) {
+      if (cleanup !== null) cleanup();
+      else rmSync(temporaryRoot, { recursive: true, force: true });
     }
   }
 }
+
+export function writeNewNestExampleInventoryFile(
+  requestedPath: string,
+  content: string,
+): void {
+  publishNewExclusiveAuditFile(requestedPath, content);
+}
+
+function publishNestExampleInventoryAfterCleanup(
+  output: string | null,
+  canonical: string,
+  cleanup: () => void,
+  writeStdout: (content: string) => unknown,
+  publishFile: (target: string, content: string) => void,
+): void {
+  cleanup();
+  if (output === null) writeStdout(canonical);
+  else publishFile(output, canonical);
+}
+
+function retryableOrderedCleanup(
+  disposeRuntime: () => void,
+  removeAcquisitionRoot: () => void,
+): () => void {
+  let runtimeDisposed = false;
+  let acquisitionRootRemoved = false;
+  return () => {
+    if (!runtimeDisposed) {
+      disposeRuntime();
+      runtimeDisposed = true;
+    }
+    if (!acquisitionRootRemoved) {
+      removeAcquisitionRoot();
+      acquisitionRootRemoved = true;
+    }
+  };
+}
+
+export const nestExampleSourceInventoryGeneratorTesting = Object.freeze({
+  publishAfterCleanup: publishNestExampleInventoryAfterCleanup,
+  retryableOrderedCleanup,
+});
 
 function safeDiagnostic(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error);
@@ -303,10 +522,12 @@ function safeDiagnostic(error: unknown): string {
     .slice(0, 2_000);
 }
 
-function main(): number {
+export async function runNestExampleSourceInventoryGenerator(
+  argv: readonly string[] = process.argv.slice(2),
+): Promise<number> {
   let parsed: ParsedArguments;
   try {
-    parsed = parseArguments(process.argv.slice(2));
+    parsed = parseArguments(argv);
   } catch (error) {
     process.stderr.write(`${safeDiagnostic(error)}\n${usage()}\n`);
     return 2;
@@ -316,22 +537,37 @@ function main(): number {
     return 0;
   }
 
-  let fetched: ReturnType<typeof fetchPinnedRepository> | null = null;
+  let fetched: Awaited<ReturnType<typeof fetchPinnedRepository>> | null = null;
   try {
-    fetched = fetchPinnedRepository();
+    fetched = await fetchPinnedRepository();
     const inventory = buildNestExampleSourceInventory(
       fetched.repository,
       PINNED_NEST_EXAMPLE_INVENTORY_AUTHORITY,
       fetched.acquisitionContext,
+      NEST_EXAMPLE_ACQUISITION_PRODUCER_PROFILE,
+      fetched.reviewedGit,
     );
+    const problems = validateNestExampleSourceInventory(inventory);
+    if (problems.length !== 0) {
+      throw new Error(
+        `generated NEST example inventory failed its pinned validator: ${problems[0]}`,
+      );
+    }
     const canonical = canonicalNestExampleSourceInventory(inventory);
     // Do not publish evidence until the temporary acquisition authority has
     // been removed successfully. A cleanup failure is a bounded command failure,
     // not an accepted artifact followed by an unhandled finally exception.
-    fetched.cleanup();
-    fetched = null;
-    if (parsed.output === null) process.stdout.write(canonical);
-    else writeNewFileSafely(parsed.output, canonical);
+    const acquired = fetched;
+    publishNestExampleInventoryAfterCleanup(
+      parsed.output,
+      canonical,
+      () => {
+        acquired.cleanup();
+        fetched = null;
+      },
+      (content) => process.stdout.write(content),
+      writeNewNestExampleInventoryFile,
+    );
     return 0;
   } catch (error) {
     process.stderr.write(`${safeDiagnostic(error)}\n`);
@@ -342,11 +578,15 @@ function main(): number {
         fetched.cleanup();
       } catch {
         // Preserve the primary bounded diagnostic. No artifact is published on
-        // this path, and the private randomized temporary root remains the only
-        // possible residue.
+        // this path, and the randomized owner/mode/ACL-restricted temporary root
+        // remains the only possible residue.
       }
     }
   }
 }
 
-process.exitCode = main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  void runNestExampleSourceInventoryGenerator().then((exitCode) => {
+    process.exitCode = exitCode;
+  });
+}

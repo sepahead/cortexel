@@ -263,11 +263,13 @@ scientific review (§7), not a runtime gate.
   re-derive and confirm exactly what was validated and drawn. A local build reports
   `sourceRevision: "unreleased-worktree"` and `release: false` rather than guessing a
   release commit.
-- **Immutable evidence.** The knowledge-graph contract binds an immutable snapshot
-  id, source, scope, and RFC-3339 generation time into the artifact so a stored
-  figure is unambiguous about the graph state it depicts. The release evidence ledger
-  (`docs/release/evidence-ledger.v1.json`) records what was actually executed; a gate
-  is `PASS` only with a reproducible receipt.
+- **Stable artifact identity is explicit.** FigureRequestV1 artifacts bind canonical
+  request, contract, catalog, and logical-output digests. The legacy experimental
+  `corpus.knowledge_graph` surface does not inherit that claim: its snapshot id, source,
+  scope, and generation time are caller-declared metadata, it has no closed evidence
+  inventory or stable FigureArtifact, and its force-layout view is not a deterministic
+  evidence artifact. The release evidence ledger (`docs/release/evidence-ledger.v1.json`)
+  records what was actually executed; a gate is `PASS` only with a reproducible receipt.
 
 ### Information disclosure — leaking through diagnostics or metadata
 

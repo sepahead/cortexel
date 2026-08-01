@@ -480,7 +480,7 @@ export const SKILL_EXAMPLE_PAYLOADS: Partial<Record<NestSkillId, VizSpec>> = {
     params: {
       graph_id: 'corpus-entity-graph',
       graph_source: 'engram:corpus_entity_graph',
-      graph_snapshot_id: 'sha256:example-corpus-snapshot',
+      graph_snapshot_id: 'caller-declared-example-snapshot',
       graph_scope: 'corpus_entity',
       generated_at: '2026-07-11T00:00:00Z',
       nodes: [
@@ -625,7 +625,7 @@ export const SKILL_EXAMPLE_PAYLOADS: Partial<Record<NestSkillId, VizSpec>> = {
     provenance: {
       ...synthetic({
         graph_source: 'engram:corpus_entity_graph',
-        graph_snapshot_id: 'sha256:example-corpus-snapshot',
+        graph_snapshot_id: 'caller-declared-example-snapshot',
         graph_scope: 'corpus_entity',
         identity_advisory: true,
       }),

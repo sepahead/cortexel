@@ -1,7 +1,12 @@
 {
   "registry": "cortexel-nest-official-example-coverage",
-  "version": "1.0",
-  "description": "A fail-closed external audit ledger for Cortexel coverage of the official NEST Simulator v3.10 example corpus. V1 closes only the pinned source, alias, selector, canonical-entrypoint, runner-target-profile, and checked-in-asset denominator. It deliberately admits no visual-output, mapping, adapter, renderer, upstream-execution, or scientific-certification rows. This mutable audit evidence remains outside the normative package contract and establishes no visualization coverage.",
+  "version": "1.1",
+  "semanticBinding": {
+    "identityAlgorithm": "cortexel-nest-official-example-coverage.semantic.rfc8785-sha256.v1",
+    "digestScope": "all_top_level_members_except_semanticBinding",
+    "semanticDigest": "sha256:1ac8b2b440e333c8be8fe250545c4ab8e8525f7664a5448e5390135c41a090fc"
+  },
+  "description": "A fail-closed external audit ledger for Cortexel coverage of the official NEST Simulator v3.10 PyNEST pynest/examples tree with its documentation/default-runner selectors and an explicitly selected user-documentation source corpus. V1.1 closes that pinned PyNEST example source/selector scope and separately binds exact bytes for explicitly selected documentation source scopes. Neither scope is a Sphinx/CMake build-input denominator or a complete visualization-definition denominator. The ledger deliberately admits no built visual-output, mapping, adapter, renderer, upstream-execution, parity, or scientific-certification rows. This mutable audit evidence remains outside the normative package contract and establishes no visualization coverage.",
   "upstreamAuthority": {
     "project": "NEST Simulator",
     "release": "v3.10",
@@ -29,13 +34,30 @@
   "sourceInventory": {
     "state": "complete",
     "artifact": {
-      "path": "docs/audit/nest-example-source-inventory.v1.json",
+      "path": "docs/audit/nest-example-source-inventory.v2.json",
       "protocol": "cortexel-nest-example-source-inventory",
-      "protocolVersion": 1,
-      "identityAlgorithm": "cortexel-nest-example-source-inventory.rfc8785-sha256.v1",
-      "inventoryDigest": "sha256:cd59e82a8eb5af6d482d3042afdf91b0793865aef75843f5b10da6ee61ba3fe6",
-      "artifactByteLength": 196576,
-      "artifactSha256": "sha256:1d762db8c60e174f42371308093c0d091937bde2299ed8cfce4217c9e9179c1a"
+      "protocolVersion": 2,
+      "identityAlgorithm": "cortexel-nest-example-source-inventory.rfc8785-sha256.v2",
+      "predecessor": {
+        "path": "docs/audit/nest-example-source-inventory.v1.json",
+        "protocol": "cortexel-nest-example-source-inventory",
+        "protocolVersion": 1,
+        "identityAlgorithm": "cortexel-nest-example-source-inventory.rfc8785-sha256.v1",
+        "inventoryDigest": "sha256:cd59e82a8eb5af6d482d3042afdf91b0793865aef75843f5b10da6ee61ba3fe6",
+        "artifactByteLength": 196576,
+        "artifactSha256": "sha256:1d762db8c60e174f42371308093c0d091937bde2299ed8cfce4217c9e9179c1a",
+        "evidenceTransfer": "none"
+      },
+      "producerProfile": {
+        "schema": "cortexel-source-inventory-acquisition-producer-profile.v1",
+        "producer": "scripts/generate-nest-example-source-inventory.ts",
+        "profile": "cortexel.nest-example.git-sha1-blobless-structural-137-example-leaves-162-example-unique-blobs-159-acquired-unique-blobs-160-raw-https-selected-reviewed-posix-offline-batch-canonical-object-rehash.v6",
+        "harnessRevision": 6,
+        "executionEvidence": "profile_declaration_not_independent_execution_receipt"
+      },
+      "inventoryDigest": "sha256:1f039d9b4616ffa2de0c2acb6ca4ef9eaf473185b044a66bd8e6bbea27b1d216",
+      "artifactByteLength": 228211,
+      "artifactSha256": "sha256:a8a7da4c62170a5405da3662dbef2602891c87cadbadd7f897196be6966928cd"
     },
     "closure": {
       "pythonSourcePaths": "complete",
@@ -43,7 +65,10 @@
       "documentationAndRunnerSelectors": "complete",
       "canonicalEntrypoints": "complete",
       "runnerTargetProfiles": "complete",
-      "checkedInVisualAssets": "complete"
+      "checkedInVisualAssets": "complete",
+      "completeExampleTreeLeaves": "complete",
+      "perLeafGitAndSha256Authority": "complete",
+      "closedAuxiliaryRoleClassification": "complete"
     },
     "counts": {
       "pythonPathEntryCount": 112,
@@ -51,42 +76,114 @@
       "pythonSymlinkCount": 3,
       "canonicalEntrypointCount": 98,
       "runnerTargetProfileCount": 92,
-      "checkedInVisualAssetCount": 12
+      "checkedInVisualAssetCount": 12,
+      "exampleTreeLeafCount": 162,
+      "uniqueExampleTreeGitBlobCount": 159,
+      "auxiliaryLeafCount": 38
     },
     "limitations": [
-      "The inventory binds the pinned commit's Git SHA-1 object identities and source roles; its outer SHA-256 digest binds those identifiers, not independently rehashed source-blob bytes. It does not classify plotting callsites or the semantics of any source body.",
+      "The V2 inventory binds every one of the pinned example tree's 162 leaves by path bytes, Git mode and blob SHA-1, plus independently recomputed content SHA-256 and byte length. Its closed partition contains 112 Python paths, 12 checked-in visual assets, and 38 auxiliary leaves. Auxiliary roles are structural path/type classifications only: they do not classify visualization semantics or establish runtime-dependency closure.",
       "A documentation reference is selector evidence, not a process invocation; it never contributes to the runner-target-profile count.",
       "A runner target profile records one member of the canonical sorted target set, its Python argv, working directory, and runner-owned environment fields. It neither preserves the runner's filesystem-dependent execution order nor models the surrounding time, shell, redirection, and logging wrapper; it is a definition rather than an execution receipt and does not close inherited ambient dependencies.",
       "A checked-in PNG, GIF, or SVG is a source-tree asset; its presence does not establish that an example emits, consumes, or semantically matches that asset.",
-      "Source closure transfers no evidence to visual-output inventory, stable mapping, packaged implementation, rendering, upstream execution, or scientific certification."
+      "The V2 contract migration and source closure transfer no evidence to visual-output inventory, stable mapping, packaged implementation, rendering, upstream execution, or scientific certification; the byte-preserved V1 artifact remains historical only."
     ],
-    "notes": "The canonical artifact was generated from a temporary Git repository after fetching the exact commit, materializing only the bounded selector and alias blobs needed for this inventory, removing every configured remote, and verifying repository-local object authority before reading the inventory. No upstream Python code was imported or executed. The artifact contains 112 Python paths (109 regular bodies and 3 aliases), 98 canonical entrypoint bodies, 92 executable runner target definitions, and 12 checked-in visual assets."
+    "notes": "The retained artifact declares the closed, versioned scripts/generate-nest-example-source-inventory.ts acquisition producer profile. The current generator accepts that profile only with verified repository authority. It performs one initially network-authorized blobless structural Git fetch pinned to HTTP/1.1, verifies the exact commit and root tree, derives the complete 162-leaf/159-unique-blob pynest/examples reference set plus the disjoint documentation-index blob, removes the remote and acquisition sidecars, and proves an exact 137-object commit/tree-only local closure before any selected blob import. Four SONATA JSON paths intentionally share one exact blob identity. A separate fixed-host raw-HTTPS boundary then retrieves exactly 160 unique tree-selected paths with no redirects, authentication, cookies, proxy authority, or content encoding. Its exact producer limits are concurrency four, four attempts, a 90-second nonempty-body idle deadline, a five-minute absolute request deadline, and a 15-minute global deadline; the per-blob cap is 6,339,219 bytes, the exact successful-byte cap is 19,427,499 bytes, and the received-HTTP-200-body cap is 96 MiB. Those byte limits cover emitted application-body chunks, not aggregate headers, TLS framing, DNS, or socket/kernel buffering, and event-loop timers cannot preempt synchronous work or a stalled event loop. Every complete response must reproduce its tree-selected Git blob SHA-1 before exclusive mode-0600 staging. One exact positional `git hash-object -w --no-filters -- <160 reviewed staged path arguments>` invocation must reproduce every identity with exact stdout and empty stderr. The generator removes staging, proves a fresh exact 297-object final closure, rereads and Git-SHA-1-verifies every selected object with lazy fetching disabled, independently computes SHA-256 and byte length, and disposes its private runtime and repository before exclusive publication. No configured remote or alternates may remain, and no upstream code is executed. The profile declaration and artifact digests expose procedure or retained-byte drift, but they are not an independent execution receipt and do not bind Git's helper/dynamic-library graph, the TLS trust store, the OS, or filesystem behavior as a reproducible acquisition toolchain. Stock Git still supplies no hostile-server input-byte quota for the initial commit/tree pack; strict containment requires an external quota or sandbox. The artifact contains 112 Python paths (109 regular bodies and 3 aliases), 98 canonical entrypoint bodies, 92 definition-only default-runner invocation profiles, 12 checked-in visual assets, and 38 structurally classified auxiliary leaves. Those auxiliary roles establish neither visualization classification nor runtime-dependency closure."
+  },
+  "documentationSelectedSourceInventory": {
+    "state": "complete",
+    "artifact": {
+      "path": "docs/audit/nest-documentation-source-inventory.v1.json",
+      "protocol": "cortexel-nest-documentation-source-inventory",
+      "protocolVersion": 1,
+      "identityAlgorithm": "cortexel-nest-documentation-source-inventory.rfc8785-sha256.v1",
+      "producerProfile": {
+        "schema": "cortexel-source-inventory-acquisition-producer-profile.v1",
+        "producer": "scripts/generate-nest-documentation-source-inventory.ts",
+        "profile": "cortexel.nest-documentation.git-sha1-blobless-structural-137-raw-https-selected-784-reviewed-posix-opaque-offline-object-closure-batch-canonical-object-rehash.v4",
+        "harnessRevision": 4,
+        "executionEvidence": "profile_declaration_not_independent_execution_receipt"
+      },
+      "inventoryDigest": "sha256:bbd9c3b77aac4d6ee64d7b185a5acd85eabeb40c621114126ff210bd7150fcc8",
+      "artifactByteLength": 493939,
+      "artifactSha256": "sha256:d533a2f96046b484f192ed88ab70fa31d5620d48ebd647c72ec3008998f8f77c"
+    },
+    "closure": {
+      "scopeKind": "closed_selected_scopes_not_build_or_visualization_definition_closure",
+      "perBlobGitAndSha256Authority": "complete",
+      "documentationTreeLeavesAtPinnedCommit": "complete",
+      "pynestPublicModuleScanCandidatesAtPinnedCommit": "complete",
+      "directModelAndKernelUserdocsHeaderCandidatesAtPinnedCommit": "complete",
+      "enumeratedBuildContextFilesAtPinnedCommit": "complete",
+      "reviewedBoundedClassificationsWithinSelectedScopes": "complete"
+    },
+    "counts": {
+      "uniqueBoundBlobCount": 784,
+      "documentationTreeLeafCount": 473,
+      "documentationRstCount": 142,
+      "documentationNotebookCount": 8,
+      "documentationPythonCount": 13,
+      "documentationMediaCount": 282,
+      "documentationSupportCount": 28,
+      "pynestPublicModuleCandidateCount": 29,
+      "userdocsHeaderCandidateCount": 278,
+      "userdocsBlockCount": 146,
+      "notebookStoredPngCount": 50,
+      "notebookPlotLikePngCount": 38,
+      "notebookFormulaPngCount": 12,
+      "notebookTextLatexDataCount": 12,
+      "notebookTextPlainDataCount": 54,
+      "notebookStreamOutputCount": 19,
+      "userdocsFigureDirectiveCount": 2,
+      "scriptFigureFamilyDefinitionCount": 18,
+      "scriptActiveSaveCallCount": 17,
+      "authoredDiagramSourceCount": 3,
+      "authoredDiagramDirectiveCount": 4,
+      "rstFigureOrImageReferenceCount": 107,
+      "rstMathDirectiveCount": 53,
+      "publicVisualizationModuleDefinitionCount": 4
+    },
+    "limitations": [
+      "Every admitted blob carries its exact repository-relative path bytes, Git mode, Git blob SHA-1, independently recomputed content SHA-256, and byte length. The selected scopes are exactly all 473 doc/htmldoc tree leaves, 29 PyNEST public-module scan candidates, 278 direct model/kernel UserDocs header candidates, and the enumerated build-context files at the pinned commit. This is not closure over all Sphinx/CMake build inputs or all visualization definitions and is not a documentation-build receipt.",
+      "The 50 notebook PNGs are unverified historical stored-output candidates embedded in notebook source. The pinned Sphinx configuration sets nbsphinx execution to `never`; this inventory did not invoke Sphinx or witness that setting control a build. Of those PNGs, 38 are plot-like and 12 are formula renders, and neither class is evidence that the pinned notebook was executed successfully. The selected notebook blobs also derive and pin 12 text/latex data values, 54 text/plain data values, and 19 stream outputs; those non-PNG fields are not classified as visual-output candidates.",
+      "The 282 checked-in documentation media leaves are source assets, not generated-output identities or semantic matches. The 107 figure/image and 53 math counts are lexical directive-line counts over static RST sources; target resolution, reachability, and build inclusion are unassessed. The selected UserDocs blocks derive and pin two figure directives, which remain outside the static-RST lexical counts and do not establish generated outputs. Raw-HTML/video surfaces and remote images remain outside those counts.",
+      "The two reviewed documentation scripts define 18 active figure families and 17 active literal save calls. Their relative save targets are resolved by Python against an execution working directory, which this source-only inventory does not bind; target resolution and presence are therefore not assessed. No save call is equated with a checked-in asset. The conn_3d source contains active plotting helpers, but its active top-level figure remains empty because all branch-render invocations and the save call are commented; that candidate is explicitly excluded.",
+      "Four authored graphviz, Mermaid, or PlantUML directives occur in three reviewed RST sources. They are source definitions only; their external tools, includes, network resources, generated bytes, and successful rendering have not been bound or run. Known inline RST plotting recipes, generated UserDocs/API RST, UserDocs figure directives, and non-Python files admitted by Sphinx-Gallery copy rules are outside the explicit reviewed visualization classifiers.",
+      "The Sphinx configuration can consume patch_url, download a commit-named patch, and invoke git apply before building. Recommended requirements include both ranges and unconstrained names and are not a lock; external Sphinx, intersphinx, MathJax, PlantUML, Graphviz, and Mermaid dependencies are not closed. Network isolation, dependency resolution, build-input closure, source-mutation exclusion, acquisition-toolchain reproducibility, and reproducible documentation-build authority are not established.",
+      "Source-definition closure transfers no evidence to built visual outputs, stable mappings, packaged adapters, renderers, parity, upstream execution, or scientific certification."
+    ],
+    "notes": "The retained artifact declares the closed, versioned scripts/generate-nest-documentation-source-inventory.ts acquisition producer profile. Under that profile, the generator requires the exact NEST v3.10 commit in a worktree-free repository initialized by one blobless smart-HTTPS structural fetch under a current-user-owned temporary root whose permission and special bits are exactly 0700 and whose path and descriptor pass the reviewed non-authorizing POSIX ACL profile. Real and effective UIDs must agree. The resolved ancestor chain must be root- or current-UID-owned, pass the same non-authorizing ACL profile, and use sticky entry protection wherever group/other write is present, excluding ordinary different-UID parent-entry replacement. Darwin uses its native ACL API and may admit only the reviewed non-authorizing deny-delete restriction, but does not establish filesystem implementation or locality. On Linux, native libacl requires a reviewed ext-family or tmpfs VFS type and listed alternate ACL namespaces are rejected separately; network, stacked, unknown, unsupported, or indeterminate ACL models fail closed. Additional VFS types require their own reviewed profile and native controls. Filesystem magic does not establish backing-device locality or exclude lower-layer stacking. These observations do not establish containment against root or DAC/ownership-bypassing capabilities, mount-namespace changes, or another process with the current UID. The initial Git fetch receives a minimal environment and empty controlled home without ambient configuration, .netrc, credential helpers, proxies, tracing, or exported secrets. After the exact commit/tree closure selects 784 unique path/blob identities, the generator removes the Git remote, partial-clone configuration, and checked promisor/reverse-index sidecars; rejects checkout, sparse, temporary-pack, alternate, and network-authority residue; verifies every retained pack; and proves exactly one pinned commit plus 136 unique trees. Only then may fixed-host, no-redirect, no-authentication, no-cookie, no-proxy, identity-encoded TLS requests retrieve the selected raw paths. The exact producer limits are concurrency four, four attempts, a 90-second nonempty-body idle deadline, a five-minute absolute request deadline, and a 15-minute global deadline; the per-blob cap is 4 MiB, the successful-byte cap is 64 MiB, and the received-HTTP-200-body cap is 256 MiB. Those limits cover emitted application-body chunks rather than aggregate headers, TLS framing, DNS, or socket/kernel buffering, and event-loop timers cannot preempt synchronous work or a stalled event loop. Each complete response must reproduce its tree-selected Git blob SHA-1 before exclusive mode-0600 staging. One exact positional `git hash-object -w --no-filters -- <784 reviewed staged path arguments>` invocation must reproduce all identities with exact stdout and empty stderr. The generator removes staging, proves a fresh exact 921-object closure, rereads and parses every selected blob with lazy fetch disabled, verifies Git SHA-1 again, independently computes SHA-256 and byte length, and disposes its private runtime and repository before exclusive publication. The profile declaration and artifact digests expose procedure or retained-byte drift, but are not an independent execution receipt. They do not bind Git's helper/dynamic-library graph, the TLS trust store, OS ACL implementation, filesystem/backing-device topology, or acquisition environment as a reproducible toolchain or availability receipt. Stock Git supplies no hostile-server input-byte quota for the initial commit/tree pack; that requires external containment. No upstream source is imported or executed by the declared profile. The artifact binds 784 unique selected blobs while every downstream evidence count remains zero."
   },
   "evidenceAxes": [
     {
       "id": "upstream_source_inventory",
       "state": "complete",
-      "notes": "The exact pinned source artifact closes paths, aliases, documentation and default-runner selectors, canonical entrypoints, executable runner target definitions, and checked-in visual assets for its declared scope."
+      "notes": "The exact pinned source artifact closes paths, aliases, documentation and default-runner selectors, canonical entrypoints, definition-only default-runner invocation profiles, and checked-in visual assets for its declared scope."
     },
     {
-      "id": "visual_output_inventory",
-      "state": "not_generated",
-      "notes": "No figure, panel, overlay, table, animation, interactive surface, emitted artifact, stdout report, or reviewed no-output result has been admitted."
+      "id": "documentation_selected_source_inventory",
+      "state": "complete",
+      "notes": "The separate canonical artifact closes per-blob bytes and reviewed bounded classifications only for its explicit pinned scopes: the complete user-documentation tree, the PyNEST public-module scan candidates, direct model/kernel UserDocs header candidates, and enumerated build-context files. It is not a complete build-input or visualization-definition denominator, built-output identity, or execution receipt."
+    },
+    {
+      "id": "execution_bound_visual_output_inventory",
+      "state": "not_established",
+      "notes": "The selected source corpus contains checked-in media and 50 unverified historical notebook PNG candidates, but no figure, panel, overlay, table, animation, interactive surface, emitted artifact, stdout report, or reviewed no-output result has an execution-bound identity or receipt."
     },
     {
       "id": "stable_contract_mapping",
       "state": "not_assessed",
-      "notes": "No official-example output has been assigned a stable Cortexel mapping or an explicit infeasibility result."
+      "notes": "No output from the pinned PyNEST pynest/examples source/selector scope has been assigned a stable Cortexel mapping or an explicit infeasibility result."
     },
     {
       "id": "packaged_adapter_implementation",
       "state": "not_assessed",
-      "notes": "The existence of package adapters is not projected onto any official example until a visual output and its source profile have been assessed."
+      "notes": "The existence of package adapters is not projected onto any pinned PyNEST pynest/examples target until a visual output and its source profile have been assessed."
     },
     {
-      "id": "renderer_coverage",
+      "id": "renderer_parity",
       "state": "not_assessed",
-      "notes": "No stable renderer has been compared with an inventoried official-example visual output."
+      "notes": "No stable renderer has been compared with an execution-bound visual output from the pinned PyNEST pynest/examples scope."
     },
     {
       "id": "upstream_execution",
@@ -133,16 +230,23 @@
   ],
   "summary": {
     "sourcePathCount": 112,
+    "exampleTreeLeafCount": 162,
+    "uniqueExampleTreeGitBlobCount": 159,
+    "auxiliaryLeafCount": 38,
     "canonicalEntrypointCount": 98,
     "runnerTargetProfileCount": 92,
     "checkedInVisualAssetCount": 12,
-    "inventoriedVisualOutputCount": 0,
+    "documentationSelectedSourceBoundBlobCount": 784,
+    "documentationScriptFigureDefinitionCount": 18,
+    "documentationStoredNotebookPngCount": 50,
+    "documentationPublicVisualizationModuleDefinitionCount": 4,
+    "admittedExecutionBoundVisualOutputCount": 0,
     "mappedVisualOutputCount": 0,
     "executableVisualOutputCount": 0,
     "renderedVisualOutputCount": 0,
     "upstreamExecutedVisualOutputCount": 0,
     "certifiedVisualOutputCount": 0,
     "coverageClaim": "none",
-    "notes": "The source denominator is closed, but every visualization-evidence count remains zero. This ledger establishes no Cortexel coverage of official NEST examples."
+    "notes": "The PyNEST pynest/examples tree plus documentation/default-runner selector scope and the explicitly selected documentation source scopes are closed, but a full documentation-build or visualization-definition denominator is not. Every built-output and visualization-evidence count remains zero. This ledger establishes no Cortexel coverage of official NEST example outputs or documentation visualizations."
   }
 }

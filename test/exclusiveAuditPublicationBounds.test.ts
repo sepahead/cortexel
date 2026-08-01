@@ -1,0 +1,176 @@
+import { spawnSync } from 'node:child_process';
+import {
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+import { describe, expect, it } from 'vitest';
+
+const ROOT = path.resolve(import.meta.dirname, '..');
+const MODULE_PATH = path.join(
+  ROOT,
+  'scripts',
+  'lib',
+  'exclusive-audit-publication.ts',
+);
+
+interface BoundFixtureResult {
+  readonly finalEntries: readonly string[];
+  readonly message: string;
+  readonly mutationCalls: readonly string[];
+  readonly requestedPathCodeUnits: number;
+}
+
+function runBoundFixture(mode: string): BoundFixtureResult {
+  const fixture = realpathSync(
+    mkdtempSync(path.join(tmpdir(), 'cortexel-publication-bound-')),
+  );
+  const script = path.join(fixture, 'fixture.mjs');
+  try {
+    writeFileSync(script, String.raw`
+      import fs from 'node:fs';
+      import { syncBuiltinESMExports } from 'node:module';
+      import path from 'node:path';
+      import { pathToFileURL } from 'node:url';
+
+      const [mode, fixture, modulePath] = process.argv.slice(2);
+      const target = path.join(fixture, 'result.json');
+      const originalCwd = process.cwd;
+      const originalOpen = fs.openSync;
+      const originalLink = fs.linkSync;
+      const originalRealpath = fs.realpathSync;
+      const originalUnlink = fs.unlinkSync;
+      const originalJoin = path.join;
+      const mutationCalls = [];
+      let requestedPath = target;
+
+      fs.openSync = (filename, flags, ...rest) => {
+        if (
+          typeof filename === 'string' &&
+          ((filename.startsWith(fixture + path.sep) &&
+            (filename === target || filename.includes('.cortexel-'))) ||
+            filename.length > 4_096)
+        ) {
+          mutationCalls.push('open:' + filename);
+        }
+        return originalOpen(filename, flags, ...rest);
+      };
+      fs.linkSync = (source, destination) => {
+        if (destination === target) mutationCalls.push('link:' + destination);
+        return originalLink(source, destination);
+      };
+      fs.unlinkSync = (filename) => {
+        if (
+          typeof filename === 'string' &&
+          (filename === target ||
+            (filename.startsWith(fixture + path.sep) && filename.includes('.cortexel-')))
+        ) {
+          mutationCalls.push('unlink:' + filename);
+        }
+        return originalUnlink(filename);
+      };
+
+      if (mode === 'target-code-units') {
+        process.cwd = () => '/' + 'a'.repeat(4_096);
+        requestedPath = 'r.json';
+      } else if (mode === 'target-utf8') {
+        process.cwd = () => '/' + 'é'.repeat(2_050);
+        requestedPath = 'r.json';
+      } else if (mode === 'parent-code-units') {
+        fs.realpathSync = (filename, ...args) =>
+          filename === fixture
+            ? '/' + 'a'.repeat(4_096)
+            : originalRealpath(filename, ...args);
+      } else if (mode === 'parent-utf8') {
+        fs.realpathSync = (filename, ...args) =>
+          filename === fixture
+            ? '/' + 'é'.repeat(2_050)
+            : originalRealpath(filename, ...args);
+      } else if (mode === 'staged') {
+        path.join = (...parts) => {
+          const joined = originalJoin(...parts);
+          return parts.some((part) =>
+            typeof part === 'string' && part.includes('.cortexel-'))
+            ? '/' + 's'.repeat(4_096)
+            : joined;
+        };
+      } else {
+        throw new Error('unknown bound fixture mode');
+      }
+
+      syncBuiltinESMExports();
+      const { publishNewExclusiveAuditFile } = await import(
+        pathToFileURL(modulePath).href + '?bound=' + mode + '-' + Date.now()
+      );
+      let message = '';
+      try {
+        publishNewExclusiveAuditFile(requestedPath, '{}');
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      } finally {
+        process.cwd = originalCwd;
+        path.join = originalJoin;
+      }
+      if (!message) throw new Error('over-bound publication path was accepted');
+      process.stdout.write(JSON.stringify({
+        finalEntries: fs.readdirSync(fixture).sort(),
+        message,
+        mutationCalls,
+        requestedPathCodeUnits: requestedPath.length,
+      }));
+    `, 'utf8');
+    const result = spawnSync(
+      'node',
+      ['--import', 'tsx', script, mode, fixture, MODULE_PATH],
+      {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: {
+          LANG: 'C',
+          LC_ALL: 'C',
+          PATH: process.env.PATH,
+        },
+        maxBuffer: 64 * 1024,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 5_000,
+      },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    return JSON.parse(result.stdout) as BoundFixtureResult;
+  } finally {
+    rmSync(fixture, { force: true, recursive: true });
+  }
+}
+
+describe('exclusive audit publication resolved-path bounds', () => {
+  it('rejects a short relative name expanded by a long cwd before mutation', () => {
+    for (const mode of ['target-code-units', 'target-utf8']) {
+      const result = runBoundFixture(mode);
+      expect(result.requestedPathCodeUnits).toBe('r.json'.length);
+      expect(result.message).toMatch(/resolved audit output target exceeds/u);
+      expect(result.mutationCalls).toEqual([]);
+      expect(result.finalEntries).toEqual(['fixture.mjs']);
+    }
+  });
+
+  it('rejects an over-bound canonical parent before mutation', () => {
+    for (const mode of ['parent-code-units', 'parent-utf8']) {
+      const result = runBoundFixture(mode);
+      expect(result.message).toMatch(/canonical audit output parent exceeds/u);
+      expect(result.mutationCalls).toEqual([]);
+      expect(result.finalEntries).toEqual(['fixture.mjs']);
+    }
+  });
+
+  it('rejects an over-bound constructed staging path before mutation', () => {
+    const result = runBoundFixture('staged');
+    expect(result.message).toMatch(/resolved audit staging path exceeds/u);
+    expect(result.mutationCalls).toEqual([]);
+    expect(result.finalEntries).toEqual(['fixture.mjs']);
+  });
+});

@@ -1,5 +1,5 @@
-import { S as StableSkillId } from '../catalog-B3dXHggm.cjs';
-export { a as SKILL_CATALOG, b as STABLE_SKILL_IDS, c as SkillCatalogEntry, i as isStableSkillId, l as lookupSkillCatalogEntry } from '../catalog-B3dXHggm.cjs';
+import { S as StableSkillId } from '../catalog-BwEfiOSM.cjs';
+export { a as SKILL_CATALOG, b as STABLE_SKILL_IDS, c as SkillCatalogEntry, i as isStableSkillId, l as lookupSkillCatalogEntry } from '../catalog-BwEfiOSM.cjs';
 export { C as CATALOG_DIGEST, a as CATALOG_DIGEST_DOMAIN } from '../identity-D0azGxGf.cjs';
 import '../errors-DOfZeMp8.cjs';
 

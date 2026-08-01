@@ -343,7 +343,7 @@ Interactive WebGL meshes are not accessibility controls. Pair
 `PopulationA11yList`, and selectable `ExpandableNeurons` with the paginated
 `NeuronA11yPager`; render these DOM companions outside the Canvas.
 Pass the `context` returned by `mapCorpusKnowledgeGraph` to
-`KnowledgeGraphLegend` so the graph id, source, immutable snapshot id, scope and
+`KnowledgeGraphLegend` so the graph id, source, caller-declared snapshot namespace, scope and
 generation time remain available in the DOM alongside the visual encoding. Pass
 the returned `graphIdentity` to both `KnowledgeGraph3DScene` and
 `KnowledgeGraphA11yList`; retain it across filters
@@ -438,8 +438,9 @@ JSON Schema per skill); the table is a quick reference.
 
 ⚠ = weak (carries a mandatory derived-view disclosure).
 
-`corpus.knowledge_graph` is a snapshot-bound evidence multigraph, not a bare
-topology list. Every node has bounded attributes, a derived/advisory epistemic
+`corpus.knowledge_graph` is an evidence-shaped advisory multigraph in a
+caller-declared snapshot namespace, not a bare topology list. Every node has
+bounded attributes, a derived/advisory epistemic
 record and one or more typed evidence references. Each element's evidence list
 must include a direct `graph_snapshot_record`, `citation`, or `external_source`
 anchor; a `graph_node` reference is supplemental and cannot create a

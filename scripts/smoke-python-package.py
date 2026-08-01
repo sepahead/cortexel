@@ -15,7 +15,6 @@ import json
 import os
 import re
 import select
-import selectors
 import shlex
 import signal
 import stat
@@ -32,7 +31,7 @@ import venv
 import zipfile
 import zlib
 from pathlib import Path, PurePosixPath
-from typing import Callable, Literal, NamedTuple, NoReturn, overload
+from typing import Literal, NoReturn, overload
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,6 +51,8 @@ MAX_SOURCE_DEPTH = 32
 MAX_DIRECTORY_CHILDREN = 10_000
 MAX_BUILD_OUTPUT_ENTRIES = 16
 MAX_SUBPROCESS_OUTPUT_BYTES = 64 * 1024
+MAX_SUBPROCESS_GUARDIAN_CONFIG_BYTES = 1024 * 1024
+MAX_SUBPROCESS_GUARDIAN_STATUS_BYTES = 4096
 MAX_RESULT_BYTES = 64 * 1024
 MAX_RESULT_JSON_DEPTH = 32
 UV_POSIX_SHEBANG_LIMIT_BYTES = 127
@@ -1440,384 +1441,286 @@ def _assert_exclusive_child_reaper_authority(label: str) -> None:
 
     if signal.getsignal(signal.SIGCHLD) != signal.SIG_DFL:
         fail(f"{label} requires exclusive default SIGCHLD authority")
+    if sys.gettrace() is not None or sys.getprofile() is not None:
+        fail(f"{label} requires no Python trace or profile callback")
+    for signal_number in signal.valid_signals():
+        if signal_number in _SUBPROCESS_CANCELLATION_SIGNALS:
+            continue
+        try:
+            handler = signal.getsignal(signal_number)
+        except (OSError, ValueError):
+            continue
+        if callable(handler):
+            fail(
+                f"{label} requires no Python signal handler outside the "
+                "closed cancellation set"
+            )
     if threading.active_count() != 1 or _operating_system_thread_count() != 1:
         fail(f"{label} requires exclusive single-threaded child-reaping authority")
 
 
-class _ChildProcessAnchorLost(RuntimeError):
-    """The child was reaped outside this lifecycle; numeric identity is unsafe."""
+def _subprocess_wait_boundary_signals() -> frozenset[int]:
+    """Block cancellation and child delivery at the exact reaper boundary."""
+
+    return frozenset({*_SUBPROCESS_CANCELLATION_SIGNALS, signal.SIGCHLD})
 
 
-class _UnreapedExitStatus(NamedTuple):
-    """One terminal WNOWAIT record bound to the still-owned child."""
+_SUBPROCESS_GUARDIAN_CONTRACT = "cortexel-python-subprocess-guardian.v1"
+_SUBPROCESS_GUARDIAN_PROGRAM = r'''
+import json
+import os
+import select
+import signal
+import struct
+import subprocess
+import sys
 
-    process_id: int
-    code: int
-    status: int
+CONTRACT = "cortexel-python-subprocess-guardian.v1"
+CONFIG_LIMIT = 1024 * 1024
+FRAME = struct.Struct("!8si")
+TARGET = b"CXTARGET"
+LAUNCH = b"CXLAUNCH"
+WORKER = b"CXWORKER"
 
 
-class _OwnedPopenBinding(NamedTuple):
-    """The exact Popen object and PID published before reaper transfer."""
+def read_bounded(fd, limit):
+    chunks = []
+    total = 0
+    while True:
+        chunk = os.read(fd, min(65536, limit + 1 - total))
+        if not chunk:
+            return b"".join(chunks)
+        total += len(chunk)
+        if total > limit:
+            raise RuntimeError("bounded input exceeded")
+        chunks.append(chunk)
 
-    process: subprocess.Popen[bytes]
-    process_id: int
+
+def write_all(fd, payload):
+    offset = 0
+    while offset < len(payload):
+        try:
+            written = os.write(fd, payload[offset:])
+        except InterruptedError:
+            continue
+        if written <= 0:
+            raise RuntimeError("short protocol write")
+        offset += written
 
 
-class _UnreapedProcessExitObserver:
-    """Observe one owned child without releasing its PID/PGID anchor."""
+def canonical(value):
+    return json.dumps(
+        value,
+        ensure_ascii=True,
+        allow_nan=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("ascii")
 
-    def __init__(self, label: str) -> None:
-        self.label = label
-        self._binding: _OwnedPopenBinding | None = None
-        self._binding_state: Literal[
-            "unbound",
-            "published",
-            "disarmed",
-            "complete",
-        ] = "unbound"
-        self.reaped = False
-        self.reap_started = False
-        self.return_code: int | None = None
-        self.final_exit_status: _UnreapedExitStatus | None = None
 
-    @property
-    def process_id(self) -> int | None:
-        return None if self._binding is None else self._binding.process_id
+def emit(status_fd, nonce, state, **fields):
+    record = {"contract": CONTRACT, "nonce": nonce, "state": state, **fields}
+    write_all(status_fd, canonical(record) + b"\n")
 
-    @property
-    def binding_complete(self) -> bool:
-        return self._binding_state == "complete"
 
-    def _publish_binding(self, binding: _OwnedPopenBinding) -> None:
-        self._binding = binding
+def self_sweep():
+    process_id = os.getpid()
+    process_group_id = os.getpgrp()
+    if process_id <= 1 or process_group_id != process_id or os.getsid(0) != process_id:
+        os._exit(126)
+    try:
+        os.killpg(process_group_id, signal.SIGKILL)
+    except BaseException:
+        os._exit(127)
+    os._exit(128)
 
-    @staticmethod
-    def _disarm_bound_popen(process: subprocess.Popen[bytes]) -> None:
-        child_created = getattr(process, "_child_created", None)
-        if child_created is True:
-            process._child_created = False  # type: ignore[attr-defined]
-        elif child_created is not False:
-            fail("owned Popen reaper state is invalid")
 
-    def bind(self, process: subprocess.Popen[bytes]) -> None:
-        binding = self._binding
-        if binding is not None and binding.process is not process:
-            fail(f"{self.label} cleanup substituted its bound process")
-        if self._binding_state == "complete":
-            fail(f"{self.label} leader identity is already bound")
+def validate_config(raw):
+    value = json.loads(raw.decode("ascii"))
+    if canonical(value) != raw:
+        raise RuntimeError("noncanonical config")
+    if type(value) is not dict or set(value) != {
+        "command", "contract", "cwd", "environment", "nonce"
+    }:
+        raise RuntimeError("invalid config envelope")
+    if value["contract"] != CONTRACT:
+        raise RuntimeError("invalid config contract")
+    nonce = value["nonce"]
+    if (
+        type(nonce) is not str
+        or len(nonce) != 64
+        or any(character not in "0123456789abcdef" for character in nonce)
+    ):
+        raise RuntimeError("invalid config nonce")
+    command = value["command"]
+    environment = value["environment"]
+    if (
+        type(command) is not list
+        or not command
+        or any(type(argument) is not str or "\0" in argument for argument in command)
+        or type(value["cwd"]) is not str
+        or not value["cwd"]
+        or "\0" in value["cwd"]
+        or type(environment) is not dict
+        or any(
+            type(key) is not str
+            or type(item) is not str
+            or not key
+            or "=" in key
+            or "\0" in key
+            or "\0" in item
+            for key, item in environment.items()
+        )
+    ):
+        raise RuntimeError("invalid target authority")
+    return value
 
-        if binding is None:
-            if self._binding_state != "unbound":
-                fail(f"{self.label} Popen binding state is invalid")
-            if (
-                getattr(process, "_child_created", None) is not True
-                or process.returncode is not None
-            ):
-                fail(f"{self.label} Popen reap authority was already transferred")
-            process_id = process.pid
-            if process_id <= 1:
-                fail(f"{self.label} leader identity is invalid")
 
-            # One assignment publishes exact object and PID together before
-            # Popen's implicit reaper is disarmed. A retry can therefore finish
-            # either side of every interrupted transfer transition.
-            binding = _OwnedPopenBinding(process, process_id)
-            self._publish_binding(binding)
-
-        if self._binding_state == "unbound":
-            self._binding_state = "published"
-        if self._binding_state == "published":
-            self._disarm_bound_popen(process)
-            self._binding_state = "disarmed"
-        if self._binding_state == "disarmed":
-            if getattr(process, "_child_created", None) is not False:
-                fail(f"{self.label} Popen reaper transfer was not retained")
-            self._binding_state = "complete"
-        if self._binding_state != "complete":
-            fail(f"{self.label} Popen binding state is invalid")
-
-    def require_process(self, process: subprocess.Popen[bytes]) -> int:
-        binding = self._binding
-        if binding is None or binding.process is not process:
-            fail(f"{self.label} cleanup substituted its bound process")
-        if self._binding_state != "complete":
-            fail(f"{self.label} Popen reaper transfer is incomplete")
-        if getattr(process, "_child_created", None) is not False:
-            fail(f"{self.label} Popen reaper transfer was not retained")
-        return binding.process_id
-
-    def observe(self) -> _UnreapedExitStatus | None:
-        """Return a terminal status without surrendering the numeric anchor."""
-
-        if self.reap_started:
-            fail(f"{self.label} exit was queried after the reap boundary")
-        if self.process_id is None:
-            fail(f"{self.label} exit observer is unbound")
-        for _ in range(64):
-            try:
-                result = os.waitid(
-                    os.P_PID,
-                    self.process_id,
-                    os.WEXITED | os.WNOHANG | os.WNOWAIT,
-                )
-            except ChildProcessError as exc:
-                raise _ChildProcessAnchorLost(
-                    f"{self.label} leader was reaped outside its owner"
-                ) from exc
-            except OSError as exc:
-                if exc.errno == errno.EINTR:
-                    continue
-                if exc.errno == errno.ECHILD:
-                    raise _ChildProcessAnchorLost(
-                        f"{self.label} leader was reaped outside its owner"
-                    ) from exc
-                raise RuntimeError(f"cannot observe {self.label} leader") from exc
-            if result is None or result.si_pid == 0:
-                return None
-            if result.si_pid != self.process_id:
-                fail(f"{self.label} exit observation changed child identity")
-            if result.si_code not in {
-                os.CLD_EXITED,
-                os.CLD_KILLED,
-                os.CLD_DUMPED,
-            }:
-                fail(f"{self.label} exit observation reported an invalid state")
-            return _UnreapedExitStatus(
-                process_id=self.process_id,
-                code=result.si_code,
-                status=result.si_status,
+def worker_main(go_fd, result_fd, command, cwd, environment, close_fds):
+    for fd in close_fds:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+    try:
+        if read_bounded(go_fd, 1) != b"G":
+            os._exit(121)
+        os.close(go_fd)
+        for signal_number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            signal.signal(signal_number, signal.SIG_DFL)
+        signal.pthread_sigmask(
+            signal.SIG_UNBLOCK,
+            {signal.SIGINT, signal.SIGTERM, signal.SIGHUP},
+        )
+        try:
+            target = subprocess.Popen(
+                command,
+                cwd=cwd,
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                stdout=None,
+                stderr=None,
+                close_fds=True,
+                restore_signals=True,
             )
-        fail(f"{self.label} child observation remained interrupted")
+        except OSError as error:
+            write_all(result_fd, FRAME.pack(LAUNCH, error.errno or 0))
+            os._exit(0)
+        try:
+            return_code = target.wait()
+        except BaseException:
+            write_all(result_fd, FRAME.pack(WORKER, 0))
+            os._exit(0)
+        write_all(result_fd, FRAME.pack(TARGET, return_code))
+        os._exit(0)
+    except BaseException:
+        try:
+            write_all(result_fd, FRAME.pack(WORKER, 0))
+        except BaseException:
+            pass
+        os._exit(122)
 
-    def exited(self) -> bool:
-        return self.observe() is not None
 
-    def begin_reap(self, exit_status: _UnreapedExitStatus) -> None:
-        if (
-            self.process_id is None
-            or exit_status.process_id != self.process_id
-            or self.reap_started
-        ):
-            fail(f"{self.label} final reap authority is invalid")
-        self.reap_started = True
-        self.final_exit_status = exit_status
+def guardian_main(config_fd, lease_fd, status_fd, expected_nonce):
+    if os.getpid() != os.getpgrp() or os.getsid(0) != os.getpid():
+        raise RuntimeError("guardian is not the live session leader")
+    signal.signal(signal.SIGCHLD, signal.SIG_DFL)
+    signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGCHLD})
+    raw_config = read_bounded(config_fd, CONFIG_LIMIT)
+    os.close(config_fd)
+    config = validate_config(raw_config)
+    if config["nonce"] != expected_nonce:
+        raise RuntimeError("guardian nonce changed across the descriptor boundary")
+    nonce = expected_nonce
+    worker_read, worker_write = os.pipe()
+    go_read, go_write = os.pipe()
+    worker_pid = os.fork()
+    if worker_pid == 0:
+        os.close(worker_read)
+        os.close(go_write)
+        worker_main(
+            go_read,
+            worker_write,
+            config["command"],
+            config["cwd"],
+            config["environment"],
+            (lease_fd, status_fd),
+        )
+        os._exit(123)
 
-    def mark_reaped(self, return_code: int) -> None:
-        if not self.reap_started or self.final_exit_status is None or self.reaped:
-            fail(f"{self.label} reap completion state is invalid")
-        self.reaped = True
-        self.return_code = return_code
+    os.close(worker_write)
+    os.close(go_read)
+    for signal_number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        signal.signal(signal_number, signal.SIG_IGN)
+    write_all(go_write, b"G")
+    os.close(go_write)
+
+    worker_frame = bytearray()
+    poller = select.poll()
+    poller.register(lease_fd, select.POLLIN | select.POLLHUP | select.POLLERR)
+    poller.register(worker_read, select.POLLIN | select.POLLHUP | select.POLLERR)
+    while True:
+        ready = {descriptor for descriptor, _events in poller.poll()}
+        if lease_fd in ready:
+            lease_value = os.read(lease_fd, 1)
+            if lease_value:
+                emit(status_fd, nonce, "guardian_error", code="lease_protocol")
+            else:
+                emit(status_fd, nonce, "cleanup")
+            self_sweep()
+        if worker_read not in ready:
+            continue
+        chunk = os.read(worker_read, FRAME.size + 1 - len(worker_frame))
+        if chunk:
+            worker_frame.extend(chunk)
+            if len(worker_frame) > FRAME.size:
+                emit(status_fd, nonce, "guardian_error", code="worker_protocol")
+                self_sweep()
+            continue
+
+        os.close(worker_read)
+        while True:
+            try:
+                waited_pid, worker_status = os.waitpid(worker_pid, 0)
+                break
+            except InterruptedError:
+                continue
+        if waited_pid != worker_pid or not os.WIFEXITED(worker_status) or os.WEXITSTATUS(worker_status) != 0:
+            emit(status_fd, nonce, "guardian_error", code="worker_exit")
+            self_sweep()
+        if len(worker_frame) != FRAME.size:
+            emit(status_fd, nonce, "guardian_error", code="worker_protocol")
+            self_sweep()
+        frame_kind, frame_value = FRAME.unpack(worker_frame)
+        if frame_kind == TARGET:
+            emit(status_fd, nonce, "target_exit", targetReturnCode=frame_value)
+        elif frame_kind == LAUNCH:
+            emit(status_fd, nonce, "guardian_error", code="target_launch")
+        else:
+            emit(status_fd, nonce, "guardian_error", code="worker_failure")
+        self_sweep()
+
+
+config_fd = int(sys.argv[1])
+lease_fd = int(sys.argv[2])
+status_fd = int(sys.argv[3])
+nonce = sys.argv[4]
+try:
+    guardian_main(config_fd, lease_fd, status_fd, nonce)
+except BaseException:
+    try:
+        emit(status_fd, nonce, "guardian_error", code="guardian_internal")
+    except BaseException:
+        pass
+self_sweep()
+'''
 
 
 def _note_exception(error: BaseException, note: str) -> None:
-    add_note = getattr(error, "add_note", None)
-    if callable(add_note):
-        add_note(note)
-
-
-def _signal_private_process_group(process_group_id: int) -> str:
-    """Make the sole numeric PGID signal while the leader remains unreaped."""
-
     try:
-        os.killpg(process_group_id, signal.SIGKILL)
-    except OSError as exc:
-        if exc.errno == errno.ESRCH:
-            return "absent"
-        if exc.errno == errno.EPERM:
-            return "permission_denied"
-        raise RuntimeError("cannot signal the package subprocess group") from exc
-    return "delivered"
-
-
-def _wait_for_unreaped_process_exit(
-    observer: _UnreapedProcessExitObserver,
-    *,
-    label: str,
-) -> _UnreapedExitStatus:
-    deadline = time.monotonic() + PROCESS_CLEANUP_TIMEOUT_SECONDS
-    while True:
-        exit_status = observer.observe()
-        if exit_status is not None:
-            return exit_status
-        if time.monotonic() >= deadline:
-            fail(f"{label} direct process survived group cleanup")
-        time.sleep(0.01)
-
-
-def _raw_wait_status_matches(
-    expected: _UnreapedExitStatus,
-    raw_status: int,
-) -> bool:
-    """Match the raw waitpid status to the exact final WNOWAIT record."""
-
-    if expected.code == os.CLD_EXITED:
-        return os.WIFEXITED(raw_status) and os.WEXITSTATUS(raw_status) == expected.status
-    if expected.code not in {os.CLD_KILLED, os.CLD_DUMPED}:
-        return False
-    if not os.WIFSIGNALED(raw_status) or os.WTERMSIG(raw_status) != expected.status:
-        return False
-    dumped = bool(os.WCOREDUMP(raw_status))
-    return dumped if expected.code == os.CLD_DUMPED else not dumped
-
-
-def _reap_exact_observed_child_once(
-    process: subprocess.Popen[bytes],
-    observer: _UnreapedProcessExitObserver,
-    *,
-    exit_status: _UnreapedExitStatus,
-    label: str,
-) -> int:
-    """Cross the one-way raw reap boundary and validate its exact result."""
-
-    sealed_process_id = observer.require_process(process)
-    if exit_status.process_id != sealed_process_id:
-        fail(f"{label} final reap changed child identity")
-    observer.begin_reap(exit_status)
-
-    try:
-        waited_process_id, raw_status = os.waitpid(sealed_process_id, 0)
-    except BaseException as exc:
-        raise RuntimeError(f"{label} leader raw reap failed terminally") from exc
-
-    if waited_process_id != sealed_process_id:
-        fail(f"{label} raw reap changed child identity")
-
-    try:
-        return_code = os.waitstatus_to_exitcode(raw_status)
-    except ValueError as exc:
-        raise RuntimeError(f"{label} raw reap returned a nonterminal status") from exc
-
-    # Cache only the result of our own exact raw reap. This is a local assignment,
-    # not a Popen state query, and prevents any later Popen path from reaping.
-    process.returncode = return_code
-    if not _raw_wait_status_matches(exit_status, raw_status):
-        fail(f"{label} raw reap status mismatched its final WNOWAIT record")
-    observer.mark_reaped(return_code)
-    return return_code
-
-
-def _cleanup_private_process_group(
-    process: subprocess.Popen[bytes],
-    observer: _UnreapedProcessExitObserver,
-    *,
-    label: str,
-    before_reap: Callable[[], None] | None = None,
-) -> int:
-    """Signal once while anchored, drain, and only then reap exactly once."""
-
-    if not observer.binding_complete:
-        observer.bind(process)
-    sealed_process_id = observer.require_process(process)
-    if observer.reaped:
-        if observer.return_code is None or observer.process_id is None:
-            fail(f"{label} reap state is incomplete")
-        return observer.return_code
-    if observer.reap_started:
-        fail(f"{label} cleanup already crossed its terminal reap boundary")
-
-    # Establish structural ownership, observe without reaping, then establish
-    # structural ownership again and make a final WNOWAIT observation. The last
-    # operation before killpg is therefore an independent child-identity proof.
-    _assert_exclusive_child_reaper_authority(label)
-    observer.observe()
-    _assert_exclusive_child_reaper_authority(label)
-
-    # ECHILD here forbids every later numeric signal and the final raw reap.
-    leader_exited_before_signal = observer.observe() is not None
-    signal_error: BaseException | None = None
-    signal_status = "error"
-    try:
-        signal_status = _signal_private_process_group(sealed_process_id)
-    except BaseException as exc:
-        signal_error = exc
-
-    darwin_zombie_only = (
-        signal_status == "permission_denied"
-        and sys.platform == "darwin"
-        and leader_exited_before_signal
-    )
-    absent_after_exit = signal_status == "absent" and leader_exited_before_signal
-    group_signal_safe = (
-        signal_status == "delivered" or darwin_zombie_only or absent_after_exit
-    )
-    if not group_signal_safe and signal_error is None:
-        if signal_status == "permission_denied":
-            signal_error = RuntimeError(f"{label} process-group cleanup was denied")
-        elif signal_status == "absent":
-            signal_error = RuntimeError(
-                f"{label} process group disappeared before leader exit"
-            )
-        else:
-            signal_error = RuntimeError(
-                f"{label} process-group cleanup was inconclusive"
-            )
-
-    leader_exit_observed = leader_exited_before_signal
-    if not group_signal_safe:
-        # The group operation may have raced an external reaper. Re-prove both
-        # structural and kernel child authority before any direct PID signal.
-        # ECHILD forbids both os.kill and the final raw waitpid.
-        _assert_exclusive_child_reaper_authority(label)
-        leader_exit_observed = observer.observe() is not None
-
-    # A direct fallback is still anchored here. Popen.kill/terminate are banned:
-    # their implementations may poll and reap before sending the signal.
-    if not group_signal_safe and not leader_exit_observed:
-        try:
-            os.kill(sealed_process_id, signal.SIGKILL)
-        except OSError as exc:
-            if signal_error is None:
-                signal_error = RuntimeError(f"cannot kill {label} leader")
-                signal_error.__cause__ = exc
-        except BaseException as exc:
-            if signal_error is None:
-                signal_error = exc
-            else:
-                _note_exception(
-                    signal_error,
-                    f"direct leader signal was interrupted: {type(exc).__name__}: {exc}",
-                )
-
-    # Re-observe even an already-exited leader. This catches an external reap
-    # that raced the group operation before entering the final reap-only region.
-    _wait_for_unreaped_process_exit(observer, label=label)
-
-    drain_error: BaseException | None = None
-    if before_reap is not None:
-        try:
-            before_reap()
-        except BaseException as exc:
-            drain_error = exc
-
-    # Draining may be long enough for an uncooperative in-process owner to reap
-    # the child. Re-prove structural and kernel ownership one last time. Failure
-    # here forbids the raw reap just as it forbids every earlier numeric fallback.
-    _assert_exclusive_child_reaper_authority(label)
-    final_exit_status = observer.observe()
-    if final_exit_status is None:
-        fail(f"{label} leader lost its terminal status before reap")
-
-    # No signal, waitid probe, Popen state query, or second wait is permitted
-    # below this one-way boundary.
-    return_code = _reap_exact_observed_child_once(
-        process,
-        observer,
-        exit_status=final_exit_status,
-        label=label,
-    )
-    primary = signal_error or drain_error
-    if primary is not None:
-        for secondary_label, secondary in (
-            ("group signal failure", signal_error),
-            ("pipe drain failure", drain_error),
-        ):
-            if secondary is not None and secondary is not primary:
-                _note_exception(
-                    primary,
-                    f"{secondary_label}: {type(secondary).__name__}: {secondary}",
-                )
-        raise primary
-    return return_code
+        error.add_note(note)
+    except (AttributeError, TypeError):
+        pass
 
 
 class _DeferredSubprocessCancellation(BaseException):
@@ -1832,7 +1735,139 @@ def _raise_if_subprocess_cancellation_pending() -> None:
         raise _DeferredSubprocessCancellation(min(pending))
 
 
-def _run_checked_with_blocked_cancellation(
+def _canonical_guardian_json(value: object) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=True,
+        allow_nan=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("ascii")
+
+
+def _validate_guardian_target(
+    command: list[str],
+    *,
+    cwd: Path,
+    environment: dict[str, str],
+) -> tuple[list[str], str, dict[str, str]]:
+    if (
+        type(command) is not list
+        or not command
+        or any(type(argument) is not str or "\0" in argument for argument in command)
+    ):
+        fail("the bounded package subprocess command is invalid")
+    if type(environment) is not dict or any(
+        type(key) is not str
+        or type(value) is not str
+        or not key
+        or "=" in key
+        or "\0" in key
+        or "\0" in value
+        for key, value in environment.items()
+    ):
+        fail("the bounded package subprocess environment is invalid")
+    cwd_text = os.path.abspath(os.fspath(cwd))
+    if not cwd_text or "\0" in cwd_text:
+        fail("the bounded package subprocess working directory is invalid")
+    return list(command), cwd_text, dict(environment)
+
+
+def _parse_guardian_status(raw: bytes, *, nonce: str, label: str) -> dict[str, object]:
+    if not raw or len(raw) > MAX_SUBPROCESS_GUARDIAN_STATUS_BYTES:
+        fail(f"{label} guardian status size is invalid")
+    if not raw.endswith(b"\n") or b"\n" in raw[:-1]:
+        fail(f"{label} guardian status framing is invalid")
+    try:
+        value = json.loads(raw[:-1].decode("ascii"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"{label} guardian status is invalid JSON") from exc
+    if _canonical_guardian_json(value) + b"\n" != raw or type(value) is not dict:
+        fail(f"{label} guardian status is not canonical")
+    if value.get("contract") != _SUBPROCESS_GUARDIAN_CONTRACT or value.get("nonce") != nonce:
+        fail(f"{label} guardian status identity is invalid")
+    state = value.get("state")
+    if state == "target_exit":
+        if set(value) != {"contract", "nonce", "state", "targetReturnCode"}:
+            fail(f"{label} guardian target status shape is invalid")
+        return_code = value["targetReturnCode"]
+        if type(return_code) is not int or not (-signal.NSIG < return_code < 256):
+            fail(f"{label} guardian target status is invalid")
+    elif state == "cleanup":
+        if set(value) != {"contract", "nonce", "state"}:
+            fail(f"{label} guardian cleanup status shape is invalid")
+    elif state == "guardian_error":
+        if set(value) != {"code", "contract", "nonce", "state"} or value.get("code") not in {
+            "guardian_internal",
+            "lease_protocol",
+            "target_launch",
+            "worker_exit",
+            "worker_failure",
+            "worker_protocol",
+        }:
+            fail(f"{label} guardian error status is invalid")
+    else:
+        fail(f"{label} guardian status state is invalid")
+    return value
+
+
+def _close_file_descriptor(file_descriptor: int | None) -> None:
+    if file_descriptor is not None:
+        try:
+            os.close(file_descriptor)
+        except OSError:
+            pass
+
+
+def _fail_stop_after_ambiguous_descriptor_close() -> NoReturn:
+    """Let kernel process teardown revoke every possibly-live capability."""
+
+    # Do not diagnose through fd 2: it may itself be the descriptor whose close
+    # outcome is ambiguous, or its number may already have been reused.
+    os._exit(70)
+
+
+def _reap_guardian_once(process: subprocess.Popen[bytes], *, label: str) -> int:
+    """Perform one raw reap, then make the Popen destructor permanently inert."""
+
+    process_id = process.pid
+    if (
+        type(process_id) is not int
+        or process_id <= 1
+        or process.returncode is not None
+        or getattr(process, "_child_created", None) is not True
+    ):
+        process._child_created = False  # type: ignore[attr-defined]
+        fail(f"{label} guardian reap ownership was already lost")
+    # Disarm before the one-way syscall. A Python signal exception after kernel
+    # reap but before the next bytecode can no longer arm a destructor probe.
+    process._child_created = False  # type: ignore[attr-defined]
+    try:
+        waited_pid, raw_status = os.waitpid(process_id, 0)
+    except BaseException as exc:
+        raise RuntimeError(
+            f"{label} guardian reap ownership was lost or interrupted; "
+            "no later numeric process action is permitted"
+        ) from exc
+    if os.WIFSIGNALED(raw_status):
+        process.returncode = -os.WTERMSIG(raw_status)
+    elif os.WIFEXITED(raw_status):
+        process.returncode = os.WEXITSTATUS(raw_status)
+    else:
+        process.returncode = 127
+    if (
+        waited_pid != process_id
+        or not os.WIFSIGNALED(raw_status)
+        or os.WTERMSIG(raw_status) != signal.SIGKILL
+    ):
+        fail(
+            f"{label} guardian exit did not establish the required SIGKILL "
+            "terminal state (external reaping or guardian failure)"
+        )
+    return process.returncode
+
+
+def _run_checked_with_guardian(
     command: list[str],
     *,
     cwd: Path,
@@ -1841,310 +1876,365 @@ def _run_checked_with_blocked_cancellation(
     label: str,
     capture_output: bool,
 ) -> tuple[int, bytes, bytes]:
-    """Run one command while retaining its unreaped PID/PGID authority."""
+    """Run one command behind a live, self-sweeping POSIX group leader."""
 
-    required_waitid = (
-        "P_PID",
-        "WEXITED",
-        "WNOHANG",
-        "WNOWAIT",
-        "CLD_EXITED",
-        "CLD_KILLED",
-        "CLD_DUMPED",
-        "WCOREDUMP",
-        "waitid",
-        "waitpid",
-        "waitstatus_to_exitcode",
-    )
     if (
         os.name != "posix"
+        or not hasattr(os, "fork")
         or not hasattr(os, "killpg")
-        or not all(hasattr(os, name) for name in required_waitid)
+        or not hasattr(select, "poll")
+        or not hasattr(signal, "pthread_sigmask")
     ):
-        fail("the bounded package subprocess boundary requires POSIX WNOWAIT")
-    _assert_exclusive_child_reaper_authority(label)
+        fail("the bounded package subprocess guardian requires POSIX")
+    target_command, target_cwd, target_environment = _validate_guardian_target(
+        command,
+        cwd=cwd,
+        environment=environment,
+    )
+    nonce = os.urandom(32).hex()
+    config = _canonical_guardian_json(
+        {
+            "command": target_command,
+            "contract": _SUBPROCESS_GUARDIAN_CONTRACT,
+            "cwd": target_cwd,
+            "environment": target_environment,
+            "nonce": nonce,
+        }
+    )
+    if len(config) > MAX_SUBPROCESS_GUARDIAN_CONFIG_BYTES:
+        fail(f"{label} guardian config exceeded its byte budget")
 
-    # Initialize every lifecycle object and closure before Popen so the child is
-    # followed immediately by the cleanup guard. Supported cancellation signals
-    # remain blocked across this entire function.
+    lease_read: int | None = None
+    lease_write: int | None = None
+    status_read: int | None = None
+    status_write: int | None = None
     process: subprocess.Popen[bytes] | None = None
-    observer = _UnreapedProcessExitObserver(label)
-    stdout_target = subprocess.PIPE if capture_output else None
-    stderr_target = subprocess.PIPE if capture_output else None
-    selector: selectors.BaseSelector | None = None
-    stdout_stream: io.BufferedReader | None = None
-    stderr_stream: io.BufferedReader | None = None
+    launch_error: BaseException | None = None
+    additional_launch_errors = 0
+    config_file = tempfile.TemporaryFile(mode="w+b")
+
+    def latch_launch_error(error: BaseException, *, resource: str) -> None:
+        nonlocal additional_launch_errors, launch_error
+        if launch_error is None:
+            launch_error = error
+            return
+        additional_launch_errors += 1
+        if additional_launch_errors <= 4:
+            _note_exception(
+                launch_error,
+                f"additional {resource} failure: {type(error).__name__}: {error}",
+            )
+
+    def close_launch_descriptor(
+        file_descriptor: int | None,
+    ) -> None:
+        if file_descriptor is None:
+            return
+        try:
+            os.close(file_descriptor)
+        except BaseException:
+            # close(2) failure is an ambiguous one-way boundary: the descriptor
+            # may still be live or its number may already be reusable. Continuing
+            # cannot revoke both possibilities; kernel process teardown can.
+            _fail_stop_after_ambiguous_descriptor_close()
+
+    descriptors: dict[int, str] = {}
+    streams: dict[str, io.BufferedReader] = {}
     captured = {"stdout": bytearray(), "stderr": bytearray()}
+    output_bytes_seen = 0
+    status_bytes = bytearray()
+    status_overflow = False
     body_error: BaseException | None = None
     cleanup_error: BaseException | None = None
-    return_code: int | None = None
+    additional_cleanup_errors = 0
+    guardian_status: dict[str, object] | None = None
+    lease_closed = False
+    deadline = 0.0
+    drain_deadline: float | None = None
 
-    def prepare_output_capture(*, recovering: bool = False) -> None:
-        """Idempotently publish both capture pipes into the drain selector."""
+    def latch_cleanup_error(error: BaseException) -> None:
+        nonlocal additional_cleanup_errors, cleanup_error
+        if cleanup_error is None:
+            cleanup_error = error
+        else:
+            additional_cleanup_errors += 1
+            if additional_cleanup_errors <= 4:
+                _note_exception(
+                    cleanup_error,
+                    f"additional cleanup failure: {type(error).__name__}: {error}",
+                )
 
-        nonlocal selector, stderr_stream, stdout_stream
-        if not capture_output:
-            return
-        if process is None:
-            fail(f"{label} output capture has no launched process")
-        stdout_stream = process.stdout
-        stderr_stream = process.stderr
-        if stdout_stream is None or stderr_stream is None:
-            fail(f"{label} output pipes were not created")
-        if selector is None:
-            # DefaultSelector construction itself is a fallible post-launch
-            # operation. Cleanup uses the independent POSIX SelectSelector
-            # fallback so an interruption there cannot strand the child or
-            # suppress the required pipe-drain phase.
-            selector = (
-                selectors.SelectSelector()
-                if recovering
-                else selectors.DefaultSelector()
-            )
-        for stream, stream_name in (
-            (stdout_stream, "stdout"),
-            (stderr_stream, "stderr"),
-        ):
-            try:
-                key = selector.get_key(stream)
-            except KeyError:
-                selector.register(stream, selectors.EVENT_READ, stream_name)
-                continue
-            if (
-                key.fileobj is not stream
-                or key.events != selectors.EVENT_READ
-                or key.data != stream_name
-            ):
-                fail(f"{label} output pipe registration changed")
+    def close_lease() -> None:
+        nonlocal lease_closed, lease_write
+        if not lease_closed:
+            if lease_write is not None:
+                try:
+                    os.close(lease_write)
+                except BaseException:
+                    # A possibly-live writer can pin the guardian forever. The
+                    # smoke boundary is a CLI worker, so fail-stop and let the
+                    # kernel close every capability without a numeric retry.
+                    _fail_stop_after_ambiguous_descriptor_close()
+            lease_write = None
+            lease_closed = True
 
-    def read_ready_streams(*, deadline: float, retain_output: bool) -> None:
-        if selector is None:
-            return
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            fail(f"{label} pipe drain timed out")
-        for key, _events in selector.select(min(remaining, 0.1)):
-            chunk = os.read(key.fd, IO_CHUNK_BYTES)
-            if not chunk:
-                selector.unregister(key.fileobj)
-                continue
-            if retain_output:
-                captured[key.data].extend(chunk)
-                if sum(map(len, captured.values())) > MAX_SUBPROCESS_OUTPUT_BYTES:
-                    fail(
-                        f"{label} exceeded its {MAX_SUBPROCESS_OUTPUT_BYTES}-byte "
-                        "captured-output budget"
-                    )
-
-    def drain_after_group_signal() -> None:
-        if not capture_output:
-            return
-        deadline = time.monotonic() + PROCESS_CLEANUP_TIMEOUT_SECONDS
-        retain_output = body_error is None
-        drain_error: BaseException | None = None
-        additional_failures = 0
-
-        def latch_drain_failure(exc: BaseException) -> None:
-            nonlocal additional_failures, drain_error, retain_output
-            if drain_error is None:
-                drain_error = exc
-            else:
-                additional_failures += 1
-                if additional_failures <= 4:
-                    _note_exception(
-                        drain_error,
-                        "additional pipe-drain failure: "
-                        f"{type(exc).__name__}: {exc}",
-                    )
-            retain_output = False
-
-        setup_error: BaseException | None = None
+    def close_protocol_descriptor(file_descriptor: int) -> None:
         try:
-            prepare_output_capture(recovering=True)
-        except BaseException as exc:
-            setup_error = exc
-            latch_drain_failure(exc)
+            os.close(file_descriptor)
+        except BaseException:
+            _fail_stop_after_ambiguous_descriptor_close()
 
-        if setup_error is not None:
-            # Selector construction/registration is fallible after launch. Keep
-            # the unreaped leader as the PID/PGID anchor and use the most basic
-            # POSIX readiness primitive directly. If even that path is damaged,
-            # consume the fixed deadline without spinning before final reap.
-            unresolved = {"stdout", "stderr"}
-            direct_streams: dict[int, str] = {}
-            for stream, stream_name in (
-                (stdout_stream, "stdout"),
-                (stderr_stream, "stderr"),
-            ):
-                if stream is None:
-                    latch_drain_failure(
-                        RuntimeError(f"{label} {stream_name} pipe was not published")
-                    )
-                    continue
-                try:
-                    file_descriptor = stream.fileno()
-                except BaseException as exc:
-                    latch_drain_failure(exc)
-                    continue
-                if file_descriptor < 0 or file_descriptor in direct_streams:
-                    latch_drain_failure(
-                        RuntimeError(f"{label} output pipe identity is invalid")
-                    )
-                    continue
-                direct_streams[file_descriptor] = stream_name
-
-            while unresolved:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    latch_drain_failure(RuntimeError(f"{label} pipe drain timed out"))
-                    break
-                if not direct_streams:
-                    time.sleep(min(remaining, 0.01))
-                    continue
-                try:
-                    ready, _, _ = select.select(
-                        tuple(direct_streams),
-                        (),
-                        (),
-                        min(remaining, 0.1),
-                    )
-                except BaseException as exc:
-                    latch_drain_failure(exc)
-                    remaining = deadline - time.monotonic()
-                    if remaining > 0:
-                        time.sleep(min(remaining, 0.01))
-                    continue
-                for file_descriptor in ready:
-                    stream_name = direct_streams.get(file_descriptor)
-                    if stream_name is None:
-                        latch_drain_failure(
-                            RuntimeError(f"{label} direct pipe readiness changed")
-                        )
-                        continue
-                    try:
-                        chunk = os.read(file_descriptor, IO_CHUNK_BYTES)
-                    except BaseException as exc:
-                        latch_drain_failure(exc)
-                        remaining = deadline - time.monotonic()
-                        if remaining > 0:
-                            time.sleep(min(remaining, 0.01))
-                        continue
-                    if not chunk:
-                        unresolved.discard(stream_name)
-                        del direct_streams[file_descriptor]
-                        continue
-                    if retain_output:
-                        captured[stream_name].extend(chunk)
-                        if sum(map(len, captured.values())) > MAX_SUBPROCESS_OUTPUT_BYTES:
-                            latch_drain_failure(
-                                RuntimeError(
-                                    f"{label} exceeded its "
-                                    f"{MAX_SUBPROCESS_OUTPUT_BYTES}-byte "
-                                    "captured-output budget"
-                                )
-                            )
-            if drain_error is None:
-                fail(f"{label} selector recovery lost its initiating failure")
-            if additional_failures > 4:
-                _note_exception(
-                    drain_error,
-                    f"{additional_failures - 4} further pipe-drain failures suppressed",
-                )
-            raise drain_error
-
-        if selector is None:
-            fail(f"{label} output drain selector was not created")
-        while True:
+    def close_output_stream(stream_name: str) -> None:
+        stream = streams.pop(stream_name, None)
+        if stream is not None:
             try:
-                streams_remain = bool(selector.get_map())
-            except BaseException as exc:
-                latch_drain_failure(exc)
-                streams_remain = True
-            if not streams_remain:
-                break
-            if time.monotonic() >= deadline:
-                timeout_error = RuntimeError(f"{label} pipe drain timed out")
-                if drain_error is None:
-                    drain_error = timeout_error
-                else:
-                    _note_exception(
-                        drain_error,
-                        f"pipe drain also reached its fixed deadline: {timeout_error}",
-                    )
-                break
-            try:
-                read_ready_streams(
-                    deadline=deadline,
-                    retain_output=retain_output,
-                )
-            except BaseException as exc:
-                latch_drain_failure(exc)
-                remaining = deadline - time.monotonic()
-                if remaining > 0:
-                    time.sleep(min(remaining, 0.001))
-        if drain_error is not None:
-            if additional_failures > 4:
-                _note_exception(
-                    drain_error,
-                    f"{additional_failures - 4} further pipe-drain failures suppressed",
-                )
-            raise drain_error
+                stream.close()
+            except BaseException:
+                _fail_stop_after_ambiguous_descriptor_close()
 
-    # Popen itself is inside the guarded lifetime. If it returns an exact process
-    # object, every later BaseException reaches conditional cleanup; if it raises
-    # before assignment, no numeric PID/PGID operation is attempted.
     try:
+        if config_file.write(config) != len(config):
+            fail(f"{label} guardian config write was incomplete")
+        config_file.flush()
+        config_file.seek(0)
+        lease_read, lease_write = os.pipe()
+        status_read, status_write = os.pipe()
+        for descriptor in (lease_read, lease_write, status_read, status_write):
+            os.set_inheritable(descriptor, False)
+        guardian_python = os.path.realpath(sys.executable)
         try:
-            try:
-                process = subprocess.Popen(
-                    command,
-                    cwd=cwd,
-                    env=environment,
-                    stdin=subprocess.DEVNULL,
-                    stdout=stdout_target,
-                    stderr=stderr_target,
-                    close_fds=True,
-                    start_new_session=True,
-                )
-            except OSError as exc:
-                raise RuntimeError(f"{label} could not be launched") from exc
-            observer.bind(process)
-            prepare_output_capture()
-            deadline = time.monotonic() + timeout
-            while not observer.exited():
-                _raise_if_subprocess_cancellation_pending()
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    fail(f"{label} exceeded its {timeout}-second timeout")
-                if selector is not None and selector.get_map():
-                    read_ready_streams(deadline=deadline, retain_output=True)
-                else:
-                    time.sleep(min(remaining, 0.01))
-        except BaseException as exc:
-            body_error = exc
+            process = subprocess.Popen(
+                [
+                    guardian_python,
+                    "-I",
+                    "-B",
+                    "-S",
+                    "-c",
+                    _SUBPROCESS_GUARDIAN_PROGRAM,
+                    str(config_file.fileno()),
+                    str(lease_read),
+                    str(status_write),
+                    nonce,
+                ],
+                cwd=target_cwd,
+                env={},
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                close_fds=True,
+                pass_fds=(config_file.fileno(), lease_read, status_write),
+                start_new_session=True,
+            )
+        except OSError as exc:
+            raise RuntimeError(f"{label} guardian could not be launched") from exc
+    except BaseException as exc:
+        latch_launch_error(exc, resource="guardian launch")
     finally:
-        if process is not None:
+        try:
+            config_file.close()
+        except BaseException:
+            # Never retry through fileno(): the number may already name an
+            # unrelated object. Process teardown closes either possible object.
+            _fail_stop_after_ambiguous_descriptor_close()
+        close_launch_descriptor(lease_read)
+        lease_read = None
+        close_launch_descriptor(status_write)
+        status_write = None
+        if process is None:
+            close_launch_descriptor(lease_write)
+            lease_write = None
+            close_launch_descriptor(status_read)
+            status_read = None
+
+    if launch_error is not None and additional_launch_errors > 4:
+        _note_exception(
+            launch_error,
+            f"{additional_launch_errors - 4} further launch/cleanup failures suppressed",
+        )
+
+    if process is None or lease_write is None or status_read is None:
+        if launch_error is not None:
+            raise launch_error
+        fail(f"{label} guardian launch did not publish its lifecycle")
+
+    try:
+        descriptors[status_read] = "status"
+        setup_error: BaseException | None = None
+        if process.stdout is None or process.stderr is None:
+            setup_error = RuntimeError(f"{label} guardian output pipes were not created")
+        else:
+            streams.update({"stdout": process.stdout, "stderr": process.stderr})
             try:
-                return_code = _cleanup_private_process_group(
-                    process,
-                    observer,
-                    label=label,
-                    before_reap=drain_after_group_signal,
-                )
+                for stream_name, stream in streams.items():
+                    descriptors[stream.fileno()] = stream_name
             except BaseException as exc:
-                cleanup_error = exc
-        resources: tuple[object | None, ...] = (selector,)
-        if process is not None:
-            resources += (process.stdout, process.stderr)
-        for resource in resources:
-            if resource is not None:
+                setup_error = exc
+        body_error = launch_error or setup_error
+        deadline = time.monotonic() + timeout
+        while descriptors:
+            if body_error is None and guardian_status is None:
                 try:
-                    resource.close()
+                    _raise_if_subprocess_cancellation_pending()
                 except BaseException as exc:
-                    if cleanup_error is None:
-                        cleanup_error = exc
+                    body_error = exc
+                if body_error is None and time.monotonic() >= deadline:
+                    body_error = RuntimeError(
+                        f"{label} exceeded its {timeout}-second timeout"
+                    )
+            if body_error is not None:
+                close_lease()
+            if (body_error is not None or guardian_status is not None) and drain_deadline is None:
+                drain_deadline = time.monotonic() + PROCESS_CLEANUP_TIMEOUT_SECONDS
+
+            active_deadline = drain_deadline if drain_deadline is not None else deadline
+            remaining = active_deadline - time.monotonic()
+            if remaining <= 0:
+                latch_cleanup_error(RuntimeError(f"{label} pipe drain timed out"))
+                break
+            try:
+                poller = select.poll()
+                for descriptor in descriptors:
+                    poller.register(
+                        descriptor,
+                        select.POLLIN | select.POLLHUP | select.POLLERR,
+                    )
+                wait_milliseconds = max(1, int(min(remaining, 0.1) * 1000))
+                ready = [
+                    descriptor
+                    for descriptor, _events in poller.poll(wait_milliseconds)
+                ]
+            except InterruptedError:
+                continue
+            except BaseException as exc:
+                latch_cleanup_error(exc)
+                close_lease()
+                if drain_deadline is None:
+                    drain_deadline = time.monotonic() + PROCESS_CLEANUP_TIMEOUT_SECONDS
+                time.sleep(0.01)
+                continue
+            for descriptor in ready:
+                stream_name = descriptors.get(descriptor)
+                if stream_name is None:
+                    latch_cleanup_error(RuntimeError(f"{label} pipe identity changed"))
+                    continue
+                try:
+                    chunk = os.read(descriptor, IO_CHUNK_BYTES)
+                except InterruptedError:
+                    continue
+                except BaseException as exc:
+                    latch_cleanup_error(exc)
+                    close_lease()
+                    del descriptors[descriptor]
+                    if stream_name == "status":
+                        close_protocol_descriptor(
+                            descriptor,
+                        )
                     else:
-                        _note_exception(cleanup_error, f"resource close failed: {exc}")
+                        close_output_stream(stream_name)
+                    continue
+                if not chunk:
+                    del descriptors[descriptor]
+                    if stream_name == "status":
+                        close_protocol_descriptor(
+                            descriptor,
+                        )
+                        try:
+                            guardian_status = _parse_guardian_status(
+                                bytes(status_bytes),
+                                nonce=nonce,
+                                label=label,
+                            )
+                        except BaseException as exc:
+                            latch_cleanup_error(exc)
+                        if drain_deadline is None:
+                            drain_deadline = (
+                                time.monotonic() + PROCESS_CLEANUP_TIMEOUT_SECONDS
+                            )
+                    else:
+                        close_output_stream(stream_name)
+                    continue
+                if stream_name == "status":
+                    if (
+                        status_overflow
+                        or len(status_bytes) + len(chunk)
+                        > MAX_SUBPROCESS_GUARDIAN_STATUS_BYTES
+                    ):
+                        status_overflow = True
+                        status_bytes.clear()
+                        latch_cleanup_error(
+                            RuntimeError(f"{label} guardian status exceeded its byte budget")
+                        )
+                        close_lease()
+                    else:
+                        status_bytes.extend(chunk)
+                    continue
+                if body_error is not None:
+                    continue
+                if output_bytes_seen + len(chunk) > MAX_SUBPROCESS_OUTPUT_BYTES:
+                    body_error = RuntimeError(
+                        f"{label} exceeded its {MAX_SUBPROCESS_OUTPUT_BYTES}-byte "
+                        "output budget"
+                    )
+                    close_lease()
+                    continue
+                output_bytes_seen += len(chunk)
+                if capture_output:
+                    captured[stream_name].extend(chunk)
+    except BaseException as exc:
+        try:
+            if body_error is None:
+                body_error = exc
+            else:
+                latch_cleanup_error(exc)
+        except BaseException:
+            # Preserve an already-materialized exception without allowing error
+            # aggregation itself to bypass the lifecycle finally block.
+            if body_error is None:
+                body_error = exc
+            elif cleanup_error is None:
+                cleanup_error = exc
+    finally:
+        try:
+            close_lease()
+            for descriptor, stream_name in tuple(descriptors.items()):
+                if stream_name == "status":
+                    close_protocol_descriptor(descriptor)
+            descriptors.clear()
+            for stream_name in tuple(streams):
+                close_output_stream(stream_name)
+        except BaseException:
+            # No exception may escape the post-spawn region with a possibly-live
+            # lease or armed Popen. Kernel teardown is the only total fallback.
+            _fail_stop_after_ambiguous_descriptor_close()
+
+    try:
+        _reap_guardian_once(process, label=label)
+    except BaseException as exc:
+        if process.returncode is None:
+            _fail_stop_after_ambiguous_descriptor_close()
+        try:
+            latch_cleanup_error(exc)
+        except BaseException:
+            cleanup_error = exc
+
+    if cleanup_error is not None and additional_cleanup_errors > 4:
+        _note_exception(
+            cleanup_error,
+            f"{additional_cleanup_errors - 4} further cleanup failures suppressed",
+        )
+
+    if guardian_status is None:
+        latch_cleanup_error(RuntimeError(f"{label} guardian published no final status"))
+    elif guardian_status["state"] == "guardian_error":
+        latch_cleanup_error(
+            RuntimeError(
+                f"{label} guardian failed closed: {guardian_status['code']}"
+            )
+        )
+    elif body_error is None and guardian_status["state"] != "target_exit":
+        latch_cleanup_error(
+            RuntimeError(f"{label} guardian cleaned up before target completion")
+        )
 
     if cleanup_error is not None:
         if body_error is not None:
@@ -2155,9 +2245,13 @@ def _run_checked_with_blocked_cancellation(
         raise cleanup_error
     if body_error is not None:
         raise body_error
-    if return_code is None:
-        fail(f"{label} leader was not safely reaped")
-    return return_code, bytes(captured["stdout"]), bytes(captured["stderr"])
+    if guardian_status is None or guardian_status["state"] != "target_exit":
+        fail(f"{label} guardian did not bind a target result")
+    return (
+        int(guardian_status["targetReturnCode"]),
+        bytes(captured["stdout"]),
+        bytes(captured["stderr"]),
+    )
 
 
 @overload
@@ -2202,12 +2296,13 @@ def run_checked(
         fail("the bounded package subprocess boundary requires POSIX signal masks")
     previous_mask = signal.pthread_sigmask(
         signal.SIG_BLOCK,
-        _SUBPROCESS_CANCELLATION_SIGNALS,
+        _subprocess_wait_boundary_signals(),
     )
     deferred_signal: int | None = None
     result: tuple[int, bytes, bytes] | None = None
     try:
-        result = _run_checked_with_blocked_cancellation(
+        _assert_exclusive_child_reaper_authority(label)
+        result = _run_checked_with_guardian(
             command,
             cwd=cwd,
             environment=environment,

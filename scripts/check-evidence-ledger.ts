@@ -461,6 +461,10 @@ export function runEvidenceLedgerCli(
   let nestExampleAuditSchema: unknown;
   let nestExampleSourceArtifact: unknown;
   let nestExampleSourceArtifactRaw = '';
+  let nestExampleHistoricalSourceArtifact: unknown;
+  let nestExampleHistoricalSourceArtifactRaw = '';
+  let nestDocumentationSourceArtifact: unknown;
+  let nestDocumentationSourceArtifactRaw = '';
   try {
     parsed = parseLedgerJsonStrict(
       readDirectRepositoryFile(repositoryRoot, 'docs/release/evidence-ledger.v1.json'),
@@ -478,9 +482,23 @@ export function runEvidenceLedgerCli(
       readDirectRepositoryFile(repositoryRoot, 'docs/audit/nest-example-coverage.schema.json'),
       path.resolve(repositoryRoot, 'docs/audit/nest-example-coverage.schema.json'),
     );
-    const nestExampleSourceArtifactBytes = readDirectRepositoryFile(
+    const nestExampleHistoricalSourceArtifactBytes = readDirectRepositoryFile(
       repositoryRoot,
       'docs/audit/nest-example-source-inventory.v1.json',
+    );
+    nestExampleHistoricalSourceArtifactRaw = new TextDecoder('utf-8', {
+      fatal: true,
+    }).decode(nestExampleHistoricalSourceArtifactBytes);
+    nestExampleHistoricalSourceArtifact = parseLedgerJsonStrict(
+      nestExampleHistoricalSourceArtifactBytes,
+      path.resolve(
+        repositoryRoot,
+        'docs/audit/nest-example-source-inventory.v1.json',
+      ),
+    );
+    const nestExampleSourceArtifactBytes = readDirectRepositoryFile(
+      repositoryRoot,
+      'docs/audit/nest-example-source-inventory.v2.json',
     );
     nestExampleSourceArtifactRaw = new TextDecoder('utf-8', {
       fatal: true,
@@ -489,7 +507,21 @@ export function runEvidenceLedgerCli(
       nestExampleSourceArtifactBytes,
       path.resolve(
         repositoryRoot,
-        'docs/audit/nest-example-source-inventory.v1.json',
+        'docs/audit/nest-example-source-inventory.v2.json',
+      ),
+    );
+    const nestDocumentationSourceArtifactBytes = readDirectRepositoryFile(
+      repositoryRoot,
+      'docs/audit/nest-documentation-source-inventory.v1.json',
+    );
+    nestDocumentationSourceArtifactRaw = new TextDecoder('utf-8', {
+      fatal: true,
+    }).decode(nestDocumentationSourceArtifactBytes);
+    nestDocumentationSourceArtifact = parseLedgerJsonStrict(
+      nestDocumentationSourceArtifactBytes,
+      path.resolve(
+        repositoryRoot,
+        'docs/audit/nest-documentation-source-inventory.v1.json',
       ),
     );
   } catch (error) {
@@ -504,6 +536,14 @@ export function runEvidenceLedgerCli(
     {
       value: nestExampleSourceArtifact,
       rawUtf8: nestExampleSourceArtifactRaw,
+      predecessor: {
+        value: nestExampleHistoricalSourceArtifact,
+        rawUtf8: nestExampleHistoricalSourceArtifactRaw,
+      },
+    },
+    {
+      value: nestDocumentationSourceArtifact,
+      rawUtf8: nestDocumentationSourceArtifactRaw,
     },
   );
 
@@ -524,7 +564,7 @@ export function runEvidenceLedgerCli(
     process.stdout.write(`  ${status.padEnd(15)} ${counts.get(status) ?? 0}\n`);
   }
   process.stdout.write(
-    'NEST example audit: pinned source denominator valid; visualization coverage none\n',
+    'NEST audit: pinned PyNEST pynest/examples source/selector scope and selected documentation source scopes valid; visualization coverage none\n',
   );
 
   if (!releaseVersion) {

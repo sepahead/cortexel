@@ -5118,7 +5118,7 @@ var SKILL_EXAMPLE_PAYLOADS = {
     params: {
       graph_id: "corpus-entity-graph",
       graph_source: "engram:corpus_entity_graph",
-      graph_snapshot_id: "sha256:example-corpus-snapshot",
+      graph_snapshot_id: "caller-declared-example-snapshot",
       graph_scope: "corpus_entity",
       generated_at: "2026-07-11T00:00:00Z",
       nodes: [
@@ -5263,7 +5263,7 @@ var SKILL_EXAMPLE_PAYLOADS = {
     provenance: {
       ...synthetic({
         graph_source: "engram:corpus_entity_graph",
-        graph_snapshot_id: "sha256:example-corpus-snapshot",
+        graph_snapshot_id: "caller-declared-example-snapshot",
         graph_scope: "corpus_entity",
         identity_advisory: true
       }),
@@ -7624,7 +7624,7 @@ var NEST_SKILL_REGISTRY = {
     id: "corpus.knowledge_graph",
     version: CORTEXEL_SKILL_VERSION,
     title: "Corpus knowledge-graph 3D renderer",
-    description: "Render a bounded, traceable cross-paper entity multigraph: paper/model/family nodes plus identified citation, instantiation, family and advisory identity assertions. Every element carries typed source evidence; every numeric score is discriminated and explicitly uncalibrated.",
+    description: "Render a bounded, evidence-shaped cross-paper entity multigraph: paper/model/family nodes plus identified citation, instantiation, family and advisory identity assertions. Every element carries typed caller-declared evidence-reference metadata; the legacy envelope does not resolve or authenticate those references. Every numeric score is discriminated and explicitly uncalibrated.",
     deviceFamily: "corpus",
     scene: "knowledge-graph-3d",
     // weak: identity edges are advisory structural similarity, NOT certified
@@ -7664,7 +7664,7 @@ var NEST_SKILL_REGISTRY = {
         kind: "equals_param",
         provenanceKey: "graph_snapshot_id",
         paramKey: "graph_snapshot_id",
-        description: "The declared immutable snapshot must match params.graph_snapshot_id."
+        description: "The declared snapshot namespace must match params.graph_snapshot_id."
       },
       {
         kind: "equals_param",
@@ -7684,9 +7684,9 @@ var NEST_SKILL_REGISTRY = {
       {
         nestExample: "Cross-paper corpus knowledge graph (papers + models + families)",
         sourceUrl: "https://github.com/sepahead/Paper2Brain#knowledge-graph",
-        dataShape: "snapshot-bound paper/model/family nodes and stable-id multigraph edges, each with typed evidence, bounded attributes, derived/advisory epistemic status and optional uncalibrated scores",
-        output: "Traceable 3D force-directed multigraph with citation-flow particles and programmatically exposed DOM evidence detail",
-        note: "1.4 contract: every assertion is traceable; identity edges are advisory and force-layout geometry is non-evidentiary."
+        dataShape: "caller-declared-snapshot paper/model/family nodes and stable-id multigraph edges, each with typed evidence-reference metadata, bounded attributes, derived/advisory epistemic status and optional uncalibrated scores",
+        output: "Advisory 3D force-directed multigraph with citation-flow particles and programmatically exposed DOM reference detail",
+        note: "Legacy 1.4 inspection contract: references are not resolved or authenticated; identity edges are advisory and force-layout geometry is non-evidentiary."
       }
     ]
   }

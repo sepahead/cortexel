@@ -506,12 +506,12 @@ describe('NEST histogram schemas preserve bin, unit, and normalization semantics
   });
 });
 
-describe('corpus knowledge graph evidence-grade multigraph contract', () => {
+describe('corpus knowledge graph evidence-shaped multigraph contract', () => {
   const exampleParams = () => structuredClone(
     getExamplePayload('corpus.knowledge_graph')!.params,
   ) as Record<string, unknown>;
 
-  it('accepts the complete snapshot-bound example and rejects legacy topology-only records', () => {
+  it('accepts the complete caller-declared-snapshot example and rejects topology-only records', () => {
     expect(KnowledgeGraph3DParamsSchema.safeParse(exampleParams()).success).toBe(true);
     expect(KnowledgeGraph3DParamsSchema.safeParse({
       nodes: [{ id: 'p1', kind: 'paper', label: 'Paper' }],

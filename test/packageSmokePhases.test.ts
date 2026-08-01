@@ -12,6 +12,7 @@ import {
   readSync,
   realpathSync,
   renameSync,
+  rmdirSync,
   rmSync,
   symlinkSync,
   truncateSync,
@@ -23,7 +24,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gzipSync, gunzipSync } from 'node:zlib';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   assertFinalizedHostFile,
   assertInstalledRecursivePackageClosure,
@@ -33,6 +34,7 @@ import {
   fingerprintNpmPackageTree,
   fingerprintPackageSmokeWorkspace,
   formatReviewedNodeCommandFailure,
+  formatReviewedNodeOperationBoundFailure,
   inspectNodeExecutableAuthority,
   inspectNpmPackageAuthority,
   inspectNpmPackageTarball,
@@ -40,6 +42,8 @@ import {
   installedArtifactMode,
   packageSmokeEnvironment,
   NPM_AUTHORITY_LIMITS,
+  PACKAGE_SMOKE_COMMAND_POLICIES,
+  PACKAGE_SMOKE_CONSUMER_PROFILES,
   PACKAGE_SMOKE_PHASE_SCHEMA,
   PACKAGE_SMOKE_PREPARED_SCHEMA,
   PACKAGE_SMOKE_STATE_FILENAME,
@@ -49,12 +53,18 @@ import {
   reservePackageSmokeStateFile,
   runReviewedNodeCommand,
   scrubbedEnvironment,
+  withPackageSmokeCommandRuntime,
   type ExpectedPackageFile,
   type PackedFile,
   type PackedResult,
   validatePackageSmokeFixture,
   verifyInstalledPackageClosure,
 } from '../scripts/smoke-package';
+import {
+  createReviewedNodeRuntime,
+  disposeReviewedNodeRuntime,
+  type ReviewedNodeRuntime,
+} from '../scripts/lib/reviewed-node-runtime';
 
 const root = resolve(import.meta.dirname, '..');
 const fixtureRoot = join(root, 'scripts', 'fixtures', 'package-smoke');
@@ -85,6 +95,21 @@ function createLifecycleFifo(
   };
 }
 
+function replaceRegularFileWithFifoAndDelayedWriter(
+  path: string,
+): ReturnType<typeof spawn> {
+  renameSync(path, `${path}.reviewed`);
+  const made = spawnSync('mkfifo', ['-m', '600', path], { encoding: 'utf8' });
+  if (made.status !== 0 || made.signal !== null) {
+    throw new Error(`mkfifo failed: ${made.stderr.trim()}`);
+  }
+  return spawn(process.execPath, ['-e', `setTimeout(() => {
+    const fs = require('node:fs');
+    const descriptor = fs.openSync(${JSON.stringify(path)}, 'w');
+    fs.closeSync(descriptor);
+  }, 2_000);`], { stdio: 'ignore' });
+}
+
 function expectLifecycleFifoOpen(fifo: LifecycleFifo): void {
   const buffer = Buffer.alloc(256);
   while (true) {
@@ -106,8 +131,10 @@ function expectLifecycleFifoClosed(fifo: LifecycleFifo, timeoutMs = 3_000): void
   const deadline = Date.now() + timeoutMs;
   const chunks: Buffer[] = fifo.prefetched.splice(0);
   const buffer = Buffer.alloc(256);
+  let firstObservation = true;
   try {
-    while (Date.now() < deadline) {
+    while (firstObservation || Date.now() < deadline) {
+      firstObservation = false;
       try {
         const count = readSync(fifo.reader, buffer, 0, buffer.length, null);
         if (count === 0) {
@@ -119,6 +146,7 @@ function expectLifecycleFifoClosed(fifo: LifecycleFifo, timeoutMs = 3_000): void
         const code = (error as NodeJS.ErrnoException).code;
         if (code !== 'EAGAIN' && code !== 'EWOULDBLOCK') throw error;
       }
+      if (Date.now() >= deadline) break;
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
     }
     throw new Error('lifecycle FIFO retained a writer beyond its cleanup deadline');
@@ -285,10 +313,110 @@ afterEach(() => {
 });
 
 describe('two-phase package smoke contract', () => {
+  let reviewedRuntimeParent: string | undefined;
+  let reviewedRuntime: ReviewedNodeRuntime | undefined;
+
+  beforeAll(() => {
+    if (process.platform !== 'darwin' && process.platform !== 'linux') return;
+    const nodeProbe = spawnSync('node', ['--print', 'process.execPath'], {
+      encoding: 'utf8',
+    });
+    if (nodeProbe.status !== 0 || nodeProbe.signal !== null) {
+      throw new Error('the focused package tests require an exact Node executable');
+    }
+    const reviewedNode = realpathSync(nodeProbe.stdout.trim());
+    reviewedRuntimeParent = realpathSync(mkdtempSync(
+      join(tmpdir(), 'cortexel-package-command-runtime-parent-'),
+    ));
+    chmodSync(reviewedRuntimeParent, 0o700);
+    reviewedRuntime = createReviewedNodeRuntime(reviewedRuntimeParent, {
+      sourceNodeCandidates: [reviewedNode],
+    });
+  }, 60_000);
+
+  afterAll(() => {
+    const failures: unknown[] = [];
+    if (reviewedRuntime !== undefined) {
+      try {
+        disposeReviewedNodeRuntime(reviewedRuntime);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (reviewedRuntimeParent !== undefined && failures.length === 0) {
+      try {
+        rmdirSync(reviewedRuntimeParent);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'focused reviewed Node runtime cleanup failed');
+    }
+  }, 60_000);
+
+  const runReviewedNodeCommandWithStagedRuntime = (
+    reviewedNodeExecutable: string,
+    args: readonly string[],
+    cwd: string,
+    options: NonNullable<Parameters<typeof runReviewedNodeCommand>[3]> = {},
+  ): ReturnType<typeof runReviewedNodeCommand> => {
+    if (reviewedRuntime === undefined) {
+      throw new Error('the focused reviewed Node runtime is unavailable');
+    }
+    return runReviewedNodeCommand(reviewedNodeExecutable, args, cwd, {
+      ...options,
+      reviewedRuntime,
+    });
+  };
+
   it('publishes only the fresh v2 state and phase identities', () => {
     expect(PACKAGE_SMOKE_PREPARED_SCHEMA).toBe('cortexel-package-smoke-prepared.v2');
     expect(PACKAGE_SMOKE_PHASE_SCHEMA).toBe('cortexel-package-smoke-phase.v2');
     expect(PACKAGE_SMOKE_STATE_FILENAME).toBe('package-smoke-state.v2.json');
+    expect(PACKAGE_SMOKE_COMMAND_POLICIES).toEqual({
+      ordinary: { operation: 'package.ordinary', timeoutMs: 300_000 },
+      npmVersion: { operation: 'prepare.npm-version', timeoutMs: 300_000 },
+      npmPack: { operation: 'prepare.npm-pack', timeoutMs: 300_000 },
+      npmCiCore: { operation: 'prepare.npm-ci.core', timeoutMs: 900_000 },
+      npmCiCharts: { operation: 'prepare.npm-ci.charts', timeoutMs: 900_000 },
+      npmCiFull: { operation: 'prepare.npm-ci.full', timeoutMs: 900_000 },
+    });
+    expect(PACKAGE_SMOKE_CONSUMER_PROFILES).toEqual({
+      core: {
+        commandPolicy: PACKAGE_SMOKE_COMMAND_POLICIES.npmCiCore,
+        omittedDependencyClasses: ['dev', 'optional'],
+      },
+      charts: {
+        commandPolicy: PACKAGE_SMOKE_COMMAND_POLICIES.npmCiCharts,
+        omittedDependencyClasses: ['optional'],
+      },
+      full: {
+        commandPolicy: PACKAGE_SMOKE_COMMAND_POLICIES.npmCiFull,
+        omittedDependencyClasses: [],
+      },
+    });
+    expect(formatReviewedNodeOperationBoundFailure(
+      PACKAGE_SMOKE_COMMAND_POLICIES.npmCiCharts,
+      'timeout',
+    )).toBe(
+      'reviewed Node operation "prepare.npm-ci.charts" exceeded its 900000 ms hard timeout',
+    );
+    expect(formatReviewedNodeOperationBoundFailure(
+      PACKAGE_SMOKE_COMMAND_POLICIES.npmCiCharts,
+      'output-overflow',
+    )).toBe(
+      'reviewed Node operation "prepare.npm-ci.charts" exceeded its ' +
+      '16777216-byte output budget',
+    );
+    expect(() => formatReviewedNodeOperationBoundFailure(
+      {
+        operation: 'secret argv=/tmp/private-token',
+        timeoutMs: 900_000,
+      },
+      'timeout',
+    )).toThrow(/not one closed host-authored profile/u);
 
     if (process.platform === 'win32') return;
     const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-v1-state-rejection-')));
@@ -360,6 +488,83 @@ describe('two-phase package smoke contract', () => {
     );
     expect(() => inspectNpmPackageAuthority(fixture.npmCli)).toThrow(/manifest.*CLI identity/u);
   });
+
+  it('fails closed without blocking when each reviewed regular-file path becomes a FIFO', () => {
+    if (process.platform === 'win32') return;
+    const assertBoundedFifoRejection = (
+      operation: (trustedTestHook: (event: {
+        readonly phase: 'regular-file-reviewed-before-open';
+        readonly path: string;
+        readonly label: string;
+      }) => void) => void,
+      expectedPath: string,
+      expectedError: RegExp,
+    ): void => {
+      let delayedWriter: ReturnType<typeof spawn> | undefined;
+      const startedAt = Date.now();
+      try {
+        expect(() => operation((event) => {
+          expect(event).toMatchObject({
+            phase: 'regular-file-reviewed-before-open',
+            path: expectedPath,
+          });
+          delayedWriter = replaceRegularFileWithFifoAndDelayedWriter(expectedPath);
+        })).toThrow(expectedError);
+      } finally {
+        delayedWriter?.kill('SIGKILL');
+      }
+      expect(Date.now() - startedAt).toBeLessThan(1_000);
+      expect(lstatSync(expectedPath).isFIFO()).toBe(true);
+    };
+
+    const runtime = fakeRuntimeAuthorityTree();
+    assertBoundedFifoRejection(
+      (trustedTestHook) => {
+        inspectNodeExecutableAuthority(runtime.node, trustedTestHook);
+      },
+      runtime.node,
+      /changed before it could be hashed/u,
+    );
+
+    const hostWorkspace = realpathSync(mkdtempSync(
+      join(tmpdir(), 'cortexel-host-file-fifo-race-'),
+    ));
+    cleanups.push(hostWorkspace);
+    const hostFile = join(hostWorkspace, 'probe.mjs');
+    const hostBytes = 'throw new Error("reviewed");\n';
+    writeFileSync(hostFile, hostBytes, { mode: 0o444 });
+    chmodSync(hostFile, 0o444);
+    assertBoundedFifoRejection(
+      (trustedTestHook) => {
+        assertFinalizedHostFile(hostFile, hostBytes, 'reviewed host file', trustedTestHook);
+      },
+      hostFile,
+      /changed before it could be read/u,
+    );
+
+    const sealWorkspace = realpathSync(mkdtempSync(
+      join(tmpdir(), 'cortexel-workspace-file-fifo-race-'),
+    ));
+    cleanups.push(sealWorkspace);
+    const sealFile = join(sealWorkspace, 'sealed.txt');
+    writeFileSync(sealFile, 'sealed\n', { mode: 0o644 });
+    assertBoundedFifoRejection(
+      (trustedTestHook) => {
+        fingerprintPackageSmokeWorkspace(sealWorkspace, false, trustedTestHook);
+      },
+      sealFile,
+      /changed before it could be hashed/u,
+    );
+
+    const smokeSource = readFileSync(join(root, 'scripts', 'smoke-package.ts'), 'utf8');
+    expect(smokeSource.match(/openExpectedRegularFileAfterReview\(/gu) ?? [])
+      .toHaveLength(4);
+    const supervisorSource = readFileSync(
+      join(root, 'scripts', 'lib', 'reviewed-posix-supervisor.ts'),
+      'utf8',
+    );
+    expect(supervisorSource).not.toMatch(/\bopen(?:Sync)?\s*\(/u);
+  }, 15_000);
 
   it('rejects npm hard links, unsafe symlinks, writable authority, and resource overflow', () => {
     if (process.platform === 'win32') return;
@@ -624,6 +829,84 @@ describe('two-phase package smoke contract', () => {
     expect(clipped).not.toContain('\u0000');
   });
 
+  it('binds reviewed Node execution to one strictly synchronous staged-runtime scope', () => {
+    if (process.platform !== 'darwin' && process.platform !== 'linux') return;
+    if (reviewedRuntime === undefined) {
+      throw new Error('the focused reviewed Node runtime is unavailable');
+    }
+    const reviewedNode = reviewedRuntime.sourceNodeExecutable;
+    const sourceAuthority = inspectNodeExecutableAuthority(reviewedNode);
+    expect(reviewedRuntime.node.executable.sourcePath).toBe(reviewedNode);
+    expect(reviewedRuntime.node.executable.sourceSha256).toBe(sourceAuthority.file.sha256);
+    expect(reviewedRuntime.node.executable.stagedSha256).toBe(sourceAuthority.file.sha256);
+    expect(reviewedRuntime.node.authority.file.sha256).toBe(sourceAuthority.file.sha256);
+    expect(reviewedRuntime.node.authority.executable).not.toBe(reviewedNode);
+
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-runtime-scope-')));
+    cleanups.push(workspace);
+    const marker = join(workspace, 'unstaged-command-ran');
+    expect(() => runReviewedNodeCommand(
+      reviewedNode,
+      ['-e', `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran\\n')`],
+      workspace,
+      {
+        environment: packageSmokeEnvironment(reviewedNode, workspace, {}),
+        timeoutMs: 10_000,
+        outputLimitBytes: 1_024,
+      },
+    )).toThrow(/requires one active operation-scoped staged runtime/u);
+    expect(existsSync(marker)).toBe(false);
+
+    withPackageSmokeCommandRuntime(() => {
+      expect(() => withPackageSmokeCommandRuntime(
+        () => undefined,
+        workspace,
+      )).toThrow(/runtime scope is already active/u);
+    }, workspace);
+    expect(() => withPackageSmokeCommandRuntime(
+      (() => Promise.resolve('not synchronous')) as () => unknown,
+      workspace,
+    )).toThrow(/operation must be synchronous/u);
+
+    const scoped = withPackageSmokeCommandRuntime(
+      () => runReviewedNodeCommand(
+        reviewedNode,
+        ['-e', 'process.stdout.write(process.execPath)'],
+        workspace,
+        {
+          environment: packageSmokeEnvironment(reviewedNode, workspace, {}),
+          timeoutMs: 10_000,
+          outputLimitBytes: 1_024,
+        },
+      ),
+      workspace,
+    );
+    expect(scoped.status).toBe(0);
+    expect(scoped.stdout).not.toBe(reviewedNode);
+    expect(existsSync(scoped.stdout)).toBe(false);
+
+    let failedOperationStagedPath: string | undefined;
+    expect(() => withPackageSmokeCommandRuntime(
+      () => {
+        const result = runReviewedNodeCommand(
+          reviewedNode,
+          ['-e', 'process.stdout.write(process.execPath)'],
+          workspace,
+          {
+            environment: packageSmokeEnvironment(reviewedNode, workspace, {}),
+            timeoutMs: 10_000,
+            outputLimitBytes: 1_024,
+          },
+        );
+        failedOperationStagedPath = result.stdout;
+        throw new Error('intentional operation failure after staged execution');
+      },
+      workspace,
+    )).toThrow(/intentional operation failure after staged execution/u);
+    expect(failedOperationStagedPath).toBeDefined();
+    expect(existsSync(failedOperationStagedPath!)).toBe(false);
+  }, 60_000);
+
   it('bounds reviewed Node commands and their descendant process group', () => {
     if (process.platform !== 'darwin' && process.platform !== 'linux') return;
     const nodeProbe = spawnSync('node', ['--print', 'process.execPath'], {
@@ -639,7 +922,7 @@ describe('two-phase package smoke contract', () => {
     const nonTimeoutCommandTimeoutMs = 10_000;
     const intentionalTimeoutMs = 5_000;
 
-    const successful = runReviewedNodeCommand(
+    const successful = runReviewedNodeCommandWithStagedRuntime(
       reviewedNode,
       ['-e', 'process.stdout.write("bounded-ok")'],
       workspace,
@@ -655,10 +938,43 @@ describe('two-phase package smoke contract', () => {
     });
     expect(successful.guardianSweepIntentCount).toBe(1);
 
+    const exactMaximumTimeout = runReviewedNodeCommandWithStagedRuntime(
+      reviewedNode,
+      ['-e', 'process.stdout.write("exact-maximum-timeout")'],
+      workspace,
+      {
+        environment,
+        timeoutMs: PACKAGE_SMOKE_COMMAND_POLICIES.npmCiCore.timeoutMs,
+        outputLimitBytes: 1_024,
+      },
+    );
+    expect(exactMaximumTimeout).toMatchObject({
+      status: 0,
+      signal: null,
+      stdout: 'exact-maximum-timeout',
+      timedOut: false,
+      outputOverflow: false,
+    });
+    const excessiveTimeoutMarker = join(workspace, 'excessive-timeout-launched');
+    expect(() => runReviewedNodeCommandWithStagedRuntime(
+      reviewedNode,
+      [
+        '-e',
+        `require('node:fs').writeFileSync(${JSON.stringify(excessiveTimeoutMarker)}, 'ran')`,
+      ],
+      workspace,
+      {
+        environment,
+        timeoutMs: PACKAGE_SMOKE_COMMAND_POLICIES.npmCiCore.timeoutMs + 1,
+        outputLimitBytes: 1_024,
+      },
+    )).toThrow(/timeout is outside its bound/u);
+    expect(existsSync(excessiveTimeoutMarker)).toBe(false);
+
     // This completion deliberately exceeds the former one-second test assumption.
     // The production wall-clock timer remains authoritative; only this regression's
     // requested non-timeout budget is larger than scheduler startup noise.
-    const delayedSuccessful = runReviewedNodeCommand(
+    const delayedSuccessful = runReviewedNodeCommandWithStagedRuntime(
       reviewedNode,
       ['-e', 'setTimeout(() => process.stdout.write("delayed-ok"), 1_200)'],
       workspace,
@@ -673,11 +989,10 @@ describe('two-phase package smoke contract', () => {
       outputOverflow: false,
     });
 
-    // The base64 protocol envelope is larger than the bounded raw output. This
-    // crosses the ordinary 16 MiB JSON-file limit while remaining below the
-    // command's advertised 16 MiB raw-output limit.
+    // Output is retained in descriptor-backed spools, so a large binary-safe
+    // result does not inflate the small canonical control envelope.
     const largeOutputBytes = 12 * 1024 * 1024;
-    const largeOutput = runReviewedNodeCommand(
+    const largeOutput = runReviewedNodeCommandWithStagedRuntime(
       reviewedNode,
       ['-e', `process.stdout.write('x'.repeat(${largeOutputBytes}))`],
       workspace,
@@ -694,7 +1009,7 @@ describe('two-phase package smoke contract', () => {
     expect(largeOutput.stdout.length).toBe(largeOutputBytes);
     expect(largeOutput.guardianSweepIntentCount).toBe(1);
 
-    const exactSplitOutput = runReviewedNodeCommand(
+    const exactSplitOutput = runReviewedNodeCommandWithStagedRuntime(
       reviewedNode,
       [
         '-e',
@@ -712,7 +1027,7 @@ describe('two-phase package smoke contract', () => {
       outputOverflow: false,
     });
 
-    const nonzero = runReviewedNodeCommand(
+    const nonzero = runReviewedNodeCommandWithStagedRuntime(
       reviewedNode,
       ['-e', 'process.stderr.write("bounded-error"); process.exit(7)'],
       workspace,
@@ -726,24 +1041,25 @@ describe('two-phase package smoke contract', () => {
     expect(successful.guardianSweepIntentCount).toBe(1);
     expect(nonzero.guardianSweepIntentCount).toBe(1);
 
-    const exitWithChild = (exitCode: number, fifo: LifecycleFifo) => runReviewedNodeCommand(
-      reviewedNode,
-      [
-        '-e',
-         `const child = require('node:child_process').spawn(
-           process.execPath,
-           ['-e', ${JSON.stringify(`${lifecycleWriterProgram(fifo)}
-             setInterval(() => {}, 1000);`)}],
-           { stdio: 'ignore' },
-         );
-         while (!require('node:fs').existsSync(${JSON.stringify(`${fifo.path}.ready`)})) {
-           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-         }
-         process.exit(${exitCode});`,
-      ],
-      workspace,
-      { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
-    );
+    const exitWithChild = (exitCode: number, fifo: LifecycleFifo) =>
+      runReviewedNodeCommandWithStagedRuntime(
+        reviewedNode,
+        [
+          '-e',
+           `const child = require('node:child_process').spawn(
+             process.execPath,
+             ['-e', ${JSON.stringify(`${lifecycleWriterProgram(fifo)}
+               setInterval(() => {}, 1000);`)}],
+             { stdio: 'ignore' },
+           );
+           while (!require('node:fs').existsSync(${JSON.stringify(`${fifo.path}.ready`)})) {
+             Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+           }
+           process.exit(${exitCode});`,
+        ],
+        workspace,
+        { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
+      );
     const successChild = createLifecycleFifo(workspace, 'success-child', 'S');
     const nonzeroChild = createLifecycleFifo(workspace, 'nonzero-child', 'N');
     const successfulWithChild = exitWithChild(0, successChild);
@@ -760,7 +1076,7 @@ describe('two-phase package smoke contract', () => {
     expectLifecycleFifoClosed(nonzeroChild);
 
     const signaledChild = createLifecycleFifo(workspace, 'signaled-child', 'G');
-    const signaledWithChild = runReviewedNodeCommand(
+    const signaledWithChild = runReviewedNodeCommandWithStagedRuntime(
       reviewedNode,
       [
         '-e',
@@ -788,7 +1104,7 @@ describe('two-phase package smoke contract', () => {
     expectLifecycleFifoClosed(signaledChild);
 
     const timeoutChild = createLifecycleFifo(workspace, 'timeout-child', 'T');
-    const timedOut = runReviewedNodeCommand(
+    const timedOut = runReviewedNodeCommandWithStagedRuntime(
       reviewedNode,
       [
         '-e',
@@ -816,7 +1132,7 @@ describe('two-phase package smoke contract', () => {
     expectLifecycleFifoClosed(timeoutChild);
 
     const overflowChild = createLifecycleFifo(workspace, 'overflow-child', 'O');
-    const overflow = runReviewedNodeCommand(
+    const overflow = runReviewedNodeCommandWithStagedRuntime(
       reviewedNode,
       [
         '-e',
@@ -843,7 +1159,7 @@ describe('two-phase package smoke contract', () => {
     expect(overflow.guardianSweepIntentCount).toBe(1);
     expectLifecycleFifoClosed(overflowChild);
 
-    const stderrOverflow = runReviewedNodeCommand(
+    const stderrOverflow = runReviewedNodeCommandWithStagedRuntime(
       reviewedNode,
       ['-e', 'process.stderr.write("e".repeat(2048)); setInterval(() => {}, 1000);'],
       workspace,
@@ -858,7 +1174,7 @@ describe('two-phase package smoke contract', () => {
       guardianSweepIntentCount: 1,
     });
 
-    const combinedOverflow = runReviewedNodeCommand(
+    const combinedOverflow = runReviewedNodeCommandWithStagedRuntime(
       reviewedNode,
       [
         '-e',
@@ -878,7 +1194,7 @@ describe('two-phase package smoke contract', () => {
       .toBe(1_024);
 
     const parentKillTarget = createLifecycleFifo(workspace, 'parent-kill-target', 'P');
-    expect(() => runReviewedNodeCommand(
+    expect(() => runReviewedNodeCommandWithStagedRuntime(
       reviewedNode,
       [
         '-e',
@@ -903,13 +1219,13 @@ describe('two-phase package smoke contract', () => {
       expect(result.guardianSweepIntentCount).toBe(1);
     }
 
-    expect(() => runReviewedNodeCommand(
+    expect(() => runReviewedNodeCommandWithStagedRuntime(
       reviewedNode,
       ['-e', 'process.stdout.write(Buffer.from([0xff]));'],
       workspace,
       { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
     )).toThrow(/well-formed UTF-8/u);
-    expect(() => runReviewedNodeCommand(
+    expect(() => runReviewedNodeCommandWithStagedRuntime(
       reviewedNode,
       ['-e', 'process.exit(0)', 'nul\0argument'],
       workspace,
@@ -921,7 +1237,7 @@ describe('two-phase package smoke contract', () => {
       'CORTEXEL_PACKAGE_SMOKE_WORKER_PAYLOAD',
       'CORTEXEL_PACKAGE_SMOKE_TRUSTED_COMMAND_TEST_HOOK',
     ]) {
-      expect(() => runReviewedNodeCommand(
+      expect(() => runReviewedNodeCommandWithStagedRuntime(
         reviewedNode,
         ['-e', 'process.exit(0)'],
         workspace,
@@ -945,7 +1261,7 @@ describe('two-phase package smoke contract', () => {
     const sentinelEnvironment = packageSmokeEnvironment(reviewedNode, workspace, {
       PATH: sentinelDirectory,
     });
-    const exactRuntime = runReviewedNodeCommand(
+    const exactRuntime = runReviewedNodeCommandWithStagedRuntime(
       reviewedNode,
       ['-e', 'process.stdout.write(process.execPath)'],
       workspace,
@@ -958,7 +1274,9 @@ describe('two-phase package smoke contract', () => {
     expect(exactRuntime.timedOut).toBe(false);
     expect(exactRuntime.outputOverflow).toBe(false);
     expect(exactRuntime.guardianSweepIntentCount).toBe(1);
-    expect(realpathSync(exactRuntime.stdout)).toBe(reviewedNode);
+    expect(realpathSync(exactRuntime.stdout)).toBe(
+      reviewedRuntime?.node.authority.executable,
+    );
     expect(() => realpathSync(sentinelMarker)).toThrow();
 
     const loaderMarker = join(workspace, 'target-loader-pids');
@@ -969,7 +1287,7 @@ describe('two-phase package smoke contract', () => {
       { mode: 0o444 },
     );
     chmodSync(loader, 0o444);
-    const targetLoader = runReviewedNodeCommand(
+    const targetLoader = runReviewedNodeCommandWithStagedRuntime(
       reviewedNode,
       ['-e', 'process.stdout.write(String(process.pid))'],
       workspace,
@@ -1004,7 +1322,7 @@ describe('two-phase package smoke contract', () => {
     });
     let result;
     try {
-      result = runReviewedNodeCommand(
+      result = runReviewedNodeCommandWithStagedRuntime(
         reviewedNode,
         ['-e', 'process.stdout.write("clean-receipt")'],
         workspace,
@@ -1056,7 +1374,7 @@ describe('two-phase package smoke contract', () => {
     });
     const startedAt = Date.now();
     try {
-      expect(() => runReviewedNodeCommand(
+      expect(() => runReviewedNodeCommandWithStagedRuntime(
         reviewedNode,
         ['-e', targetProgram],
         workspace,
@@ -1065,7 +1383,7 @@ describe('two-phase package smoke contract', () => {
           timeoutMs: 10_000,
           outputLimitBytes: 1_024,
         },
-      )).toThrow(/pipes did not reach bounded EOF after exit/u);
+      )).toThrow(/guardian pipes did not reach bounded EOF/u);
     } finally {
       killSpy.mockRestore();
     }
@@ -1077,21 +1395,29 @@ describe('two-phase package smoke contract', () => {
 
   it('has exactly one explicit direct-property process-group signal site', () => {
     const supervisorSource = readFileSync(
-      join(root, 'scripts', 'lib', 'reviewed-node-supervisor.ts'),
+      join(root, 'scripts', 'lib', 'reviewed-posix-supervisor.ts'),
       'utf8',
     );
-    const outerSource = readFileSync(join(root, 'scripts', 'smoke-package.ts'), 'utf8');
+    const commandSource = readFileSync(
+      join(root, 'scripts', 'lib', 'reviewed-posix-command.ts'),
+      'utf8',
+    );
+    const adapterSource = readFileSync(join(root, 'scripts', 'smoke-package.ts'), 'utf8');
     expect(
-      `${supervisorSource}\n${outerSource}`.match(/\.\s*kill\s*\(/gu) ?? [],
+      `${supervisorSource}\n${commandSource}\n${adapterSource}`.match(/\.\s*kill\s*\(/gu) ?? [],
     ).toEqual(['.kill(']);
     expect(
       supervisorSource.match(
         /process\.kill\(-process\.pid, 'SIGKILL'\)/gu,
       ) ?? [],
     ).toEqual(["process.kill(-process.pid, 'SIGKILL')"]);
-    expect(outerSource).not.toContain('process.kill(');
-    expect(outerSource).not.toContain('processGroupId');
-    expect(outerSource).not.toContain('publishedProcessGroup');
+    expect(commandSource).not.toContain('process.kill(');
+    expect(adapterSource).not.toContain('process.kill(');
+    expect(adapterSource).not.toContain('processGroupId');
+    expect(adapterSource).not.toContain('publishedProcessGroup');
+    expect(adapterSource).toContain('runReviewedPosixCommand(');
+    expect(adapterSource).not.toContain('reviewed-node-supervisor');
+    expect(existsSync(join(root, 'scripts', 'lib', 'reviewed-node-supervisor.ts'))).toBe(false);
   });
 
   it('never adds an outer numeric fallback after abnormal supervisor completion', () => {
@@ -1110,7 +1436,7 @@ describe('two-phase package smoke contract', () => {
       throw new Error('outer numeric process signalling is forbidden');
     });
     try {
-      expect(() => runReviewedNodeCommand(
+      expect(() => runReviewedNodeCommandWithStagedRuntime(
         reviewedNode,
         [
           '-e',
@@ -1151,7 +1477,7 @@ describe('two-phase package smoke contract', () => {
     cleanups.push(workspace);
     const smokeModule = pathToFileURL(join(root, 'scripts', 'smoke-package.ts')).href;
 
-    const waitFor = (predicate: () => boolean, timeoutMs = 4_000): boolean => {
+    const waitFor = (predicate: () => boolean, timeoutMs = 10_000): boolean => {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         if (predicate()) return true;
@@ -1192,17 +1518,22 @@ describe('two-phase package smoke contract', () => {
       writeFileSync(
         runner,
         `
-          import { runReviewedNodeCommand } from ${JSON.stringify(smokeModule)};
-          runReviewedNodeCommand(
-            ${JSON.stringify(reviewedNode)},
-            ['-e', ${JSON.stringify(targetProgram)}],
-            ${JSON.stringify(workspace)},
-            {
-              environment: { PATH: '/usr/bin:/bin' },
-              timeoutMs: 60_000,
-              outputLimitBytes: 1_024,
-            },
-          );
+          import {
+            runReviewedNodeCommand,
+            withPackageSmokeCommandRuntime,
+          } from ${JSON.stringify(smokeModule)};
+          withPackageSmokeCommandRuntime(() => {
+            runReviewedNodeCommand(
+              ${JSON.stringify(reviewedNode)},
+              ['-e', ${JSON.stringify(targetProgram)}],
+              ${JSON.stringify(workspace)},
+              {
+                environment: { PATH: '/usr/bin:/bin' },
+                timeoutMs: 60_000,
+                outputLimitBytes: 1_024,
+              },
+            );
+          }, ${JSON.stringify(workspace)});
         `,
       );
       const outer = spawn(reviewedBun, [runner], {
@@ -1222,7 +1553,7 @@ describe('two-phase package smoke contract', () => {
       expectLifecycleFifoClosed(targetLifetime, 5_000);
       expectLifecycleFifoClosed(descendantLifetime, 5_000);
     }
-  }, 30_000);
+  }, 60_000);
 
   it('uses active lease EOF after supervisor SIGKILL and fails closed if the guardian dies', () => {
     if (process.platform !== 'darwin' && process.platform !== 'linux') return;
@@ -1240,7 +1571,7 @@ describe('two-phase package smoke contract', () => {
     const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-active-lease-')));
     cleanups.push(workspace);
     const smokeModule = pathToFileURL(join(root, 'scripts', 'smoke-package.ts')).href;
-    const waitFor = (predicate: () => boolean, timeoutMs = 6_000): boolean => {
+    const waitFor = (predicate: () => boolean, timeoutMs = 15_000): boolean => {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         if (predicate()) return true;
@@ -1262,25 +1593,30 @@ describe('two-phase package smoke contract', () => {
         runner,
         `
           import { writeFileSync } from 'node:fs';
-          import { runReviewedNodeCommand } from ${JSON.stringify(smokeModule)};
+          import {
+            runReviewedNodeCommand,
+            withPackageSmokeCommandRuntime,
+          } from ${JSON.stringify(smokeModule)};
           try {
-            runReviewedNodeCommand(
-              ${JSON.stringify(reviewedNode)},
-              ['-e', ${JSON.stringify(
-                `${lifecycleWriterProgram(targetLifetime, 6_000)}
-                 setInterval(() => {}, 1000);`,
-              )}],
-              ${JSON.stringify(workspace)},
-              {
-                environment: { PATH: '/usr/bin:/bin' },
-                timeoutMs: 10_000,
-                outputLimitBytes: 1_024,
-                trustedTestHook: {
-                  phase: 'go-sent',
-                  readyPath: ${JSON.stringify(readyPath)},
+            withPackageSmokeCommandRuntime(() => {
+              runReviewedNodeCommand(
+                ${JSON.stringify(reviewedNode)},
+                ['-e', ${JSON.stringify(
+                  `${lifecycleWriterProgram(targetLifetime, 6_000)}
+                   setInterval(() => {}, 1000);`,
+                )}],
+                ${JSON.stringify(workspace)},
+                {
+                  environment: { PATH: '/usr/bin:/bin' },
+                  timeoutMs: 10_000,
+                  outputLimitBytes: 1_024,
+                  trustedTestHook: {
+                    phase: 'go-sent',
+                    readyPath: ${JSON.stringify(readyPath)},
+                  },
                 },
-              },
-            );
+              );
+            }, ${JSON.stringify(workspace)});
             writeFileSync(${JSON.stringify(outcomePath)}, '{"kind":"returned"}\\n', {
               flag: 'wx',
             });
@@ -1313,7 +1649,7 @@ describe('two-phase package smoke contract', () => {
       };
       expect(ready).toMatchObject({
         phase: 'go-sent',
-        schema: 'cortexel-package-smoke-command-test-hook.v2',
+        schema: 'cortexel-reviewed-posix-command-test-hook.v1',
       });
       const victimPid = victim === 'supervisor'
         ? ready.supervisorPid
@@ -1346,7 +1682,127 @@ describe('two-phase package smoke contract', () => {
         expectLifecycleFifoClosed(targetLifetime, 8_000);
       }
     }
-  }, 30_000);
+  }, 60_000);
+
+  it('does not return past a killed supervisor while the lifetime guardian is stopped', () => {
+    if (process.platform !== 'darwin' && process.platform !== 'linux') return;
+    const nodeProbe = spawnSync('node', ['--print', 'process.execPath'], {
+      encoding: 'utf8',
+    });
+    const bunProbe = spawnSync('bun', ['--print', 'process.execPath'], {
+      encoding: 'utf8',
+    });
+    if (nodeProbe.status !== 0 || bunProbe.status !== 0) {
+      throw new Error('the stopped-guardian regression requires exact Node and Bun executables');
+    }
+    const reviewedNode = realpathSync(nodeProbe.stdout.trim());
+    const reviewedBun = realpathSync(bunProbe.stdout.trim());
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-stopped-guardian-')));
+    cleanups.push(workspace);
+    const targetLifetime = createLifecycleFifo(workspace, 'target-lifetime', 'L');
+    const readyPath = join(workspace, 'go-sent.json');
+    const outcomePath = join(workspace, 'outcome.json');
+    const runner = join(workspace, 'runner.ts');
+    const smokeModule = pathToFileURL(join(root, 'scripts', 'smoke-package.ts')).href;
+    writeFileSync(
+      runner,
+      `
+        import { writeFileSync } from 'node:fs';
+        import {
+          runReviewedNodeCommand,
+          withPackageSmokeCommandRuntime,
+        } from ${JSON.stringify(smokeModule)};
+        try {
+          withPackageSmokeCommandRuntime(() => {
+            runReviewedNodeCommand(
+              ${JSON.stringify(reviewedNode)},
+              ['-e', ${JSON.stringify(
+                `${lifecycleWriterProgram(targetLifetime, 20_000)}
+                 setInterval(() => {}, 1000);`,
+              )}],
+              ${JSON.stringify(workspace)},
+              {
+                environment: { PATH: '/usr/bin:/bin' },
+                timeoutMs: 10_000,
+                outputLimitBytes: 1_024,
+                trustedTestHook: {
+                  phase: 'go-sent',
+                  readyPath: ${JSON.stringify(readyPath)},
+                },
+              },
+            );
+          }, ${JSON.stringify(workspace)});
+          writeFileSync(${JSON.stringify(outcomePath)}, '{"kind":"returned"}\\n', {
+            flag: 'wx',
+          });
+        } catch (error) {
+          writeFileSync(
+            ${JSON.stringify(outcomePath)},
+            JSON.stringify({
+              kind: 'threw',
+              message: error instanceof Error ? error.message : String(error),
+            }) + '\\n',
+            { flag: 'wx' },
+          );
+        }
+      `,
+    );
+    const outer = spawn(reviewedBun, [runner], {
+      cwd: root,
+      detached: true,
+      stdio: 'ignore',
+    });
+    outer.unref();
+    const waitFor = (predicate: () => boolean, timeoutMs = 15_000): boolean => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        if (predicate()) return true;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+      }
+      return predicate();
+    };
+    expect(waitFor(() =>
+      existsSync(readyPath) && existsSync(`${targetLifetime.path}.ready`))).toBe(true);
+    const ready = JSON.parse(readFileSync(readyPath, 'utf8')) as {
+      guardianPid: number;
+      phase: string;
+      schema: string;
+      supervisorPid: number;
+    };
+    expect(ready).toMatchObject({
+      phase: 'go-sent',
+      schema: 'cortexel-reviewed-posix-command-test-hook.v1',
+    });
+    expect(Number.isSafeInteger(ready.guardianPid) && ready.guardianPid > 1).toBe(true);
+    expect(Number.isSafeInteger(ready.supervisorPid) && ready.supervisorPid > 1).toBe(true);
+
+    // Both PIDs come from one live trusted rendezvous. The guardian remains the
+    // exact stopped, unreaped leader between this planned STOP/CONT pair; kill the
+    // supervisor once and perform no numeric action after resuming the guardian.
+    process.kill(ready.guardianPid, 'SIGSTOP');
+    let resumeSent = false;
+    try {
+      process.kill(ready.supervisorPid, 'SIGKILL');
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+      expect(existsSync(outcomePath)).toBe(false);
+      expectLifecycleFifoOpen(targetLifetime);
+      process.kill(ready.guardianPid, 'SIGCONT');
+      resumeSent = true;
+    } finally {
+      if (!resumeSent) process.kill(ready.guardianPid, 'SIGCONT');
+    }
+
+    expect(waitFor(() => existsSync(outcomePath))).toBe(true);
+    const outcome = JSON.parse(readFileSync(outcomePath, 'utf8')) as {
+      kind: string;
+      message?: string;
+    };
+    expect(outcome.kind).toBe('threw');
+    expect(outcome.message).toMatch(/without a valid result/u);
+    // No retry loop is allowed here: publication of the runner outcome must be
+    // ordered after guardian lifetime EOF and same-group target cleanup.
+    expectLifecycleFifoClosed(targetLifetime, 0);
+  }, 45_000);
 
 
   it('keeps GO gated across worker, guardian, and supervisor killpoints', () => {
@@ -1365,7 +1821,7 @@ describe('two-phase package smoke contract', () => {
     const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-guardian-killpoint-')));
     cleanups.push(workspace);
     const smokeModule = pathToFileURL(join(root, 'scripts', 'smoke-package.ts')).href;
-    const waitFor = (predicate: () => boolean, timeoutMs = 6_000): boolean => {
+    const waitFor = (predicate: () => boolean, timeoutMs = 15_000): boolean => {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         if (predicate()) return true;
@@ -1393,22 +1849,27 @@ describe('two-phase package smoke contract', () => {
         runner,
         `
           import { writeFileSync } from 'node:fs';
-          import { runReviewedNodeCommand } from ${JSON.stringify(smokeModule)};
+          import {
+            runReviewedNodeCommand,
+            withPackageSmokeCommandRuntime,
+          } from ${JSON.stringify(smokeModule)};
           try {
-            runReviewedNodeCommand(
-              ${JSON.stringify(reviewedNode)},
-              ['-e', ${JSON.stringify(targetProgram)}],
-              ${JSON.stringify(workspace)},
-              {
-                environment: { PATH: '/usr/bin:/bin' },
-                timeoutMs: 10_000,
-                outputLimitBytes: 1_024,
-                trustedTestHook: {
-                  phase: ${JSON.stringify(scenario.phase)},
-                  readyPath: ${JSON.stringify(readyPath)},
+            withPackageSmokeCommandRuntime(() => {
+              runReviewedNodeCommand(
+                ${JSON.stringify(reviewedNode)},
+                ['-e', ${JSON.stringify(targetProgram)}],
+                ${JSON.stringify(workspace)},
+                {
+                  environment: { PATH: '/usr/bin:/bin' },
+                  timeoutMs: 10_000,
+                  outputLimitBytes: 1_024,
+                  trustedTestHook: {
+                    phase: ${JSON.stringify(scenario.phase)},
+                    readyPath: ${JSON.stringify(readyPath)},
+                  },
                 },
-              },
-            );
+              );
+            }, ${JSON.stringify(workspace)});
             writeFileSync(${JSON.stringify(outcomePath)}, '{"kind":"returned"}\\n', {
               flag: 'wx',
             });
@@ -1440,7 +1901,7 @@ describe('two-phase package smoke contract', () => {
       };
       expect(ready).toMatchObject({
         phase: scenario.phase,
-        schema: 'cortexel-package-smoke-command-test-hook.v2',
+        schema: 'cortexel-reviewed-posix-command-test-hook.v1',
       });
       const victimPid = scenario.victim === 'worker'
         ? ready.workerPid
@@ -1461,7 +1922,7 @@ describe('two-phase package smoke contract', () => {
       expect(outcome.message).toMatch(/without a valid result/u);
       expect(existsSync(targetMarker)).toBe(false);
     }
-  }, 30_000);
+  }, 60_000);
 
   it('does not signal after the guardian is reaped and before result publication', () => {
     if (process.platform !== 'darwin' && process.platform !== 'linux') return;
@@ -1487,7 +1948,10 @@ describe('two-phase package smoke contract', () => {
       runner,
       `
         import { writeFileSync } from 'node:fs';
-        import { runReviewedNodeCommand } from ${JSON.stringify(smokeModule)};
+        import {
+          runReviewedNodeCommand,
+          withPackageSmokeCommandRuntime,
+        } from ${JSON.stringify(smokeModule)};
         const hostSignals = [];
         const originalKill = process.kill;
         process.kill = ((pid, signal) => {
@@ -1495,22 +1959,24 @@ describe('two-phase package smoke contract', () => {
           throw new Error('post-reap outer signal attempted');
         });
         try {
-          runReviewedNodeCommand(
-            ${JSON.stringify(reviewedNode)},
-            ['-e', ${JSON.stringify(
-              `require('node:fs').writeFileSync(${JSON.stringify(targetMarker)}, 'ran\\n');`,
-            )}],
-            ${JSON.stringify(workspace)},
-            {
-              environment: { PATH: '/usr/bin:/bin' },
-              timeoutMs: 10_000,
-              outputLimitBytes: 1_024,
-              trustedTestHook: {
-                phase: 'guardian-swept-before-result',
-                readyPath: ${JSON.stringify(readyPath)},
+          withPackageSmokeCommandRuntime(() => {
+            runReviewedNodeCommand(
+              ${JSON.stringify(reviewedNode)},
+              ['-e', ${JSON.stringify(
+                `require('node:fs').writeFileSync(${JSON.stringify(targetMarker)}, 'ran\\n');`,
+              )}],
+              ${JSON.stringify(workspace)},
+              {
+                environment: { PATH: '/usr/bin:/bin' },
+                timeoutMs: 10_000,
+                outputLimitBytes: 1_024,
+                trustedTestHook: {
+                  phase: 'guardian-swept-before-result',
+                  readyPath: ${JSON.stringify(readyPath)},
+                },
               },
-            },
-          );
+            );
+          }, ${JSON.stringify(workspace)});
           writeFileSync(${JSON.stringify(outcomePath)}, JSON.stringify({
             hostSignals,
             kind: 'returned',
@@ -1532,7 +1998,7 @@ describe('two-phase package smoke contract', () => {
       stdio: 'ignore',
     });
     outer.unref();
-    const waitFor = (predicate: () => boolean, timeoutMs = 6_000): boolean => {
+    const waitFor = (predicate: () => boolean, timeoutMs = 15_000): boolean => {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         if (predicate()) return true;
@@ -1548,7 +2014,7 @@ describe('two-phase package smoke contract', () => {
     };
     expect(ready).toMatchObject({
       phase: 'guardian-swept-before-result',
-      schema: 'cortexel-package-smoke-command-test-hook.v2',
+      schema: 'cortexel-reviewed-posix-command-test-hook.v1',
     });
     expect(Number.isSafeInteger(ready.supervisorPid) && ready.supervisorPid > 1).toBe(true);
     process.kill(ready.supervisorPid, 'SIGKILL');
@@ -1562,7 +2028,7 @@ describe('two-phase package smoke contract', () => {
     expect(outcome.message).toMatch(/without a valid result/u);
     expect(outcome.hostSignals).toEqual([]);
     expect(readFileSync(targetMarker, 'utf8')).toBe('ran\n');
-  }, 20_000);
+  }, 30_000);
 
   it('requires an absolute persistent workspace and a carried state digest', () => {
     const workspace = resolve('package-smoke-test-workspace');

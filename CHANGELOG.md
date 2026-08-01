@@ -134,16 +134,96 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   closed until separately pinned and evidenced. Its broad immutable R049 definition is
   unchanged, its exact conformance obligations live in the versioned adapter profile,
   and its upstream gate remains `NOT_RUN` in the release ledger.
-- A repository-validated, provisional `0.1-draft` audit skeleton pins the official NEST
-  v3.10 tree at commit `acca9704da248750219a027db99fec6cd1f9052a`, root-tree identity,
-  documentation index, and CMake orchestration context. It records 109 regular Python
-  files, three `.py` orchestration symlinks, and twelve PNG/GIF/SVG path entries, but
-  admits no assessment rows and only `coverageClaim: none`. Raw path and documentation
-  directive counts are not relabelled as entrypoint, visual-output, mapping, rendering,
-  execution, or scientific-certification coverage; the CMake file installs only
-  `run_examples.sh` and is not entrypoint authority. Because its execution and
-  certification axes are mutable, it lives under `docs/audit/` and is excluded from
-  contract/package catalogs, manifests, and build digests.
+- The versioned `1.1` audit now binds two independently validated source
+  artifacts at official NEST v3.10 commit
+  `acca9704da248750219a027db99fec6cd1f9052a`: the complete byte-bound
+  162-leaf PyNEST `pynest/examples` tree plus its
+  documentation/default-runner selector scope, and an exact 784-blob selected
+  documentation-source scope. The example artifact inventories 112 Python paths
+  and twelve PNG/GIF/SVG assets. All 38 auxiliary leaves are byte-bound and carry
+  closed structural roles, but remain outside visualization classification and
+  runtime-dependency closure.
+  Every selected
+  documentation blob carries path bytes, Git mode/SHA-1, independent SHA-256, and byte
+  length; bounded classifiers distinguish UserDocs definitions, stored notebook PNGs,
+  documentation-script figures/saves, authored diagrams, and public plotting modules.
+  These scopes are not a Sphinx/CMake build closure, visualization-definition closure,
+  execution receipt, stable mapping, renderer-parity result, or scientific certificate.
+  Every downstream visualization count remains zero and `coverageClaim` remains `none`.
+  The limitations ledger now correctly distinguishes representability from adapter
+  evidence: stable `neuro.phase_plane` can encode supplied vector fields,
+  trajectories, nullclines, and fixed points, but no executable adapter or executed
+  parity result currently binds the pinned `hh_phaseplane.py` example.
+- Both generators create worktree-free Git object databases and perform one minimal
+  blobless smart-HTTPS fetch for the pinned commit/tree structure under an empty
+  controlled home, no ambient Git configuration, `.netrc`, credential helpers,
+  proxies, tracing, or exported secrets. They derive their exact tree-selected
+  path/blob reference sets, remove the remote, partial-clone configuration and
+  checked acquisition sidecars, reject checkout/sparse/alternate/network residue,
+  verify retained packs, and prove an exact 137-object commit/tree-only closure
+  before importing selected blobs. The example generator alone pins this initial
+  Git fetch to `http.version=HTTP/1.1`; the documentation generator makes no such
+  transport-version claim.
+  A separate shared raw-HTTPS boundary retrieves exactly 160 example references or
+  784 documentation references from the fixed
+  `raw.githubusercontent.com/<owner>/<repository>/<commit>/<path>` namespace. It
+  rejects redirects, authentication/cookies/proxy authority, content encodings,
+  ambiguous length/transfer framing, non-binary chunks, byte/event/time overflow,
+  and response bytes whose canonical Git blob SHA-1 does not equal the tree-selected
+  identity. Exact producer limits are concurrency four, four attempts, a 90-second
+  nonempty-body idle deadline, a five-minute absolute request deadline, and a
+  15-minute global deadline. Body budgets cover emitted HTTP-200 application chunks,
+  not aggregate headers, TLS framing, DNS, or socket/kernel buffering; event-loop
+  timers cannot preempt synchronous work or a stalled event loop.
+  Accepted bytes are exclusively staged as current-UID mode-`0600` regular files.
+  One positional `git hash-object -w --no-filters -- <reviewed staged paths...>`
+  invocation must reproduce every identity with exact stdout and empty stderr.
+  Staging is removed before a fresh final closure proof: exactly 297 objects for the
+  example artifact and 921 for the documentation artifact. Every admitted object is
+  then reread with lazy fetching disabled, canonical-Git-rehashed, SHA-256-rehashed,
+  and bound by a complete content-set seal. Each Git command uses a staged supported
+  Node control runtime, reviewed Git executable authority, copied bounded binary
+  input, bounded output/time/status, a closed environment, and the live guardian.
+  This does not close Git's helper/dynamic-library graph, provide a reproducible
+  acquisition receipt, impose a hostile-server input-byte quota on the initial
+  structural pack, or contain a malicious same-UID process that deliberately escapes
+  its process group.
+  Sparse, checkout, temporary-pack, alternate and network residue fail closed, and both
+  generated artifacts must pass their pinned semantic validators before publication.
+  Their `--output` paths use exclusive no-clobber publication with required file
+  and parent-directory `fsync`; stdout mode remains an ordinary stream. Successful
+  `fsync` calls do not prove persistence across power loss, backing-device behavior,
+  or storage-stack semantics. Output paths and UTF-8 content now cross primitive
+  4-KiB/16-MiB admission bounds before any filesystem work. Deterministic fault
+  controls cover a foreign target winning the hard-link race, ambiguous hard-link
+  completion after the target was created, later failure, and ambiguous closes
+  without descriptor-number retries. A failed publication requires manual inspection
+  whenever target absence cannot be established.
+  Direct release-metadata reads likewise require primitive 4-KiB paths with at most
+  64 components and an exact single-link regular leaf, then open the final no-follow
+  pathname nonblocking; a deterministic regular-file-to-FIFO race now fails before
+  any blocking read, and a simultaneous read/ambiguous-close failure retains both
+  causes without retrying the descriptor number.
+  Acquisition roots require current real/effective UID equality, exact `0700`
+  permission/special bits, and path/descriptor ACL authority. The complete resolved
+  ancestor chain excludes ordinary different-UID entry replacement through unsafe
+  writable parents. Darwin uses its native extended-ACL query but does not establish
+  filesystem implementation or locality. Linux accepts only the reviewed ext-family
+  and tmpfs VFS types through `fstatfs` and `libacl`, and separately
+  rejects listed alternate ACL namespaces. Linux VFS types with distinct network,
+  stacked, unknown, unsupported, or indeterminate ACL models fail closed. Filesystem
+  magic does not establish backing-device locality or exclude lower-layer stacking.
+  Linux pathname ACL inspection is nonblocking and rejects FIFOs and other special
+  file types. The helper source is read through a bounded no-follow/nonblocking
+  descriptor, pinned by SHA-256, executed from those copied bytes on stdin, and
+  rechecked by path, descriptor, bytes, and digest after every run. ACL subject
+  admission copies only the three enumerable semantic fields without enumerating
+  inert non-enumerable or symbol metadata.
+  The checks are not containment against root or DAC/ownership-bypassing capabilities,
+  mount-namespace changes, or another process with the
+  current UID. Additional VFS types require their own
+  reviewed profile and native controls. Mutable audit evidence remains outside
+  contract/package semantics.
 - The offline CLI now exposes compact adapter status in `catalog --json` and a
   `describe <stable-skill-id> [--json]` command generated from the exact packaged
   catalog. Its closed `--section summary|example|schema|all` projection lets an agent
@@ -299,41 +379,55 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   other stable renderers move from 4 to 5. The affected skill renderer references
   move in lockstep.
 
-### Fixed — unreaped Python package subprocess cleanup
+### Fixed — live-guardian Python package subprocess cleanup
 
-- The Python package build-evidence gate no longer calls `Popen.poll()`,
-  `Popen.wait()`, `Popen.terminate()`, or `Popen.kill()` before process-group
-  cleanup. On the reviewed macOS/Linux lifecycle it requires a dedicated CPython
-  3.14.x host, default `SIGCHLD`, one kernel-visible thread, and
-  `waitid(..., WNOWAIT)` ownership of the exact child. A fresh non-reaping
-  observation immediately precedes the one
-  `killpg(SIGKILL)` call; a failed group operation requires another ownership
-  proof before an anchored direct-PID fallback. `ECHILD` and an unproved
-  `ProcessLookupError` permit neither a later numeric signal nor `Popen.wait()`.
-  Linux additionally requires readable `/proc/self/task`; Darwin requires the
-  reviewed `libproc` `proc_taskinfo` ABI. Missing wait, signal-mask, or thread
-  authority fails closed. Kqueue process registration/readiness is never child
-  ownership evidence; a kqueue-backed selector may still drain pipe descriptors.
-- Output pipes are drained under fixed bounds while the group leader remains
-  unreaped. The sole raw `waitpid` begins only after final `WNOWAIT` ownership
-  proof and either pipe EOF or the fixed drain deadline. Selector construction or
-  registration failure cannot bypass that interval: cleanup falls back to direct
-  pipe readiness and reads; if readiness or reads also fail, it sleeps in bounded
-  increments until the original deadline before reaping and retains the initiating
-  failure. Any `waitpid` exception is terminal, with no retry, signal, identity
-  probe, or second wait afterward.
-  Regression controls cover normal success and failure, timeout, output
-  overflow, deferred `INT`/`TERM`/`HUP`, post-spawn interruption, an inherited
-  pipe held by a same-group descendant, external reaping before and after a
-  positive observation, group-signal/reaper races, dual selector failure,
-  registration failure with buffered output, and the absence of any post-reap
-  numeric signal, readiness probe, or wait.
-- This is bounded same-authority POSIX process-group cleanup, not process-tree
-  isolation. Deliberate regrouping/detachment, a credential or security-label
-  transition, hostile same-process native reaping or unrelated signal handlers,
-  same-UID signaling of the owner, owner death from `SIGKILL` or a signal outside
-  deferred `INT`/`TERM`/`HUP`, kernel/OS failure, and unsupported operating
-  systems require external containment or a separately reviewed mechanism.
+- The Python build-evidence gate now launches each reviewed target behind a live
+  POSIX session/process-group guardian. An unlinked bounded descriptor carries the
+  canonical target request, the supervisor owns an exclusive close-only lease, and
+  a non-leader worker remains the target's immediate parent. Killing that parent no
+  longer releases the guardian's group-number anchor. The worker restores default
+  `INT`/`TERM`/`HUP` dispositions and unblocks them before target launch.
+- Target completion, worker loss, timeout, output overflow, and deferred
+  `INT`/`TERM`/`HUP` converge on one guardian-local sweep. The guardian publishes a
+  nonce-bound canonical status and makes the only group signal with its self-derived
+  PGID while it is still the live, unreaped leader. The supervisor contains no
+  numeric PID/PGID signal or probe fallback. Stdout and stderr are always piped;
+  observed bytes share the fixed budget until an error latches, after which cleanup
+  drains and discards without claiming a complete throughput count. `capture_output`
+  controls retention only. After EOF or the cleanup deadline the
+  supervisor closes descriptors and crosses one guardian
+  raw-`waitpid` boundary. Exact `SIGKILL` termination and protocol status are both required;
+  external reaping, direct guardian loss, malformed framing, and unexpected exit
+  fail closed. Default `SIGCHLD`, one Python/kernel-visible thread, no active
+  trace/profile callback, and rejection of callable Python signal handlers outside the
+  handled cancellation set establish exclusive reaper authority. The supervisor blocks
+  only `SIGCHLD` plus `INT`/`TERM`/`HUP` and restores the caller's exact mask; the target
+  receives default, unblocked cancellation signals. The `Popen` destructor
+  is disarmed before the one-way syscall, and no signal, query, or second wait follows
+  the reap. Parent launch-resource closes are exhaustive. Any close exception is
+  ambiguous, so the standalone smoke worker immediately `_exit(70)` and lets kernel
+  teardown revoke every possibly-live capability rather than retrying a reusable fd.
+- Regression controls cover success, nonzero and signaled targets, timeout, output
+  overflow, deferred cancellation, same-group descendants, target-directed worker
+  death, direct guardian loss, external reaping, missing-target launch, canonical
+  protocol closure, destructor behavior, and deliberate detachment plus inherited-
+  pipe retention, including failed-spawn and post-spawn resource-close faults. This is
+  still same-authority group cleanup, not hostile process
+  containment: same-UID guardian killing, detachment/regrouping, credential or
+  security-label changes, retained lease/output descriptors, hostile same-process
+  interference, owner death, whole-group `SIGSTOP`, and kernel/OS failure require an
+  external cgroup, sandbox, or VM. A stopped guardian cannot consume lease EOF and can
+  leave the sole blocking wait hung; observed status plus `SIGKILL` is also not an
+  independent receipt that the guardian, rather than a same-UID target in the
+  status/self-sweep interval, delivered the signal.
+
+- The reviewed Node lifetime capability now binds the exact launcher FIFO/socket
+  endpoint across launcher fd1, supervisor fd6, and guardian fd5. Stable `fstat`
+  identity is proved at each hop; the guardian echoes it in one canonical READY frame,
+  the supervisor rechecks and closes its retained copy exactly once, and only then may
+  it publish `guardianArmed` and send GO. Node's reuse of a closed numeric fd for an
+  unrelated internal FIFO therefore fails closed rather than blessing the wrong
+  lifetime object.
 
 ### Fixed — restrictive-umask Python package fixture
 
@@ -534,13 +628,26 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   search path. Ambient API keys, package tokens, proxy credentials, Node/loader
   injection controls, npm configuration, and OpenSSL configuration cannot cross
   the package-smoke process boundary.
-- Every executable entry point now runs through the exact reviewed Node binary.
-  Prepared-state v2 additionally binds that executable's stable bytes, metadata,
-  and path ancestry and the exact npm 10/11 manifest, CLI, and bounded recursive
-  package tree. Its deliberately narrow authority scope does not claim Node's
-  dynamic-library/OS closure or the TypeScript harness runtime. The workspace seal
-  now includes the finalized root identity and mode plus every controlling parent
-  identity; the externally carried state digest separately binds the state leaf.
+- Ordinary package-smoke child commands retain an exact 300,000 ms bound. Only the
+  three closed cold-cache npm consumer materializations use the shared reviewed-POSIX
+  maximum of 900,000 ms each, under fixed `core`, `charts`, and `full` operation
+  labels. These are per-command rather than aggregate or hostile-hard-deadline
+  guarantees; no retry or caller-controlled override is admitted. Timeout/overflow
+  diagnostics expose the fixed label and bound without argv, cwd, environment,
+  executable path, or child output. The CI package-smoke job now has a 60-minute
+  outer bound so it does not routinely preempt the three sequential installations.
+- Every executable entry point now runs through an operation-scoped,
+  descriptor-acquired private copy of the exact reviewed Node bytes. Prepared-state
+  v2 retains the original source Node's stable bytes, metadata, and path ancestry—not
+  the ephemeral staged pathname, runtime root, or acquisition record—and binds the
+  exact npm 10/11 manifest, CLI, and bounded recursive package tree. Source and staged
+  SHA-256 values must equal that prepared source digest, and their authorities are
+  revalidated around every command before the private runtime is disposed. Staging
+  copies only the bounded known Homebrew-relative `libnode.<number>.dylib` companions;
+  neither that inventory nor the deliberately narrow prepared authority scope claims
+  a closed Node dynamic-library/OS authority or the TypeScript harness runtime. The
+  workspace seal now includes the finalized root identity and mode plus every controlling
+  parent identity; the externally carried state digest separately binds the state leaf.
   That excluded leaf is exclusively reserved before sealing and durably published
   through its pinned descriptor, avoiding filesystem-specific root-link-count
   changes and state/seal circularity. Execute retains its first exact file
@@ -562,18 +669,26 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   intent, guardian exit by `SIGKILL`, canonical protocol EOF, and bounded
   stdout/stderr EOF. It performs no post-reap signal or identity probe; the outer
   caller has no numeric fallback.
+  Host-side regular-file authority reads now use POSIX
+  `O_NOFOLLOW|O_NONBLOCK` before descriptor type and identity proof; directory
+  synchronization additionally uses `O_DIRECTORY`. Deterministic regressions
+  exchange the reviewed Node executable, a finalized host probe, and a workspace
+  seal input for FIFOs after `lstat` and prove bounded rejection.
   Direct guardian death, `EPERM`/`ESRCH`, malformed protocol, or a retained pipe
   fails closed without signaling a reusable identity. This boundary covers
   same-authority descendants that remain in the group, but it is not a sandbox
   against guardian discovery/signaling, deliberate detachment/re-grouping,
-  inherited-pipe retention, or a credential/security-label change. Those
-  capabilities require an external cgroup/sandbox/VM. Windows fails closed until
-  an equivalent reviewed Job Object boundary exists.
+  inherited-pipe retention, a credential/security-label change, or whole-group
+  `SIGSTOP`. A stopped guardian cannot consume lease EOF, and retained descriptors can
+  keep the synchronous outer caller blocked beyond both configured timeouts; those
+  timeouts are not hostile hard deadlines. These capabilities require an external
+  cgroup/sandbox/VM. Windows fails closed until an equivalent reviewed Job Object
+  boundary exists.
   One-way regression rendezvous cover pre-`GO` worker/guardian/supervisor
   killpoints, active supervisor `SIGKILL` lease EOF, direct guardian loss, target
   attempts to kill its immediate parent, and the absence of any post-reap signal.
-  Protocol-size limits account for base64 expansion without giant regular
-  expressions. Directory reads and file hashes are allocation-bounded. Every
+  Binary-safe descriptor-backed output spools avoid base64 expansion in the control
+  protocol. Protocol parsing, directory reads, and file hashes are allocation-bounded. Every
   installed package container, scope, package identity,
   `.bin` inventory/shim, and hidden lock entry is derived from the exact
   omit-filtered prepared lock at every nested depth; concealed package-management
@@ -731,7 +846,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   A read-only `release:verify` gate requires coherent final-release metadata, the
   structural evidence ledger, a clean HEAD, and an exact annotated tag; the current
   artifact schema independently blocks release because no release-stamping producer
-  exists yet.
+  exists yet. Its local Git observations now use the exact reviewed runtime, closed
+  ambient environment, disabled lazy fetching, and bounded guardian lifecycle rather
+  than ambient `spawnSync('git')`; local repository config/indirection/alternates and
+  hostile same-UID mutation remain outside that process-boundary claim.
 - Project `bunfig.toml` disables Bun runtime dotenv loading, including through nested
   package scripts, and an executable sentinel guards that behavior. Because package
   managers, Vite, or a dependency can still read files in the checkout, research
@@ -1629,7 +1747,8 @@ regenerate cached descriptors/manifests before adopting this release.
 
 ### Changed
 
-- `corpus.knowledge_graph` is now a breaking, evidence-grade `1.4.0` contract:
+- `corpus.knowledge_graph` is now a breaking, evidence-shaped legacy `1.4.0`
+  contract—not a stable evidence artifact:
   immutable graph/source/snapshot identity, stable edge assertion ids, bounded
   attributes, typed evidence references, derived/advisory epistemic records and
   discriminated scores that are explicitly not calibrated posteriors. Edge-kind
@@ -1739,8 +1858,8 @@ breaking changes to the entry points (see **Changed**).
   `formatInvocationErrors(errors)` renders structured errors as one compact,
   deterministic repair block (path + message + hint + an inlined valid example) a
   model can read and fix. New `AGENTS.md` documents the whole loop.
-- `knowledge-graph-3d` scene + `corpus.knowledge_graph` skill — a first-class
-  cross-paper corpus knowledge graph. The declarative VizSpec contract adds the
+- `knowledge-graph-3d` scene + `corpus.knowledge_graph` skill — an experimental
+  legacy cross-paper corpus inspection graph. The declarative VizSpec contract adds the
   `KnowledgeGraph3DParamsSchema` (paper/model/family nodes;
   cites/same_as/variant_of/instantiates/belongs_to_family edges), the
   `graph_source`/`node_kinds`/`edge_kinds`/`identity_advisory` provenance keys,

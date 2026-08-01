@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "cortexel"
 version = "0.10.0.dev0"
-description = "Independent Python reader for Cortexel scientific figure contracts: strict parsing, RFC 8785 canonicalization, SHA-256 digests, and structural + semantic validation."
+description = "Independent Python reader for Cortexel figure contracts: strict parsing, RFC 8785 canonicalization, SHA-256 digests, structural validation, and explicitly partial semantic checks."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"

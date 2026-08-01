@@ -36,7 +36,7 @@ jobs:
 
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -283,8 +283,8 @@ jobs:
             printf 'CORTEXEL_CI_UVX=%s\n' "$expected_uvx_executable"
           } >> "$GITHUB_ENV"
       - name: Compile Python reader
-        run: python -m compileall -q python/src python/tests scripts/smoke-python-package.py
-      - name: Python tests (pure standard library)
+        run: python -m compileall -q python/src python/tests scripts/smoke-python-package.py scripts/inspect-posix-acl.py
+      - name: Python tests (stdlib and POSIX ACL integration)
         run: python -m unittest discover -s python/tests -v
       - name: Strict Python typing
         env:
@@ -295,7 +295,7 @@ jobs:
         env:
           UVX_EXECUTABLE: ${{ steps.setup_uv.outputs['uvx-path'] }}
         run: |
-          "$UVX_EXECUTABLE" --no-config --from ruff==0.15.18 ruff check python/src python/tests scripts/smoke-python-package.py
+          "$UVX_EXECUTABLE" --no-config --from ruff==0.15.18 ruff check python/src python/tests scripts/smoke-python-package.py scripts/inspect-posix-acl.py
       - name: Provision exact hash-pinned Python build backend
         if: matrix.python == '3.14.6'
         run: |

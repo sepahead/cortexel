@@ -24,7 +24,6 @@
  */
 
 import { makeError, type CortexelError, type Result, err, ok } from './errors.js';
-import type { BudgetLimits } from './limits.js';
 import { utf8ByteLength } from './sha256.js';
 
 /** A value inside the JSON domain, with objects null-prototyped. */
@@ -36,8 +35,26 @@ export interface JsonObject {
 /** Keys that can reach `Object.prototype`. Rejected outright, at every depth. */
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
+/**
+ * The complete authority the raw JSON parser consumes.
+ *
+ * Keep this seven-field boundary independent from the generated visualization
+ * budget registry. A public `BudgetLimits` value is a structural superset, while
+ * private protocols can own a tighter parser profile without creating a runtime
+ * dependency on generated contract output.
+ */
+export interface JsonParseLimits {
+  readonly rawInputBytes: number;
+  readonly jsonDepth: number;
+  readonly jsonTotalNodes: number;
+  readonly jsonStringLength: number;
+  readonly jsonNumberTokenLength: number;
+  readonly jsonObjectKeys: number;
+  readonly jsonArrayItems: number;
+}
+
 export interface ParseOptions {
-  readonly limits: BudgetLimits;
+  readonly limits: JsonParseLimits;
   /** Reject a leading UTF-8 BOM. Identical in TypeScript and Python. */
   readonly allowBom?: boolean;
 }
@@ -53,13 +70,13 @@ class ParseFailure extends Error {
 
 class Scanner {
   private readonly text: string;
-  private readonly limits: BudgetLimits;
+  private readonly limits: JsonParseLimits;
   private index = 0;
   private nodes = 0;
   /** Path segments to the value being read, for a precise JSON Pointer on failure. */
   private readonly path: (string | number)[] = [];
 
-  constructor(text: string, limits: BudgetLimits) {
+  constructor(text: string, limits: JsonParseLimits) {
     this.text = text;
     this.limits = limits;
   }
@@ -569,7 +586,7 @@ export function parseJsonStrict(text: string, options: ParseOptions): Result<Jso
       }),
     ]);
   }
-  const limits = Object.freeze(limitsSnapshot) as unknown as BudgetLimits;
+  const limits = Object.freeze(limitsSnapshot) as unknown as JsonParseLimits;
 
   // Byte length first, before a single character is examined. Checking the size of
   // a parse tree you already built is checking too late.

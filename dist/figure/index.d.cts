@@ -1,12 +1,80 @@
 export { A as ARTIFACT_CONTRACT, B as BuildIdentity, C as CATALOG_DIGEST, a as CATALOG_DIGEST_DOMAIN, b as CONTRACT_DIGEST, P as PACKAGE_VERSION, R as REQUEST_CONTRACT, S as STABLE_SKILL_COUNT, g as getBuildIdentity } from '../identity-D0azGxGf.cjs';
-import { J as JsonValue, d as BudgetLimits, L as LegacyMapEntry } from '../catalog-B3dXHggm.cjs';
-export { A as AdapterCatalogEntry, B as BudgetProfileId, D as DEFAULT_PROFILE, E as EXPERIMENTAL_CAPABILITY_IDS, e as LEGACY_SKILL_MAP, R as REMOVED_CAPABILITY_IDS, f as ResolvedBudgetProfile, a as SKILL_CATALOG, b as STABLE_SKILL_IDS, c as SkillCatalogEntry, S as StableSkillId, g as getBudgetLimits, i as isStableSkillId, l as lookupSkillCatalogEntry, p as parseJsonStrict, r as restrictLimits, t as tryGetBudgetLimits, h as trySelectTighterBudgetProfile } from '../catalog-B3dXHggm.cjs';
+import { J as JsonValue, L as LegacyMapEntry } from '../catalog-BwEfiOSM.cjs';
+export { A as AdapterCatalogEntry, E as EXPERIMENTAL_CAPABILITY_IDS, d as LEGACY_SKILL_MAP, R as REMOVED_CAPABILITY_IDS, a as SKILL_CATALOG, b as STABLE_SKILL_IDS, c as SkillCatalogEntry, S as StableSkillId, i as isStableSkillId, l as lookupSkillCatalogEntry, p as parseJsonStrict } from '../catalog-BwEfiOSM.cjs';
 import { C as CortexelError, R as Result } from '../errors-DOfZeMp8.cjs';
 export { a as CANONICALIZATION_ALGORITHMS, b as CANONICALIZATION_IDS, c as CanonicalizationId, d as DISCLOSURE_RULES, D as DisclosureId, E as ERROR_CODES, e as ERROR_CODE_META, f as ErrorCode, g as ErrorStage, Q as QUANTITY_KINDS, h as QuantityKind, i as RepairOperation, j as Severity, k as UNITS, l as UNIT_CODES, m as UnitCode, n as finalizeErrors, o as isSafeDisplayString, p as makeError, q as pointer, s as safeText } from '../errors-DOfZeMp8.cjs';
-import { ValidatedRequest, InputAssurance, ValidateOptions } from '../internal/request-capability.cjs';
-export { ValidationOutcome, isValidatedRequest, parseAndValidateRequest, validateRequestValue } from '../internal/request-capability.cjs';
+import { B as BudgetProfileId, a as ValidatedRequest, I as InputAssurance, V as ValidateOptions } from '../request-YLPWU520.cjs';
+export { b as ValidationOutcome, i as isValidatedRequest, p as parseAndValidateRequest, v as validateRequestValue } from '../request-YLPWU520.cjs';
 export { D as Disclosure, a as DisclosureFacts, d as deriveDisclosures } from '../disclosures-tyvTPm84.cjs';
 import '#cortexel-validated-request-brand';
+
+/**
+ * Resource limits.
+ *
+ * The numbers live in `contract/registries/budget-profiles.v1.json` and are
+ * GENERATED into `src/generated/budgets.ts`. This module is the typed door to
+ * them; it holds no numbers of its own, because a limit that exists in two places
+ * eventually exists at two values.
+ *
+ * The distinction that matters:
+ *
+ *   A HARD LIMIT protects the process. Input above it FAILS.
+ *   A DISPLAY BUDGET controls representation. Every current stable skill selects
+ *   only `none`, so input above it is refused. A future compiler may compact only
+ *   through a named deterministic policy introduced with complete bound output.
+ *
+ * Confusing the two is how a library ends up silently truncating a dataset and
+ * calling the result a figure.
+ */
+
+interface BudgetLimits {
+    readonly rawInputBytes: number;
+    readonly jsonDepth: number;
+    readonly jsonTotalNodes: number;
+    readonly jsonStringLength: number;
+    readonly jsonNumberTokenLength: number;
+    readonly jsonObjectKeys: number;
+    readonly jsonArrayItems: number;
+    readonly observationsPerSeries: number;
+    readonly observationsPerRequest: number;
+    readonly graphNodes: number;
+    readonly graphEdges: number;
+    readonly matrixCells: number;
+    readonly pairwiseOperations: number;
+    readonly visibleMarks: number;
+    readonly svgTextNodes: number;
+    readonly svgBytes: number;
+    readonly sidecarBytes: number;
+    readonly returnedTableRows: number;
+    readonly safeRepairOperations: number;
+    readonly errorRecords: number;
+}
+declare const DEFAULT_PROFILE: BudgetProfileId;
+/** Resolve an untrusted profile id without coercion, prototype lookup, or throwing. */
+declare function tryGetBudgetLimits(profile?: unknown): BudgetLimits | undefined;
+declare function getBudgetLimits(profile?: BudgetProfileId): BudgetLimits;
+interface ResolvedBudgetProfile {
+    readonly profile: BudgetProfileId;
+    readonly limits: BudgetLimits;
+}
+/**
+ * Select the component-wise tighter of two published profiles.
+ *
+ * Profiles are deliberately ordered resource envelopes. If a future registry adds two
+ * incomparable profiles, this returns `undefined` rather than silently mixing them under
+ * a misleading profile id. The generator/test suite then has to establish an explicit
+ * composition contract first.
+ */
+declare function trySelectTighterBudgetProfile(hostProfile: unknown, requestedProfile: unknown): ResolvedBudgetProfile | undefined;
+/**
+ * Lower a limit. There is intentionally no way to RAISE one from here.
+ *
+ * A host that genuinely needs a larger ceiling must construct a separately named
+ * internal profile after an explicit risk review, and the artifact it produces
+ * records that non-standard profile and cannot claim default conformance. An
+ * untrusted caller can never widen a bound by asking nicely.
+ */
+declare function restrictLimits(base: BudgetLimits, overrides: Partial<BudgetLimits>): BudgetLimits;
 
 /**
  * Closed machine-applicable repairs for FigureRequestV1.
@@ -270,4 +338,4 @@ interface MigrationResult {
  */
 declare function migrateLegacyRequest(input: unknown): MigrationResult;
 
-export { type AppliedSafeRepair, BudgetLimits, CanonicalizationError, CortexelError, InputAssurance, JsonValue, LegacyMapEntry, type MigrationReport, type MigrationResult, type Quantity, type QuantitySeries, RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID, Result, type SafeRepairOutcome, ValidateOptions, ValidatedRequest, applySafeRepairs, axesAreCompatible, canonicalDigest, canonicalDigestExcluding, canonicalize, compareUtf16CodeUnits, convert, dimensionOf, isKnownUnit, migrateLegacyRequest, normalizeResponseEventMemberIds, resolveAlias, responseEventMembershipDigest, sha256Digest, sha256Hex, snapshotValue, toSeconds, unitLabel, utf8ByteLength };
+export { type AppliedSafeRepair, type BudgetLimits, BudgetProfileId, CanonicalizationError, CortexelError, DEFAULT_PROFILE, InputAssurance, JsonValue, LegacyMapEntry, type MigrationReport, type MigrationResult, type Quantity, type QuantitySeries, RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID, type ResolvedBudgetProfile, Result, type SafeRepairOutcome, ValidateOptions, ValidatedRequest, applySafeRepairs, axesAreCompatible, canonicalDigest, canonicalDigestExcluding, canonicalize, compareUtf16CodeUnits, convert, dimensionOf, getBudgetLimits, isKnownUnit, migrateLegacyRequest, normalizeResponseEventMemberIds, resolveAlias, responseEventMembershipDigest, restrictLimits, sha256Digest, sha256Hex, snapshotValue, toSeconds, tryGetBudgetLimits, trySelectTighterBudgetProfile, unitLabel, utf8ByteLength };

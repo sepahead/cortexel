@@ -164,7 +164,7 @@
     "lint:package": "publint --pack=false",
     "test:package": "bun scripts/smoke-package.ts",
     "test:python": "python -m unittest discover -s python/tests",
-    "check:python": "mypy --config-file python/pyproject.toml python/src/cortexel && ruff check python/src python/tests scripts/smoke-python-package.py && python -m compileall -q python/src python/tests scripts/smoke-python-package.py",
+    "check:python": "mypy --config-file python/pyproject.toml python/src/cortexel && ruff check python/src python/tests scripts/smoke-python-package.py scripts/inspect-posix-acl.py && python -m compileall -q python/src python/tests scripts/smoke-python-package.py scripts/inspect-posix-acl.py",
     "test:python-package": "python -I -S -B scripts/smoke-python-package.py",
     "prepublishOnly": "bun run release:verify && bun run check:ledger && bun run build && bun run check && bun run check:formal && bun run test:python && bun run check:python && bun run test:python-package && bun run audit && bun run lint:package && bun run test:package && bun run release:verify"
   },

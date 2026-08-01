@@ -1,12 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 
-import { parseJsonStrict } from '../src/core/parse-json.js';
+import {
+  parseJsonStrict,
+  type JsonParseLimits,
+} from '../src/core/parse-json.js';
 import { canonicalize } from '../src/core/canonicalize.js';
 import { getBudgetLimits } from '../src/core/limits.js';
 
 const limits = getBudgetLimits('standard');
 const parse = (text: string) => parseJsonStrict(text, { limits });
+
+describe('strict JSON parser — authority boundary', () => {
+  it('requires only the seven limits the parser actually consumes', () => {
+    const parserOnlyLimits = Object.freeze({
+      rawInputBytes: 64,
+      jsonDepth: 4,
+      jsonTotalNodes: 8,
+      jsonStringLength: 16,
+      jsonNumberTokenLength: 8,
+      jsonObjectKeys: 4,
+      jsonArrayItems: 4,
+    }) satisfies JsonParseLimits;
+
+    expect(parseJsonStrict('{"value":[1,2]}', {
+      limits: parserOnlyLimits,
+    })).toMatchObject({ ok: true });
+  });
+});
 
 function codes(text: string): string[] {
   const result = parse(text);

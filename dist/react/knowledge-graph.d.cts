@@ -88,7 +88,7 @@ interface GraphSearchNode {
     uncalibrated_score?: unknown;
 }
 /** Compute the exact node-id set used by query-aware scene emphasis. Matching
- * evidence-grade edge metadata reveals both incident nodes; WebGL and the DOM
+ * evidence-shaped edge metadata reveals both incident nodes; WebGL and the DOM
  * companion call this same pure helper. */
 declare function graphQueryMatchIds(nodes: readonly GraphSearchNode[], normalizedQuery: string, edges?: readonly GraphEdgeIdentity[]): ReadonlySet<string>;
 /** Query visibility for an edge: a blank query keeps the complete graph, while

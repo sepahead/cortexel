@@ -32,7 +32,10 @@ The private `0.10.0-dev.0` metadata is a development safeguard, not a release. T
 read-only `release:verify` command intentionally fails until a final version, public
 package metadata, matching release records, an annotated tag on clean HEAD, and a real
 artifact source-stamping producer all exist. It is not a normal pull-request success
-criterion.
+criterion. Its Git subprocess boundary is exact, offline-lazy-fetch-disabled, bounded,
+and guardian-supervised, but it still inspects the caller's local repository rather than
+authenticating that repository's own config, `.git` indirection/object alternates, or
+excluding hostile same-UID mutation.
 
 ## Development
 
@@ -197,37 +200,55 @@ network or stacked filesystems, so release evidence must keep the result parent 
 locally administered filesystem with trustworthy ACL semantics.
 
 Every build, install, and runtime probe launched by this Python gate uses a private
-POSIX session/process group. The reviewed lifecycle requires a dedicated CPython
-3.14.x host on macOS or Linux, default `SIGCHLD`, one kernel-visible host thread,
-and `waitid(..., WNOWAIT)`. Result evidence binds the exact patch version, paths,
-and executable bytes; CI currently pins CPython 3.14.6. Linux additionally requires
-readable `/proc/self/task`; Darwin requires the supported `/usr/lib/libproc.dylib`
-`proc_taskinfo` ABI. Missing WNOWAIT, signal-mask, or kernel thread authority fails
-closed. Kqueue process registration/readiness is never child-ownership evidence;
-Darwin may still use a kqueue-backed selector only for pipe descriptors. The gate
-drains captured output under fixed bounds, makes one
-`killpg(SIGKILL)` attempt while the direct leader is still unreaped, re-proves child
-ownership before any direct-PID fallback, performs a bounded pipe drain to EOF or the
-fixed cleanup deadline, and only then reaps. Selector construction or registration
-failure uses direct pipe readiness while the leader remains unreaped; if that path also
-fails, cleanup retains the error and consumes the same deadline without busy-spinning.
-If a pre-signal, fallback, exit-confirmation, or final pre-reap observation
-reports lost ownership, or cannot ultimately prove current ownership, the gate performs
-no later numeric signal or `Popen.wait()` on that identity.
-The sole raw `waitpid` starts only after the final non-reaping ownership observation.
-Crossing that one-way boundary permits no retry, second wait, signal, identity probe,
-or `Popen` state query: a raw-wait exception is terminal, while a successful wait is
-followed only by local status validation and caching. `INT`, `TERM`, and `HUP` are
-deferred until cleanup finishes; they are not forwarded to the reviewed command.
+POSIX session/process group behind a live guardian. The supervisor passes the exact
+target request through an unlinked, byte-bounded descriptor and owns the only write end
+of a close-only control lease. The guardian is the new session/process-group leader and
+forks a non-leader worker; that worker, not the guardian, is the target's immediate
+parent. A target that kills its immediate parent therefore does not release the group
+number used for cleanup. Before target launch the worker restores the default
+`INT`/`TERM`/`HUP` dispositions and explicitly unblocks those signals; blocking them in
+the supervisor is a cleanup mechanism, not a silent change to target signal semantics.
+
+Target completion, worker failure, timeout, output overflow, and deferred
+`INT`/`TERM`/`HUP` all converge on the guardian. It first publishes one canonical,
+nonce-bound status frame and then makes the sole group signal from inside the still-live
+leader with its self-derived process-group identity. The supervisor has no numeric PID
+or PGID signal/probe path. Stdout and stderr are always piped. Before an operation or
+cleanup error is latched, observed bytes share one fixed budget; after that point the
+supervisor drains and discards until EOF or the cleanup deadline rather than claiming a
+whole-throughput count. `capture_output` controls retention only. The supervisor closes
+every parent-owned launch/output descriptor exactly once. A close exception is an
+ambiguous one-way boundary: the descriptor may still be live or its number may already
+have been reused. The smoke worker therefore immediately fail-stops with `_exit(70)` so
+kernel process teardown closes every capability; it never retries the descriptor or
+pretends it can recover in-process. On the ordinary path, only after pipe EOF or the
+cleanup deadline does the supervisor disarm the `Popen` destructor and cross one raw
+`waitpid` boundary. Acceptance requires both the exact status frame and guardian
+termination by `SIGKILL`; an external reap, malformed or absent status, unexpected
+guardian exit, or wait failure fails closed. The boundary requires default `SIGCHLD`
+authority, exactly one Python/kernel-visible thread, no active trace/profile callback,
+and no callable Python signal handler outside the handled cancellation set before
+launch. The supervisor temporarily blocks `SIGCHLD` plus `INT`/`TERM`/`HUP`, restores
+the caller's exact mask afterward, and the worker restores and unblocks the target's
+cancellation signals before execution. No signal, process query, or second wait follows
+the raw reap. Result evidence binds the exact
+CPython patch version, paths, and executable bytes; CI currently pins CPython 3.14.6.
+The current implementation requires POSIX `fork`, `poll`, process groups, sessions, and
+signal masks on macOS or Linux; other hosts fail closed.
 
 This boundary covers descendants only while they remain in that group and retain the
-caller's signal authority. It is not a hostile process sandbox and does not contain a
-descendant that deliberately changes session/group or signaling authority. It also does
-not claim safety against hostile same-process native reapers or unrelated signal
-handlers racing the final proof, uncatchable owner death, kernel/OS failure, or Windows.
-Same-UID descendants can also signal the owner, and a signal outside the deferred
-`INT`/`TERM`/`HUP` set can terminate it. Windows and every other host without the
-reviewed wait/thread primitives fail closed.
+guardian's signal authority. It is not a hostile process sandbox. A same-UID target can
+discover and kill the guardian, deliberately detach or regroup, retain an inherited
+pipe, change credentials or security labels, or signal the supervisor; any of those can
+defeat cleanup or its evidence. Abrupt owner death, hostile same-process descriptor or
+reaper interference, kernel/OS failure, and Windows likewise remain outside the claim.
+Lease EOF provides a cleanup path for ordinary supervisor loss, but it is not an
+owner-death guarantee and cannot help if another process retained the lease descriptor.
+Likewise, a target can stop the complete group, including the guardian; a stopped
+guardian cannot consume lease EOF, and the final blocking wait is not a hostile hard
+deadline. The status frame plus observed `SIGKILL` is not a kernel receipt that the
+guardian delivered that signal: a same-UID target can kill it after the frame and before
+the self-sweep.
 Use a cgroup, VM, or an equivalently strong platform lifetime primitive when those
 capabilities are in scope.
 
@@ -237,13 +258,40 @@ therefore fails closed on Windows; a Windows boundary needs a separately reviewe
 Job Object/process-tree implementation. Release harnesses on macOS or Linux must
 keep the two phases explicit:
 
-The outer synchronous caller starts a supervisor with a fresh closed environment.
-That supervisor creates a detached guardian as the live leader of a new POSIX
-session/process group; the guardian creates a gated non-leader worker, and only the
-worker may start the reviewed target. The outer caller receives a boolean
+The original canonical Node path is source/provenance authority, not direct execution
+authority. Prepare and execute each descriptor-acquire its exact reviewed bytes into
+one current-UID mode-`0700`, operation-scoped private runtime. The source and staged
+SHA-256 values must equal the prepared source-file digest, and both authorities are
+revalidated around every command. The staged Node is both the exact launcher/control
+runtime and the exact reviewed target executable; the source pathname is never selected
+as an executable at that boundary. The synchronous operation disposes its private
+runtime on success or failure before returning.
+
+Ordinary Node/npm version, pack, TypeScript, CLI, and import probes each retain an
+exact 300,000 ms command bound. Only the three sequential cold-cache `npm ci`
+materializations use the shared reviewed-POSIX maximum of 900,000 ms, under the
+closed labels `prepare.npm-ci.core`, `prepare.npm-ci.charts`, and
+`prepare.npm-ci.full`. These are per-command availability bounds, not an aggregate
+prepare deadline or a hostile hard deadline; there is no retry or environment/CLI
+override. Timeout and overflow diagnostics disclose only the fixed operation label
+and numeric bound, never argv, cwd, environment, executable pathname, or child output.
+
+The outer synchronous caller starts that exact staged launcher with a fresh closed
+environment. The launcher starts a supervisor, which creates a detached guardian as
+the live leader of a new POSIX session/process group; the guardian creates a gated
+non-leader worker, and only the worker may start the reviewed target. The outer caller
+receives a boolean
 `guardianArmed` handshake, never a PID or PGID. Target loader/runtime variables are
 carried as bounded JSON and installed only for the target, so they cannot preload
 the supervisor, guardian, or worker.
+
+The launcher seals its exact FIFO/socket lifetime endpoint by signed-decimal
+`dev`/`ino`/`mode`/`nlink`/`uid`/`gid`/`rdev` plus endpoint kind. The supervisor proves
+that identity at its inherited descriptor, retains it through the guardian's canonical
+READY echo, rechecks it, and closes its copy exactly once before publishing the armed
+handshake or sending GO. The guardian likewise proves the same identity before it can
+spawn the worker. A numeric fd reused by Node for an unrelated internal pipe therefore
+cannot satisfy the lifetime gate.
 
 The supervisor is the sole writer of the guardian's control lease. A worker target
 completion or guardian-local worker/protocol failure makes the guardian sweep
@@ -264,12 +312,30 @@ has no numeric fallback on either success or failure. `EPERM`, `ESRCH`, direct
 guardian death, malformed protocol, or uncertain cleanup therefore fail closed
 without signaling a potentially reused PID/PGID.
 
+Every POSIX host-side read that expects a regular file now opens the reviewed path
+with both `O_NOFOLLOW` and `O_NONBLOCK`, then proves regular-file type and the prior
+identity by descriptor before reading. Exchanging the path for a FIFO between
+`lstat` and `open` therefore fails closed instead of turning an authority check into
+an unbounded blocking open. Directory synchronization uses the corresponding
+nonblocking, no-follow, directory-only open profile.
+The POSIX ACL helper is also a reviewed input: Cortexel opens its regular source with
+the no-follow/nonblocking profile under a 64-KiB ceiling, requires its pinned SHA-256,
+executes that exact copied byte sequence through isolated `/usr/bin/python3` stdin,
+and repeats path, descriptor, byte, and digest checks after every invocation. The
+helper admits only enumerable `kind`, `label`, and `value` subject fields; inert
+non-enumerable or symbol metadata is neither enumerated nor propagated, while an
+enumerable extra fails within the three-field projection bound.
+
 This is bounded same-authority group cleanup, not hostile containment. A same-UID
 target can discover or signal the guardian; a target can create another session or
 process group, retain inherited pipes, or change credentials/security labels so the
 guardian's sweep no longer reaches it. Killing the guardian before its self-sweep
-also removes the only in-process cleanup authority. Use an external cgroup, sandbox,
-VM, or equivalent lifetime primitive when those capabilities are in scope.
+also removes the only in-process cleanup authority. A target can also stop the whole
+group. `SIGSTOP` cannot be handled: a stopped guardian cannot consume lease EOF, and
+retained descriptors can keep the synchronous outer caller blocked beyond both the
+selected command timeout and its outer timeout. Those are cooperative bounds, not a
+hostile hard deadline. Use an external cgroup, sandbox, VM, or equivalent lifetime
+primitive when those capabilities are in scope.
 
 ```bash
 bun scripts/smoke-package.ts prepare \
@@ -291,7 +357,7 @@ bun scripts/smoke-package.ts execute \
 envelope: `prepared`/`passed` is written to stdout on exit 0, while `failed` is
 written to stderr on exit 1 with the closed `PACKAGE_SMOKE_FAILED` shape. It is not
 a durable cleanup or release receipt. In particular, it does not embed the
-internal command-v2 guardian records, a digest of every reviewed command result, or
+internal reviewed-command v3 guardian records, a digest of every reviewed command result, or
 the complete harness-source/dependency identity. A release system may retain and
 hash the success envelope as one input, but must also bind the exact Cortexel
 commit/harness bytes, process exit, logs, inspected workspace, and external
@@ -304,18 +370,22 @@ bytes changed across the inspection gap. Preparation makes the workspace
 mode-read-only; the release harness must additionally mount or otherwise retain it
 read-only. The in-process network/write guard is defense in depth; the release
 harness remains responsible for OS-level network denial and for inspecting all
-three reported `nodeModules` trees. Every executable JavaScript entry point is
-invoked through the exact reviewed Node path; package-local shebang shims are
-validated but never trusted for runtime selection.
+three reported `nodeModules` trees. Every executable JavaScript entry point is invoked
+through the operation-scoped staged copy of the exact reviewed Node bytes;
+package-local shebang shims are validated but never trusted for runtime selection.
 
 The v2 prepared state is `cortexel-package-smoke-prepared.v2` in
-`package-smoke-state.v2.json`. Its `runtimeAuthority` binds the canonical Node
+`package-smoke-state.v2.json`. Its `runtimeAuthority` binds the canonical source Node
 executable's stable bytes, metadata, and path ancestry and the canonical npm 10 or
 11 package root's exact manifest/CLI identity plus a bounded recursive seal of
-every directory, ordinary file, and permitted internal direct-file symlink. This
-scope is deliberately named `node-executable-and-npm-package-tree.v1`: it does not
-claim to close Node's dynamic libraries, operating-system services, or the
-TypeScript harness runtime. A release harness must authenticate those external
+every directory, ordinary file, and permitted internal direct-file symlink. It does
+not retain an ephemeral staged pathname, staged acquisition record, or execution-time
+runtime root. A staged acquisition copies the executable and only the bounded, known
+Homebrew-relative `libnode.<number>.dylib` companions required by supported layouts;
+that inventory is not a closed dynamic-library dependency graph. This scope is
+deliberately named `node-executable-and-npm-package-tree.v1`: neither prepared state
+nor staging claims to close Node's dynamic libraries, operating-system services, or
+the TypeScript harness runtime. A release harness must authenticate those external
 authorities independently. The workspace seal binds the finalized root's physical
 identity and exact `0555` mode, every controlling parent-directory identity, and
 all non-state contents; the caller-supplied state digest separately binds the
