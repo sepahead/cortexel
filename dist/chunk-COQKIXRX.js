@@ -3056,6 +3056,122 @@ function legendPlotInset(width, itemCount, hasSubtitle) {
   return (hasSubtitle ? 16 : 0) + rows * LEGEND_ROW_HEIGHT;
 }
 
+// src/render/plan-closure.ts
+var CLOSED_RENDER_PLANS = /* @__PURE__ */ new WeakSet();
+var MAX_CLOSURE_PROBLEMS = 32;
+var MAX_CLOSURE_NODES = 2e6;
+var MAX_CLOSURE_DEPTH = 192;
+var ARRAY_INDEX = /^(?:0|[1-9][0-9]*)$/u;
+function problem(problems, path, message) {
+  if (problems.length < MAX_CLOSURE_PROBLEMS) problems.push({ path, message });
+}
+function inspectPlainTree(value) {
+  const problems = [];
+  const pending = [
+    { value, path: "", depth: 0 }
+  ];
+  const seen = /* @__PURE__ */ new WeakSet();
+  let nodes = 0;
+  while (pending.length > 0 && problems.length < MAX_CLOSURE_PROBLEMS) {
+    const current = pending.pop();
+    const item = current.value;
+    if (item === null || typeof item === "string" || typeof item === "boolean") continue;
+    if (typeof item === "number") {
+      if (!Number.isFinite(item)) problem(problems, current.path, "number is not finite");
+      continue;
+    }
+    if (typeof item !== "object") {
+      problem(problems, current.path, `non-plain value of type ${typeof item} is forbidden`);
+      continue;
+    }
+    if (current.depth > MAX_CLOSURE_DEPTH) {
+      problem(problems, current.path, `plain plan nesting exceeds ${MAX_CLOSURE_DEPTH}`);
+      continue;
+    }
+    if (seen.has(item)) {
+      problem(problems, current.path, "plan graph repeats or cycles through an object identity");
+      continue;
+    }
+    seen.add(item);
+    nodes++;
+    if (nodes > MAX_CLOSURE_NODES) {
+      problem(problems, current.path, `plain plan exceeds ${MAX_CLOSURE_NODES} object/array nodes`);
+      break;
+    }
+    let prototype;
+    let descriptors;
+    try {
+      prototype = Object.getPrototypeOf(item);
+      descriptors = Object.getOwnPropertyDescriptors(item);
+    } catch {
+      problem(problems, current.path, "plan object refused prototype/descriptor inspection");
+      continue;
+    }
+    const array5 = Array.isArray(item);
+    if (array5 && prototype !== Array.prototype || !array5 && prototype !== Object.prototype && prototype !== null) {
+      problem(problems, current.path, "plan contains a non-plain object or array prototype");
+      continue;
+    }
+    const keys = Reflect.ownKeys(descriptors);
+    if (keys.some((key) => typeof key === "symbol")) {
+      problem(problems, current.path, "symbol-keyed plan state is forbidden");
+      continue;
+    }
+    const lengthDescriptor = array5 ? descriptors.length : void 0;
+    const arrayLength = array5 && lengthDescriptor && "value" in lengthDescriptor && Number.isSafeInteger(lengthDescriptor.value) && lengthDescriptor.value >= 0 ? lengthDescriptor.value : null;
+    let arrayIndices = 0;
+    for (const key of keys) {
+      const descriptor = descriptors[key];
+      if (!descriptor || !("value" in descriptor)) {
+        problem(problems, `${current.path}/${key}`, "accessor properties are forbidden");
+        continue;
+      }
+      if (array5 && key === "length") continue;
+      if (!descriptor.enumerable) {
+        problem(problems, `${current.path}/${key}`, "non-enumerable plan state is forbidden");
+        continue;
+      }
+      if (array5) {
+        if (!ARRAY_INDEX.test(key) || arrayLength === null || Number(key) >= arrayLength) {
+          problem(problems, `${current.path}/${key}`, "array has a non-index or out-of-range own property");
+          continue;
+        }
+        arrayIndices++;
+      }
+      pending.push({
+        value: descriptor.value,
+        path: `${current.path}/${key}`,
+        depth: current.depth + 1
+      });
+    }
+    if (array5 && (arrayLength === null || arrayIndices !== arrayLength)) {
+      problem(problems, current.path, "plan arrays must be dense and have an ordinary safe length");
+    }
+  }
+  return problems;
+}
+function closePlainRenderPlanForAuthorityV1(candidate) {
+  const sourceProblems = inspectPlainTree(candidate);
+  if (sourceProblems.length > 0) return { tag: "refused", problems: sourceProblems };
+  let detached;
+  try {
+    detached = structuredClone(candidate);
+  } catch {
+    return {
+      tag: "refused",
+      problems: [{ path: "", message: "plan could not be detached; proxies and non-cloneable atoms are forbidden" }]
+    };
+  }
+  const detachedProblems = inspectPlainTree(detached);
+  if (detachedProblems.length > 0) return { tag: "refused", problems: detachedProblems };
+  const plan = deepFreeze(detached);
+  CLOSED_RENDER_PLANS.add(plan);
+  return { tag: "closed", plan };
+}
+function isClosedPlainRenderPlanForAuthorityV1(value) {
+  return value !== null && typeof value === "object" && CLOSED_RENDER_PLANS.has(value);
+}
+
 // src/render/svg.ts
 var RenderPlanGeometryError = class extends Error {
   constructor(panelId, markPath, message) {
@@ -3554,25 +3670,57 @@ function accessibleDetailText(plan) {
   }
   return details.length > 0 ? details.join(" ") : null;
 }
-function renderSvg(plan, digestOf) {
+var SVG_ID_NAMESPACE = /^[A-Za-z][A-Za-z0-9_-]{0,95}$/u;
+function requireTranslationOnlyContainer(container, plan) {
+  const idNamespace = container.idNamespace;
+  const x = container.x;
+  const y = container.y;
+  const planHasSafeIntegerExtent = Number.isSafeInteger(plan.width) && plan.width > 0 && Number.isSafeInteger(plan.height) && plan.height > 0;
+  if (typeof idNamespace !== "string" || !SVG_ID_NAMESPACE.test(idNamespace) || !Number.isSafeInteger(x) || Object.is(x, -0) || x < 0 || !Number.isSafeInteger(y) || Object.is(y, -0) || y < 0 || !planHasSafeIntegerExtent || x > Number.MAX_SAFE_INTEGER - plan.width || y > Number.MAX_SAFE_INTEGER - plan.height) {
+    throw new Error(
+      "translated SVG fragments require a 1-96 character closed ASCII id namespace, canonical non-negative safe-integer x/y offsets, and safe positive-integer child extents"
+    );
+  }
+  return {
+    idPrefix: `${idNamespace}-${plan.figureId}`,
+    x,
+    y
+  };
+}
+function emitFigureTree(plan, digestOf, container) {
   assertRenderPlanGeometry(plan);
   const colors = theme(plan.themeId);
   const writer = new SvgWriter();
   const accessibilityDetails = accessibleDetailText(plan);
-  writer.open("svg", [
-    ["xmlns", "http://www.w3.org/2000/svg"],
-    ["xmlns:cortexel", "urn:cortexel:metadata:1"],
-    ["viewBox", `0 0 ${plan.width} ${plan.height}`],
-    ["width", plan.width],
-    ["height", plan.height],
-    ["role", "img"],
-    ["aria-labelledby", `${plan.figureId}-title`],
-    ["aria-describedby", accessibilityDetails === null ? `${plan.figureId}-desc` : `${plan.figureId}-desc ${plan.figureId}-details`]
-  ]);
-  writer.text("title", plan.title, [["id", `${plan.figureId}-title`]]);
-  writer.text("desc", plan.accessibility.summary, [["id", `${plan.figureId}-desc`]]);
+  const translation = container.kind === "translated_fragment" ? requireTranslationOnlyContainer(container, plan) : null;
+  const idPrefix = translation?.idPrefix ?? plan.figureId;
+  const labelledBy = `${idPrefix}-title`;
+  const describedBy = accessibilityDetails === null ? `${idPrefix}-desc` : `${idPrefix}-desc ${idPrefix}-details`;
+  if (translation === null) {
+    writer.open("svg", [
+      ["xmlns", "http://www.w3.org/2000/svg"],
+      ["xmlns:cortexel", "urn:cortexel:metadata:1"],
+      ["viewBox", `0 0 ${plan.width} ${plan.height}`],
+      ["width", plan.width],
+      ["height", plan.height],
+      ["role", "img"],
+      ["aria-labelledby", labelledBy],
+      ["aria-describedby", describedBy]
+    ]);
+  } else {
+    writer.open("g", [
+      ["data-cortexel-fragment", "figure"],
+      ["data-cortexel-id-namespace", container.idNamespace],
+      ["transform", `translate(${translation.x} ${translation.y})`],
+      ["role", "img"],
+      ["aria-labelledby", labelledBy],
+      ["aria-describedby", describedBy]
+    ]);
+  }
+  writer.text("title", plan.title, [["id", `${idPrefix}-title`]]);
+  writer.text("desc", plan.accessibility.summary, [["id", `${idPrefix}-desc`]]);
   if (accessibilityDetails !== null) {
-    writer.text("desc", accessibilityDetails, [["id", `${plan.figureId}-details`]]);
+    writer.text("desc", accessibilityDetails, [["id", `${idPrefix}-details`]]);
   }
   writer.open("metadata");
   writer.text("cortexel:contract", ARTIFACT_CONTRACT);
@@ -3781,7 +3929,7 @@ function renderSvg(plan, digestOf) {
     writer.close("g");
   }
   writer.close("g");
-  writer.close("svg");
+  writer.close(translation === null ? "svg" : "g");
   const svg = writer.toString();
   const counts = countPlanResources(plan);
   return {
@@ -3792,6 +3940,9 @@ function renderSvg(plan, digestOf) {
     width: plan.width,
     height: plan.height
   };
+}
+function renderSvg(plan, digestOf) {
+  return emitFigureTree(plan, digestOf, { kind: "document" });
 }
 
 // src/core/deterministic-transcendentals.ts
@@ -7026,122 +7177,6 @@ function withOpacity(hex, opacity) {
   const clamped = Math.max(0, Math.min(1, opacity));
   const alpha = Math.round(clamped * 255).toString(16).padStart(2, "0");
   return `${hex}${alpha}`;
-}
-
-// src/render/plan-closure.ts
-var CLOSED_RENDER_PLANS = /* @__PURE__ */ new WeakSet();
-var MAX_CLOSURE_PROBLEMS = 32;
-var MAX_CLOSURE_NODES = 2e6;
-var MAX_CLOSURE_DEPTH = 192;
-var ARRAY_INDEX = /^(?:0|[1-9][0-9]*)$/u;
-function problem(problems, path, message) {
-  if (problems.length < MAX_CLOSURE_PROBLEMS) problems.push({ path, message });
-}
-function inspectPlainTree(value) {
-  const problems = [];
-  const pending = [
-    { value, path: "", depth: 0 }
-  ];
-  const seen = /* @__PURE__ */ new WeakSet();
-  let nodes = 0;
-  while (pending.length > 0 && problems.length < MAX_CLOSURE_PROBLEMS) {
-    const current = pending.pop();
-    const item = current.value;
-    if (item === null || typeof item === "string" || typeof item === "boolean") continue;
-    if (typeof item === "number") {
-      if (!Number.isFinite(item)) problem(problems, current.path, "number is not finite");
-      continue;
-    }
-    if (typeof item !== "object") {
-      problem(problems, current.path, `non-plain value of type ${typeof item} is forbidden`);
-      continue;
-    }
-    if (current.depth > MAX_CLOSURE_DEPTH) {
-      problem(problems, current.path, `plain plan nesting exceeds ${MAX_CLOSURE_DEPTH}`);
-      continue;
-    }
-    if (seen.has(item)) {
-      problem(problems, current.path, "plan graph repeats or cycles through an object identity");
-      continue;
-    }
-    seen.add(item);
-    nodes++;
-    if (nodes > MAX_CLOSURE_NODES) {
-      problem(problems, current.path, `plain plan exceeds ${MAX_CLOSURE_NODES} object/array nodes`);
-      break;
-    }
-    let prototype;
-    let descriptors;
-    try {
-      prototype = Object.getPrototypeOf(item);
-      descriptors = Object.getOwnPropertyDescriptors(item);
-    } catch {
-      problem(problems, current.path, "plan object refused prototype/descriptor inspection");
-      continue;
-    }
-    const array5 = Array.isArray(item);
-    if (array5 && prototype !== Array.prototype || !array5 && prototype !== Object.prototype && prototype !== null) {
-      problem(problems, current.path, "plan contains a non-plain object or array prototype");
-      continue;
-    }
-    const keys = Reflect.ownKeys(descriptors);
-    if (keys.some((key) => typeof key === "symbol")) {
-      problem(problems, current.path, "symbol-keyed plan state is forbidden");
-      continue;
-    }
-    const lengthDescriptor = array5 ? descriptors.length : void 0;
-    const arrayLength = array5 && lengthDescriptor && "value" in lengthDescriptor && Number.isSafeInteger(lengthDescriptor.value) && lengthDescriptor.value >= 0 ? lengthDescriptor.value : null;
-    let arrayIndices = 0;
-    for (const key of keys) {
-      const descriptor = descriptors[key];
-      if (!descriptor || !("value" in descriptor)) {
-        problem(problems, `${current.path}/${key}`, "accessor properties are forbidden");
-        continue;
-      }
-      if (array5 && key === "length") continue;
-      if (!descriptor.enumerable) {
-        problem(problems, `${current.path}/${key}`, "non-enumerable plan state is forbidden");
-        continue;
-      }
-      if (array5) {
-        if (!ARRAY_INDEX.test(key) || arrayLength === null || Number(key) >= arrayLength) {
-          problem(problems, `${current.path}/${key}`, "array has a non-index or out-of-range own property");
-          continue;
-        }
-        arrayIndices++;
-      }
-      pending.push({
-        value: descriptor.value,
-        path: `${current.path}/${key}`,
-        depth: current.depth + 1
-      });
-    }
-    if (array5 && (arrayLength === null || arrayIndices !== arrayLength)) {
-      problem(problems, current.path, "plan arrays must be dense and have an ordinary safe length");
-    }
-  }
-  return problems;
-}
-function closePlainRenderPlanForAuthorityV1(candidate) {
-  const sourceProblems = inspectPlainTree(candidate);
-  if (sourceProblems.length > 0) return { tag: "refused", problems: sourceProblems };
-  let detached;
-  try {
-    detached = structuredClone(candidate);
-  } catch {
-    return {
-      tag: "refused",
-      problems: [{ path: "", message: "plan could not be detached; proxies and non-cloneable atoms are forbidden" }]
-    };
-  }
-  const detachedProblems = inspectPlainTree(detached);
-  if (detachedProblems.length > 0) return { tag: "refused", problems: detachedProblems };
-  const plan = deepFreeze(detached);
-  CLOSED_RENDER_PLANS.add(plan);
-  return { tag: "closed", plan };
-}
-function isClosedPlainRenderPlanForAuthorityV1(value) {
-  return value !== null && typeof value === "object" && CLOSED_RENDER_PLANS.has(value);
 }
 
 // src/core/output-authority.ts
@@ -25514,4 +25549,4 @@ export {
   buildFigureFromJson,
   buildFigure
 };
-//# sourceMappingURL=chunk-2GFPFZUJ.js.map
+//# sourceMappingURL=chunk-COQKIXRX.js.map

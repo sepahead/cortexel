@@ -6,6 +6,20 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — composition-safe SVG foundation
+
+- The normative SVG serializer now shares one closed writer with a package-private
+  translation-only fragment path for future bounded figure composition. All 19 stable
+  authoring examples retain their exact standalone SVG bytes and artifact digests.
+  Fragment emission requires Cortexel's live closed RenderPlan capability, uses a
+  closed ASCII compiler-supplied ID namespace, rejects noncanonical or unsafe child
+  extents, and permits only an integer translation wrapper—never scaling, clipping,
+  hiding, or mark rewriting. Future bundle compilation must derive namespaces
+  deterministically and prove document-wide uniqueness. This is an internal
+  prerequisite only: no
+  `FigureBundleV1` contract, public bundle API, or cross-figure comparability claim is
+  introduced by this change.
+
 ### Added — coherent knowledge-graph presentation boundary
 
 - A new experimental, peer-free `cortexel/knowledge-graph` subpath exposes

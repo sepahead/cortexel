@@ -18,7 +18,7 @@ import {
 } from "../chunk-HNZNJAWH.js";
 import {
   buildFigureFromJson
-} from "../chunk-2GFPFZUJ.js";
+} from "../chunk-COQKIXRX.js";
 import "../chunk-U7D5HKZJ.js";
 import "../chunk-QZWIZIZR.js";
 import {

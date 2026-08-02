@@ -43,6 +43,7 @@ import {
   legendStartY,
   wrapDisclosureText,
 } from './layout.js';
+import { isClosedPlainRenderPlanForAuthorityV1 } from './plan-closure.js';
 
 /** A closed-plan geometry contradiction. Serialization never repairs or drops it. */
 export class RenderPlanGeometryError extends Error {
@@ -649,37 +650,135 @@ function accessibleDetailText(plan: RenderPlanV1): string | null {
   return details.length > 0 ? details.join(' ') : null;
 }
 
+interface FigureTreeContainer {
+  readonly kind: 'document' | 'translated_fragment';
+  /**
+   * Closed ASCII namespace owned by the future bundle compiler. It is deliberately
+   * separate from `figureId`: two cells may lawfully contain the exact same request,
+   * while SVG fragment identifiers remain document-wide.
+   */
+  readonly idNamespace?: string;
+  readonly x?: number;
+  readonly y?: number;
+}
+
+export interface TranslationOnlySvgFragmentOptions {
+  /** Deterministic compiler-owned namespace, unique within the containing document. */
+  readonly idNamespace: string;
+  /** Non-negative integer translation in the future bundle's exact pixel grid. */
+  readonly x: number;
+  /** Non-negative integer translation in the future bundle's exact pixel grid. */
+  readonly y: number;
+}
+
+export interface TranslationOnlySvgFragmentReport {
+  readonly fragment: string;
+  readonly digest: string;
+  readonly idPrefix: string;
+  readonly markCount: number;
+  readonly textCount: number;
+  readonly width: number;
+  readonly height: number;
+  readonly translation: Readonly<{ x: number; y: number }>;
+}
+
+const SVG_ID_NAMESPACE = /^[A-Za-z][A-Za-z0-9_-]{0,95}$/u;
+
+function requireTranslationOnlyContainer(
+  container: FigureTreeContainer,
+  plan: RenderPlanV1,
+): {
+  readonly idPrefix: string;
+  readonly x: number;
+  readonly y: number;
+} {
+  const idNamespace = container.idNamespace;
+  const x = container.x;
+  const y = container.y;
+  const planHasSafeIntegerExtent =
+    Number.isSafeInteger(plan.width) &&
+    plan.width > 0 &&
+    Number.isSafeInteger(plan.height) &&
+    plan.height > 0;
+  if (
+    typeof idNamespace !== 'string' ||
+    !SVG_ID_NAMESPACE.test(idNamespace) ||
+    !Number.isSafeInteger(x) ||
+    Object.is(x, -0) ||
+    (x as number) < 0 ||
+    !Number.isSafeInteger(y) ||
+    Object.is(y, -0) ||
+    (y as number) < 0 ||
+    !planHasSafeIntegerExtent ||
+    (x as number) > Number.MAX_SAFE_INTEGER - plan.width ||
+    (y as number) > Number.MAX_SAFE_INTEGER - plan.height
+  ) {
+    throw new Error(
+      'translated SVG fragments require a 1-96 character closed ASCII id namespace, canonical non-negative safe-integer x/y offsets, and safe positive-integer child extents',
+    );
+  }
+  return {
+    idPrefix: `${idNamespace}-${plan.figureId}`,
+    x: x as number,
+    y: y as number,
+  };
+}
+
 /**
- * Render a plan to normative SVG. Pure: no clock, no environment, no filesystem, no
- * network, no random state.
+ * Emit the exact figure tree inside either its historical standalone document root or
+ * one future bundle-owned translation wrapper. Keeping both paths in this single
+ * purpose-built writer makes the fragment path incapable of inventing a second mark,
+ * caption, table projection, scale, clip, or hidden subtree.
  */
-export function renderSvg(
+function emitFigureTree(
   plan: RenderPlanV1,
   digestOf: (text: string) => string,
+  container: FigureTreeContainer,
 ): SvgReport {
   assertRenderPlanGeometry(plan);
   const colors = theme(plan.themeId);
   const writer = new SvgWriter();
   const accessibilityDetails = accessibleDetailText(plan);
+  const translation = container.kind === 'translated_fragment'
+    ? requireTranslationOnlyContainer(container, plan)
+    : null;
+  const idPrefix = translation?.idPrefix ?? plan.figureId;
+  const labelledBy = `${idPrefix}-title`;
+  const describedBy = accessibilityDetails === null
+    ? `${idPrefix}-desc`
+    : `${idPrefix}-desc ${idPrefix}-details`;
 
-  writer.open('svg', [
-    ['xmlns', 'http://www.w3.org/2000/svg'],
-    ['xmlns:cortexel', 'urn:cortexel:metadata:1'],
-    ['viewBox', `0 0 ${plan.width} ${plan.height}`],
-    ['width', plan.width],
-    ['height', plan.height],
-    ['role', 'img'],
-    ['aria-labelledby', `${plan.figureId}-title`],
-    ['aria-describedby', accessibilityDetails === null
-      ? `${plan.figureId}-desc`
-      : `${plan.figureId}-desc ${plan.figureId}-details`],
-  ]);
+  if (translation === null) {
+    writer.open('svg', [
+      ['xmlns', 'http://www.w3.org/2000/svg'],
+      ['xmlns:cortexel', 'urn:cortexel:metadata:1'],
+      ['viewBox', `0 0 ${plan.width} ${plan.height}`],
+      ['width', plan.width],
+      ['height', plan.height],
+      ['role', 'img'],
+      ['aria-labelledby', labelledBy],
+      ['aria-describedby', describedBy],
+    ]);
+  } else {
+    // This wrapper intentionally has one geometric operation: integer translation.
+    // It has no viewport, scale, clip, mask, opacity, visibility, or overflow policy.
+    // A future bundle validator must separately prove that the plan's exact width and
+    // height equal the declared cell viewport before this compiler-only path is called.
+    writer.open('g', [
+      ['data-cortexel-fragment', 'figure'],
+      ['data-cortexel-id-namespace', container.idNamespace!],
+      ['transform', `translate(${translation.x} ${translation.y})`],
+      ['role', 'img'],
+      ['aria-labelledby', labelledBy],
+      ['aria-describedby', describedBy],
+    ]);
+  }
 
   // Figure-level title and description use distinct ARIA references.
-  writer.text('title', plan.title, [['id', `${plan.figureId}-title`]]);
-  writer.text('desc', plan.accessibility.summary, [['id', `${plan.figureId}-desc`]]);
+  writer.text('title', plan.title, [['id', `${idPrefix}-title`]]);
+  writer.text('desc', plan.accessibility.summary, [['id', `${idPrefix}-desc`]]);
   if (accessibilityDetails !== null) {
-    writer.text('desc', accessibilityDetails, [['id', `${plan.figureId}-details`]]);
+    writer.text('desc', accessibilityDetails, [['id', `${idPrefix}-details`]]);
   }
 
   // A compact, non-sensitive metadata block. Public identities only — no raw source
@@ -903,7 +1002,7 @@ export function renderSvg(
   }
   writer.close('g');
 
-  writer.close('svg');
+  writer.close(translation === null ? 'svg' : 'g');
 
   const svg = writer.toString();
   const counts = countPlanResources(plan);
@@ -916,4 +1015,55 @@ export function renderSvg(
     width: plan.width,
     height: plan.height,
   };
+}
+
+/**
+ * Render a plan to normative standalone SVG. Pure: no clock, no environment, no
+ * filesystem, no network, no random state. The historical byte sequence is preserved:
+ * the default identity prefix remains exactly `plan.figureId` and the document writer
+ * receives the same ordered attributes and figure body as before this extraction.
+ */
+export function renderSvg(
+  plan: RenderPlanV1,
+  digestOf: (text: string) => string,
+): SvgReport {
+  return emitFigureTree(plan, digestOf, { kind: 'document' });
+}
+
+/**
+ * Package-private foundation for FigureBundleV1. This is intentionally absent from
+ * `cortexel/render-svg`: only a future bundle compiler that already holds closed child
+ * plans may call it. The returned fragment is not a standalone SVG document.
+ */
+export function renderTranslationOnlySvgFragmentForBundleInternal(
+  plan: RenderPlanV1,
+  options: TranslationOnlySvgFragmentOptions,
+  digestOf: (text: string) => string,
+): TranslationOnlySvgFragmentReport {
+  // Preserve the OutputAuthority boundary: unlike the historical internal standalone
+  // writer, this new composition path refuses a copied or caller-constructed plan before
+  // reading any property from it.
+  if (!isClosedPlainRenderPlanForAuthorityV1(plan)) {
+    throw new Error(
+      'translated SVG fragments require the exact closed RenderPlan capability produced by Cortexel',
+    );
+  }
+  const container = {
+    kind: 'translated_fragment',
+    idNamespace: options.idNamespace,
+    x: options.x,
+    y: options.y,
+  } as const;
+  const idPrefix = requireTranslationOnlyContainer(container, plan).idPrefix;
+  const report = emitFigureTree(plan, digestOf, container);
+  return Object.freeze({
+    fragment: report.svg,
+    digest: report.digest,
+    idPrefix,
+    markCount: report.markCount,
+    textCount: report.textCount,
+    width: report.width,
+    height: report.height,
+    translation: Object.freeze({ x: container.x, y: container.y }),
+  });
 }

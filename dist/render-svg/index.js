@@ -2,7 +2,7 @@ import {
   buildFigure,
   buildFigureFromJson,
   buildFigureFromValidated
-} from "../chunk-2GFPFZUJ.js";
+} from "../chunk-COQKIXRX.js";
 import "../chunk-U7D5HKZJ.js";
 import "../chunk-QZWIZIZR.js";
 import "../chunk-3R5OZ4HO.js";
