@@ -35,10 +35,13 @@ import {
   REVIEWED_POSIX_COMMAND_RESULT_SCHEMA,
   REVIEWED_POSIX_GUARDIAN_PAYLOAD_ENV,
   REVIEWED_POSIX_GUARDIAN_READY_SCHEMA,
+  REVIEWED_POSIX_GUARDIAN_SWEEP_INTENT_SCHEMA,
   REVIEWED_POSIX_GUARDIAN_SOURCE,
   REVIEWED_POSIX_LIFETIME_AUTHORITY_SCHEMA,
   REVIEWED_POSIX_OUTER_LAUNCHER_SOURCE,
+  REVIEWED_POSIX_SUPERVISOR_PAYLOAD_ENV,
   REVIEWED_POSIX_SUPERVISOR_SOURCE,
+  REVIEWED_POSIX_TARGET_COMPLETION_SCHEMA,
 } from '../scripts/lib/reviewed-posix-supervisor';
 
 const repositoryRoot = resolve(import.meta.dirname, '..');
@@ -64,6 +67,18 @@ interface HookedRunner {
   readonly hookPath: string;
   readonly outcomePath: string;
   readonly process: ChildProcess;
+}
+
+interface FaultedSupervisorOutcome {
+  readonly completion: {
+    readonly code: number | null;
+    readonly signal: NodeJS.Signals | null;
+  };
+  readonly protocol: Buffer;
+  readonly diagnostic: Buffer;
+  readonly targetStdout: Buffer;
+  readonly targetStderr: Buffer;
+  readonly lifetimeData: Buffer;
 }
 
 function waitForPath(path: string, timeoutMs = 8_000): void {
@@ -291,6 +306,138 @@ describe('reviewed POSIX command boundary', () => {
         env: process.env,
         stdio: 'ignore',
       }),
+    };
+  };
+
+  const supervisorWithGuardianFixture = (guardianFixture: string): string => {
+    const declarationStart = REVIEWED_POSIX_SUPERVISOR_SOURCE.indexOf(
+      'const guardianSource = ',
+    );
+    const declarationEnd = REVIEWED_POSIX_SUPERVISOR_SOURCE.indexOf(
+      '\nconst resultSchema = ',
+      declarationStart,
+    );
+    if (declarationStart < 0 || declarationEnd < 0) {
+      throw new Error('could not locate the embedded guardian source declaration');
+    }
+    return REVIEWED_POSIX_SUPERVISOR_SOURCE.slice(0, declarationStart) +
+      `const guardianSource = ${JSON.stringify(guardianFixture)};` +
+      REVIEWED_POSIX_SUPERVISOR_SOURCE.slice(declarationEnd);
+  };
+
+  const guardianProtocolFixture = (
+    protocol: Buffer,
+    splitAt?: number,
+    controlObservationPath?: string,
+  ): string => {
+    const split = splitAt === undefined ? protocol.byteLength : splitAt;
+    if (!Number.isSafeInteger(split) || split < 0 || split > protocol.byteLength) {
+      throw new Error('guardian protocol fixture split is invalid');
+    }
+    const first = protocol.subarray(0, split).toString('base64');
+    const second = protocol.subarray(split).toString('base64');
+    return `'use strict';
+      const fs = require('node:fs');
+      const first = Buffer.from(${JSON.stringify(first)}, 'base64');
+      const second = Buffer.from(${JSON.stringify(second)}, 'base64');
+      const controlObservationPath = ${JSON.stringify(controlObservationPath ?? null)};
+      const control = [];
+      const sweep = () => {
+        try { process.kill(-process.pid, 'SIGKILL'); } catch { process.exit(70); }
+        setInterval(() => {}, 1000);
+      };
+      if (controlObservationPath !== null) {
+        process.stdin.on('data', (chunk) => control.push(Buffer.from(chunk)));
+        process.stdin.once('end', () => {
+          fs.writeFileSync(controlObservationPath, Buffer.concat(control), {
+            flag: 'wx', mode: 0o600,
+          });
+          sweep();
+        });
+        process.stdin.once('error', () => process.exit(70));
+      }
+      try {
+        if (first.length > 0) fs.writeSync(3, first);
+      } catch {
+        sweep();
+      }
+      if (second.length === 0) {
+        if (controlObservationPath === null) sweep();
+      } else {
+        setTimeout(() => {
+          try { fs.writeSync(3, second); } catch { sweep(); }
+          if (controlObservationPath === null) sweep();
+        }, 25);
+      }`;
+  };
+
+  const runFaultedSupervisor = async (
+    guardianFixture: string,
+  ): Promise<FaultedSupervisorOutcome> => {
+    const payload = JSON.stringify({
+      args: [],
+      cwd: workspace,
+      environment,
+      hasStdin: false,
+      outputLimitBytes: 1_024,
+      targetExecutable: reviewedNode,
+      timeoutMs: 10_000,
+    });
+    const child = spawn(
+      reviewedNode,
+      ['-e', supervisorWithGuardianFixture(guardianFixture)],
+      {
+        cwd: workspace,
+        env: { [REVIEWED_POSIX_SUPERVISOR_PAYLOAD_ENV]: payload },
+        stdio: ['pipe', 'pipe', 'pipe', 'ignore', 'pipe', 'pipe', 'pipe', 'pipe'],
+      },
+    );
+    const completionPromise = new Promise<{
+      readonly code: number | null;
+      readonly signal: NodeJS.Signals | null;
+    }>((resolveCompletion, rejectCompletion) => {
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        rejectCompletion(new Error('faulted supervisor fixture did not close'));
+      }, 15_000);
+      child.once('error', (error) => {
+        clearTimeout(timer);
+        rejectCompletion(error);
+      });
+      // Unlike waitForChildClose, this fixture deliberately waits for `close`,
+      // not merely an observed exitCode, so all inherited pipes are drained.
+      child.once('close', (code, signal) => {
+        clearTimeout(timer);
+        resolveCompletion({ code, signal });
+      });
+    });
+    const protocol: Buffer[] = [];
+    const diagnostic: Buffer[] = [];
+    const targetStdout: Buffer[] = [];
+    const targetStderr: Buffer[] = [];
+    const lifetimeData: Buffer[] = [];
+    const collect = (stream: NodeJS.ReadableStream | null, chunks: Buffer[]): void => {
+      stream?.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+    };
+    const descriptors = child.stdio as unknown as readonly (
+      NodeJS.ReadableStream | null
+    )[];
+    collect(child.stdout, protocol);
+    collect(child.stderr, diagnostic);
+    collect(descriptors[4] ?? null, targetStdout);
+    collect(descriptors[5] ?? null, targetStderr);
+    collect(descriptors[6] ?? null, []);
+    collect(descriptors[7] ?? null, lifetimeData);
+    child.stdin?.on('error', () => {});
+    child.stdin?.write('ARM\n');
+    const completion = await completionPromise;
+    return {
+      completion,
+      protocol: Buffer.concat(protocol),
+      diagnostic: Buffer.concat(diagnostic),
+      targetStdout: Buffer.concat(targetStdout),
+      targetStderr: Buffer.concat(targetStderr),
+      lifetimeData: Buffer.concat(lifetimeData),
     };
   };
 
@@ -1585,6 +1732,164 @@ describe('reviewed POSIX command boundary', () => {
       kind: 'error',
     });
   }, 120_000);
+
+  it('classifies only canonical pre-READY sweep intents without granting authority', async () => {
+    if (workspace === '') return;
+    const preReadyReasons = [
+      'guardian_exception',
+      'guardian_signal',
+      'invalid_lifetime_channel',
+      'invalid_payload',
+      'status_channel_error',
+      'supervisor_lease_closed',
+      'worker_exit',
+      'worker_protocol_eof',
+      'worker_protocol_error',
+      'worker_ready_timeout',
+      'worker_spawn_error',
+    ] as const;
+    for (const [index, reason] of preReadyReasons.entries()) {
+      const frame = Buffer.from(JSON.stringify({
+        completion: null,
+        reason,
+        schema: REVIEWED_POSIX_GUARDIAN_SWEEP_INTENT_SCHEMA,
+      }) + '\n', 'utf8');
+      const controlObservationPath = join(
+        workspace,
+        `pre-ready-${index}-guardian-control.bin`,
+      );
+      const outcome = await runFaultedSupervisor(
+        guardianProtocolFixture(
+          frame,
+          index === 0 ? 13 : undefined,
+          controlObservationPath,
+        ),
+      );
+      expect(outcome.completion).toEqual({ code: 70, signal: null });
+      expect(outcome.protocol).toEqual(Buffer.alloc(0));
+      expect(outcome.targetStdout).toEqual(Buffer.alloc(0));
+      expect(outcome.targetStderr).toEqual(Buffer.alloc(0));
+      expect(outcome.lifetimeData).toEqual(Buffer.alloc(0));
+      // Closing the supervisor lease is the only command sent before READY.
+      // The guardian observes EOF and never receives a GO byte.
+      expect(readFileSync(controlObservationPath)).toEqual(Buffer.alloc(0));
+      expect(outcome.diagnostic.toString('utf8')).toBe(
+        `reviewed Node supervisor protocol failure: guardian swept before READY: ${reason}\n`,
+      );
+    }
+  }, 60_000);
+
+  it('rejects malformed and phase-impossible pre-READY sweep-intent lookalikes', async () => {
+    if (workspace === '') return;
+    const completion = {
+      schema: REVIEWED_POSIX_TARGET_COMPLETION_SCHEMA,
+      signal: null,
+      spawnError: null,
+      status: 0,
+    };
+    const invalidFrames = [
+      // Exact values in a noncanonical member order are not reviewed bytes.
+      `{"reason":"worker_spawn_error","completion":null,"schema":${JSON.stringify(
+        REVIEWED_POSIX_GUARDIAN_SWEEP_INTENT_SCHEMA,
+      )}}\n`,
+      JSON.stringify({
+        completion: null,
+        extra: false,
+        reason: 'worker_spawn_error',
+        schema: REVIEWED_POSIX_GUARDIAN_SWEEP_INTENT_SCHEMA,
+      }) + '\n',
+      JSON.stringify({
+        completion: null,
+        reason: 'worker_spawn_error',
+        schema: 'cortexel-reviewed-posix-guardian-sweep-intent.v0',
+      }) + '\n',
+      JSON.stringify({
+        completion,
+        reason: 'worker_spawn_error',
+        schema: REVIEWED_POSIX_GUARDIAN_SWEEP_INTENT_SCHEMA,
+      }) + '\n',
+      // Both reasons are reachable only after an accepted READY boundary.
+      JSON.stringify({
+        completion: null,
+        reason: 'gate_timeout',
+        schema: REVIEWED_POSIX_GUARDIAN_SWEEP_INTENT_SCHEMA,
+      }) + '\n',
+      JSON.stringify({
+        completion: null,
+        reason: 'invalid_control',
+        schema: REVIEWED_POSIX_GUARDIAN_SWEEP_INTENT_SCHEMA,
+      }) + '\n',
+      JSON.stringify({
+        completion: null,
+        reason: 'worker_control_error',
+        schema: REVIEWED_POSIX_GUARDIAN_SWEEP_INTENT_SCHEMA,
+      }) + '\n',
+      JSON.stringify({
+        completion,
+        reason: 'target_completion',
+        schema: REVIEWED_POSIX_GUARDIAN_SWEEP_INTENT_SCHEMA,
+      }) + '\n',
+      JSON.stringify({
+        completion: null,
+        reason: 'future_unknown_reason',
+        schema: REVIEWED_POSIX_GUARDIAN_SWEEP_INTENT_SCHEMA,
+      }) + '\n',
+      // Duplicate members cannot equal the canonical frame even when JSON.parse
+      // would otherwise retain the final value.
+      `{"completion":null,"reason":"worker_exit","reason":"worker_spawn_error",` +
+        `"schema":${JSON.stringify(REVIEWED_POSIX_GUARDIAN_SWEEP_INTENT_SCHEMA)}}\n`,
+    ];
+    for (const frame of invalidFrames) {
+      const outcome = await runFaultedSupervisor(
+        guardianProtocolFixture(Buffer.from(frame, 'utf8')),
+      );
+      expect(outcome.completion).toEqual({ code: 70, signal: null });
+      expect(outcome.protocol).toEqual(Buffer.alloc(0));
+      expect(outcome.targetStdout).toEqual(Buffer.alloc(0));
+      expect(outcome.targetStderr).toEqual(Buffer.alloc(0));
+      expect(outcome.diagnostic.toString('utf8')).toMatch(
+        /guardian pre-READY sweep-intent frame is invalid/u,
+      );
+      expect(outcome.diagnostic.toString('utf8')).not.toMatch(
+        /guardian swept before READY:/u,
+      );
+    }
+  }, 60_000);
+
+  it('rejects every frame or partial suffix after one pre-READY sweep intent', async () => {
+    if (workspace === '') return;
+    const intent = (reason: 'worker_exit' | 'worker_spawn_error'): Buffer => Buffer.from(
+      JSON.stringify({
+        completion: null,
+        reason,
+        schema: REVIEWED_POSIX_GUARDIAN_SWEEP_INTENT_SCHEMA,
+      }) + '\n',
+      'utf8',
+    );
+    const secondFrame = await runFaultedSupervisor(
+      guardianProtocolFixture(Buffer.concat([
+        intent('worker_spawn_error'),
+        intent('worker_exit'),
+      ])),
+    );
+    expect(secondFrame.completion).toEqual({ code: 70, signal: null });
+    expect(secondFrame.protocol).toEqual(Buffer.alloc(0));
+    expect(secondFrame.diagnostic.toString('utf8')).toMatch(
+      /guardian emitted more than one sweep intent/u,
+    );
+
+    const partialSuffix = await runFaultedSupervisor(
+      guardianProtocolFixture(Buffer.concat([
+        intent('worker_spawn_error'),
+        Buffer.from('{"completion":', 'utf8'),
+      ])),
+    );
+    expect(partialSuffix.completion).toEqual({ code: 70, signal: null });
+    expect(partialSuffix.protocol).toEqual(Buffer.alloc(0));
+    expect(partialSuffix.diagnostic.toString('utf8')).toMatch(
+      /guardian protocol ended with a partial frame/u,
+    );
+  }, 60_000);
 
   it('self-sweeps an invalid lifetime descriptor and has no post-reap signal site', async () => {
     if (workspace === '') return;

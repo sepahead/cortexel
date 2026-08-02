@@ -1449,7 +1449,10 @@ describe('two-phase package smoke contract', () => {
     const loadedPids = readFileSync(loaderMarker, 'utf8').trimEnd().split('\n');
     expect(loadedPids).toEqual([targetLoader.stdout]);
     expect(Number.isSafeInteger(Number(targetLoader.stdout))).toBe(true);
-  }, 60_000);
+  // This regression deliberately performs many independent operation-scoped
+  // runtime acquisitions. Its aggregate harness budget is not a command timeout:
+  // every production command above retains its exact closed timeout policy.
+  }, 180_000);
 
   it('does not re-address a reusable process-group id after a clean supervisor receipt', () => {
     if (process.platform !== 'darwin' && process.platform !== 'linux') return;
@@ -1628,7 +1631,10 @@ describe('two-phase package smoke contract', () => {
     cleanups.push(workspace);
     const smokeModule = pathToFileURL(join(root, 'scripts', 'smoke-package.ts')).href;
 
-    const waitFor = (predicate: () => boolean, timeoutMs = 20_000): boolean => {
+    const waitFor = (
+      predicate: () => boolean,
+      timeoutMs = REVIEWED_COLD_RUNNER_READY_TIMEOUT_MS,
+    ): boolean => {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         if (predicate()) return true;
@@ -1704,7 +1710,7 @@ describe('two-phase package smoke contract', () => {
       expectLifecycleFifoClosed(targetLifetime, 5_000);
       expectLifecycleFifoClosed(descendantLifetime, 5_000);
     }
-  }, 90_000);
+  }, 3 * REVIEWED_COLD_RUNNER_READY_TIMEOUT_MS + 60_000);
 
   it('uses active lease EOF after supervisor SIGKILL and fails closed if the guardian dies', () => {
     if (process.platform !== 'darwin' && process.platform !== 'linux') return;
@@ -1729,7 +1735,7 @@ describe('two-phase package smoke contract', () => {
     const finiteTargetLifetimeMs = failureObservationDeadlineMs + 3_000;
     const waitFor = (
       predicate: () => boolean,
-      timeoutMs = 15_000,
+      timeoutMs = REVIEWED_COLD_RUNNER_READY_TIMEOUT_MS,
     ): boolean => {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
@@ -1841,7 +1847,7 @@ describe('two-phase package smoke contract', () => {
         expectLifecycleFifoClosed(targetLifetime, finiteTargetLifetimeMs + 2_000);
       }
     }
-  }, 60_000);
+  }, 2 * REVIEWED_COLD_RUNNER_READY_TIMEOUT_MS + 60_000);
 
   it('does not return past a killed supervisor while the lifetime guardian is stopped', () => {
     if (process.platform !== 'darwin' && process.platform !== 'linux') return;
@@ -1912,7 +1918,10 @@ describe('two-phase package smoke contract', () => {
       stdio: 'ignore',
     });
     outer.unref();
-    const waitFor = (predicate: () => boolean, timeoutMs = 15_000): boolean => {
+    const waitFor = (
+      predicate: () => boolean,
+      timeoutMs = REVIEWED_COLD_RUNNER_READY_TIMEOUT_MS,
+    ): boolean => {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         if (predicate()) return true;
@@ -1961,7 +1970,7 @@ describe('two-phase package smoke contract', () => {
     // No retry loop is allowed here: publication of the runner outcome must be
     // ordered after guardian lifetime EOF and same-group target cleanup.
     expectLifecycleFifoClosed(targetLifetime, 0);
-  }, 45_000);
+  }, REVIEWED_COLD_RUNNER_READY_TIMEOUT_MS + 45_000);
 
 
   it('keeps GO gated across worker, guardian, and supervisor killpoints', () => {

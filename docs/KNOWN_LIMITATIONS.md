@@ -729,6 +729,12 @@ The machine-readable state of every release gate is in
   guardian exit, then only drains local pipes under a separate bound; neither it nor
   the outer caller signals or probes any numeric identity after the reap. The outer
   caller receives no PID/PGID and has no fallback.
+  A canonical completion-free sweep before READY is accepted only for the closed
+  pre-READY reason set and becomes a terminal diagnostic after the same `SIGKILL`
+  and EOF checks; it cannot publish the public handshake, `GO`, a command result, or
+  target output authority. Completion-bearing, malformed, noncanonical, and
+  lifecycle-impossible frames fail as protocol violations. Post-READY reasons are
+  checked against a separate closed state set.
   Before guardian creation, the launcher activates a dedicated parent-side drain and
   sends one exact ARM frame. The supervisor derives stable `fstat` identity from the
   different child-side FIFO/socket endpoint, binds it through the guardian's canonical

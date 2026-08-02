@@ -318,6 +318,15 @@ explicit production process-group signaling call:
 group number at the call. A non-leader worker remains the target's immediate parent,
 so killing the immediate parent does not remove the group anchor.
 
+If the guardian reaches that sweep before publishing READY, the supervisor admits
+only an exact canonical completion-free intent whose reason belongs to the closed
+pre-READY state. It publishes no public handshake, `GO`, command result, or target
+output authority; it closes the lease idempotently and waits for the same guardian
+`SIGKILL` plus complete pipe-EOF predicates before emitting a bounded terminal
+diagnostic. A completion, a reason reachable only after READY, or any malformed or
+noncanonical lookalike is a protocol failure. The post-READY path independently
+admits only reasons reachable after the accepted READY boundary.
+
 The supervisor observes the guardian's exit exactly once, performs no signal or
 identity probe after that reap, and separately gives stdout, stderr, and the private
 status pipe a bounded interval to reach EOF. It accepts a result only after one

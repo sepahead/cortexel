@@ -647,6 +647,7 @@ let protocolFailureReason = null;
 let guardian = null;
 let guardianReady = null;
 let guardianIntent = null;
+let preReadyFailure = null;
 let guardianProtocol = Buffer.alloc(0);
 let guardianExited = false;
 let guardianExitStatus = undefined;
@@ -829,6 +830,78 @@ const validCompletion = (value) => {
     status: validStatus ? value.status : null,
   };
 };
+const sweepIntentReasons = [
+  'gate_timeout',
+  'guardian_exception',
+  'guardian_signal',
+  'invalid_control',
+  'invalid_lifetime_channel',
+  'invalid_payload',
+  'status_channel_error',
+  'supervisor_lease_closed',
+  'target_completion',
+  'worker_control_error',
+  'worker_exit',
+  'worker_protocol_eof',
+  'worker_protocol_error',
+  'worker_ready_timeout',
+  'worker_spawn_error',
+];
+// These are the only guardian failures reachable before it has published a
+// bound READY frame. Classification grants no execution/result authority: it
+// merely preserves the guardian's closed diagnostic while the supervisor waits
+// for the same terminal SIGKILL plus pipe-EOF predicates as every other sweep.
+const preReadySweepIntentReasons = [
+  'guardian_exception',
+  'guardian_signal',
+  'invalid_lifetime_channel',
+  'invalid_payload',
+  'status_channel_error',
+  'supervisor_lease_closed',
+  'worker_exit',
+  'worker_protocol_eof',
+  'worker_protocol_error',
+  'worker_ready_timeout',
+  'worker_spawn_error',
+];
+const postReadySweepIntentReasons = [
+  'gate_timeout',
+  'guardian_exception',
+  'guardian_signal',
+  'invalid_control',
+  'supervisor_lease_closed',
+  'target_completion',
+  'worker_control_error',
+  'worker_exit',
+  'worker_protocol_eof',
+  'worker_protocol_error',
+];
+const validSweepIntent = (value, raw) => {
+  const keys = value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.keys(value).sort()
+    : [];
+  const completion = value && value.completion === null
+    ? null
+    : validCompletion(value && value.completion);
+  const normalized = value && {
+    completion,
+    reason: value.reason,
+    schema: value.schema,
+  };
+  const canonical = Buffer.from(JSON.stringify(normalized) + '\n', 'utf8');
+  if (
+    JSON.stringify(keys) !== '["completion","reason","schema"]' ||
+    !value ||
+    value.schema !== sweepIntentSchema ||
+    !sweepIntentReasons.includes(value.reason) ||
+    (value.completion !== null && completion === null) ||
+    (value.reason === 'target_completion') !== (completion !== null) ||
+    !raw.equals(canonical)
+  ) {
+    return null;
+  }
+  return normalized;
+};
 const publishTestHookAtomically = (ready) => {
   const finalPath = trustedTestHook.readyPath;
   const stagedPath =
@@ -925,10 +998,33 @@ const acceptGuardianFrame = (raw) => {
     failProtocol('guardian frame is not JSON');
     return;
   }
+  if (guardianIntent !== null) {
+    failProtocol('guardian emitted more than one sweep intent');
+    return;
+  }
   if (guardianReady === null) {
+    const intent = validSweepIntent(value, raw);
+    if (
+      intent !== null &&
+      intent.completion === null &&
+      preReadySweepIntentReasons.includes(intent.reason)
+    ) {
+      guardianIntent = intent;
+      preReadyFailure = intent.reason;
+      clearTimeout(commandTimer);
+      closeSupervisorLease();
+      return;
+    }
     const keys = value && typeof value === 'object' && !Array.isArray(value)
       ? Object.keys(value).sort()
       : [];
+    if (
+      (value && value.schema === sweepIntentSchema) ||
+      JSON.stringify(keys) === '["completion","reason","schema"]'
+    ) {
+      failProtocol('guardian pre-READY sweep-intent frame is invalid');
+      return;
+    }
     const normalized = value && {
       guardianPid: value.guardianPid,
       lifetimeAuthority: normalizeLifetimeAuthority(value.lifetimeAuthority),
@@ -987,51 +1083,15 @@ const acceptGuardianFrame = (raw) => {
     publishHandshakeAndGo();
     return;
   }
-  if (guardianIntent !== null) {
-    failProtocol('guardian emitted more than one sweep intent');
-    return;
-  }
-  const keys = value && typeof value === 'object' && !Array.isArray(value)
-    ? Object.keys(value).sort()
-    : [];
-  const allowedReasons = [
-    'gate_timeout',
-    'guardian_exception',
-    'guardian_signal',
-    'invalid_control',
-    'invalid_lifetime_channel',
-    'invalid_payload',
-    'status_channel_error',
-    'supervisor_lease_closed',
-    'target_completion',
-    'worker_control_error',
-    'worker_exit',
-    'worker_protocol_eof',
-    'worker_protocol_error',
-    'worker_ready_timeout',
-    'worker_spawn_error',
-  ];
-  const completion = value && value.completion === null
-    ? null
-    : validCompletion(value && value.completion);
-  const normalized = value && {
-    completion,
-    reason: value.reason,
-    schema: value.schema,
-  };
-  const canonical = Buffer.from(JSON.stringify(normalized) + '\n', 'utf8');
+  const intent = validSweepIntent(value, raw);
   if (
-    JSON.stringify(keys) !== '["completion","reason","schema"]' ||
-    value.schema !== sweepIntentSchema ||
-    !allowedReasons.includes(value.reason) ||
-    (value.completion !== null && completion === null) ||
-    (value.reason === 'target_completion') !== (completion !== null) ||
-    !raw.equals(canonical)
+    intent === null ||
+    !postReadySweepIntentReasons.includes(intent.reason)
   ) {
     failProtocol('guardian sweep-intent frame is invalid');
     return;
   }
-  guardianIntent = normalized;
+  guardianIntent = intent;
   clearTimeout(commandTimer);
 };
 const captureGuardianProtocol = (chunk) => {
@@ -1130,6 +1190,14 @@ startGuardian = () => {
     }
     if (cancellationStarted) {
       process.exit(cancellationExitCode === null ? 70 : cancellationExitCode);
+      return;
+    }
+    if (preReadyFailure !== null) {
+      if (guardianReady !== null || handshakePublished || goSent) {
+        terminalFailure('pre-READY guardian failure crossed an authority boundary');
+        return;
+      }
+      terminalFailure('guardian swept before READY: ' + preReadyFailure);
       return;
     }
     if (stopAtReadyHook('guardian-swept-before-result')) return;

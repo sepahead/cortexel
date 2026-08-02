@@ -6,6 +6,20 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — pre-READY guardian failure classification
+
+- The reviewed POSIX supervisor now distinguishes an exact canonical guardian
+  sweep intent from the READY frame even when the guardian fails before READY.
+  Only the closed set of completion-free reasons reachable in that lifecycle
+  state is retained; the supervisor publishes no handshake, `GO`, command
+  result, or target output authority, closes its lease idempotently, and waits
+  for the same guardian `SIGKILL` plus complete pipe-EOF predicates before a
+  bounded terminal diagnostic. Malformed, noncanonical, duplicate-member,
+  completion-bearing, and phase-impossible lookalikes still fail as protocol
+  violations. Post-READY intents are now checked against their own reachable
+  reason set. The guardian remains the sole numeric process-group signaler, and
+  neither supervisor nor host adds a post-reap signal or identity probe.
+
 ### Added — NEST example visualization coverage V3
 
 - Added a canonical V3 source-only classification for all 98 pinned NEST 3.10
