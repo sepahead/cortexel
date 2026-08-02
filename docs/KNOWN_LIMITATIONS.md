@@ -223,16 +223,28 @@ The machine-readable state of every release gate is in
   The per-family derivation and rendering gates therefore remain `NOT_RUN`.
   *Gates: R047, R060–R066, R074–R083.*
 - **The pinned NEST example audit is a source classification, not broad NEST support.**
-  [`NEST-EXAMPLE-VISUALIZATION-COVERAGE-V2.md`](./audit/NEST-EXAMPLE-VISUALIZATION-COVERAGE-V2.md)
+  [`NEST-EXAMPLE-VISUALIZATION-COVERAGE-V3.md`](./audit/NEST-EXAMPLE-VISUALIZATION-COVERAGE-V3.md)
   closes all 98 canonical PyNEST example bodies and 11 support/coordinated Python
-  bodies against the exact NEST 3.10 source inventory, then identifies 24 semantic
-  visualization-demand families. Thirteen have a plausible complete stable-skill
-  candidate, four have only a partial candidate, and seven have no current stable
-  candidate. Every execution-bound output, example-specific mapping, executable-adapter
+  bodies against the exact NEST 3.10 source inventory, then identifies 28 semantic
+  visualization-demand families. Fourteen have a plausible complete stable-skill
+  candidate, four have only a partial candidate, and ten have no current stable
+  candidate. V3 binds 35 AST-derived corrections and explicitly inherits 63 unchanged
+  V2 taxonomy rows; its differential oracle is not an independent full reclassification.
+  It verifies the exact 112 selected source leaves and two helper blobs, not Git
+  metadata or every unselected tree byte. Its reviewed generator-source digest is
+  pathname identity read after Python startup, not proof that those bytes executed.
+  Its explicit-binding audit rejects reviewed direct, destructuring, and overlapping
+  rebinding shapes but is not a complete Python alias, reflection, mutation, or
+  control-flow proof.
+  Every execution-bound output, example-specific mapping, executable-adapter
   match, upstream execution, renderer-parity result, and scientific-certification count
   is zero. The one packaged spike-recorder adapter is not asserted to match any official
-  example without an example-specific detached capture and receipt. Presentation gaps
-  include multi-panel composition, compatible overlays/shared axes, uncertainty,
+  example without an example-specific detached capture and receipt. The nine reviewed
+  raster-helper calls compute rates over active senders present in the timestamp carrier,
+  while the separate nonvisual `if_curve.py` surface divides by its complete configured
+  neuron count; those denominators are not interchangeable. Presentation gaps include
+  multi-panel composition, compatible overlays/shared/dual axes, equal-scale generic
+  output-coordinate trajectories, uncertainty,
   source-bound image/animation artifacts, categorical grids, covariance histories, and
   measured 3D geometry.
 - **Render compilers are family-based, not one-file-per-skill.** The blueprint's target is

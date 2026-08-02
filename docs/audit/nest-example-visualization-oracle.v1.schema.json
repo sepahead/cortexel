@@ -1,0 +1,1112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cortexel.dev/schema/audit/nest-example-visualization-oracle.v1.json",
+  "title": "Differential pinned NEST visualization AST oracle V1",
+  "type": "object",
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "nonEmpty": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8000
+    }
+  },
+  "properties": {
+    "protocol": {
+      "const": "cortexel-nest-example-visualization-oracle"
+    },
+    "protocolVersion": {
+      "const": 1
+    },
+    "description": {
+      "$ref": "#/$defs/nonEmpty"
+    },
+    "upstream": {
+      "type": "object",
+      "properties": {
+        "commit": {
+          "const": "acca9704da248750219a027db99fec6cd1f9052a"
+        },
+        "exampleRoot": {
+          "const": "pynest/examples"
+        },
+        "project": {
+          "const": "NEST Simulator"
+        },
+        "release": {
+          "const": "v3.10"
+        },
+        "repository": {
+          "const": "https://github.com/nest/nest-simulator.git"
+        },
+        "rootTreeGitSha1": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      },
+      "required": [
+        "commit",
+        "exampleRoot",
+        "project",
+        "release",
+        "repository",
+        "rootTreeGitSha1"
+      ],
+      "additionalProperties": false
+    },
+    "authorities": {
+      "type": "object",
+      "properties": {
+        "helperSources": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "object",
+              "properties": {
+                "byteLength": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100000
+                },
+                "path": {
+                  "$ref": "#/$defs/nonEmpty"
+                },
+                "sha256": {
+                  "$ref": "#/$defs/sha256"
+                },
+                "verifiedSemantics": {
+                  "type": "object",
+                  "properties": {
+                    "fromDeviceCall": {
+                      "const": "nest.raster_plot.from_device"
+                    },
+                    "histogramBinWidthDefaultMs": {
+                      "const": 5
+                    },
+                    "histogramDefault": {
+                      "const": true
+                    },
+                    "rateFormula": {
+                      "const": "1000 * bin_event_count / (histogram_bin_width_ms * unique_plotted_sender_count)"
+                    },
+                    "senderDenominator": {
+                      "const": "len(numpy.unique(neurons))"
+                    },
+                    "senderDenominatorMeaning": {
+                      "const": "active_senders_present_in_unfiltered_timestamp_carrier"
+                    }
+                  },
+                  "required": [
+                    "fromDeviceCall",
+                    "histogramBinWidthDefaultMs",
+                    "histogramDefault",
+                    "rateFormula",
+                    "senderDenominator",
+                    "senderDenominatorMeaning"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "byteLength",
+                "path",
+                "sha256",
+                "verifiedSemantics"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "byteLength": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100000
+                },
+                "path": {
+                  "$ref": "#/$defs/nonEmpty"
+                },
+                "sha256": {
+                  "$ref": "#/$defs/sha256"
+                },
+                "verifiedSemantics": {
+                  "type": "object",
+                  "properties": {
+                    "extentAspect": {
+                      "const": "equal_xy"
+                    },
+                    "extentAspectCallChain": {
+                      "const": "PlotLayer_PlotTargets_PlotSources_to__draw_extent"
+                    },
+                    "mask": {
+                      "const": "explicit_patch_geometry_when_supplied"
+                    },
+                    "plotSources": {
+                      "const": "point_membership_no_endpoint_lines"
+                    },
+                    "plotTargets": {
+                      "const": "point_membership_no_endpoint_lines"
+                    },
+                    "probabilityParameter": {
+                      "const": "bounded_image_field_clamped_to_zero_one"
+                    }
+                  },
+                  "required": [
+                    "extentAspect",
+                    "extentAspectCallChain",
+                    "mask",
+                    "plotSources",
+                    "plotTargets",
+                    "probabilityParameter"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "byteLength",
+                "path",
+                "sha256",
+                "verifiedSemantics"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "predecessorCoverage": {
+          "type": "object",
+          "properties": {
+            "artifactSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "evidenceTransfer": {
+              "const": "exact_source_identity_and_predecessor_projection_only"
+            },
+            "generatorSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "implementationSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "path": {
+              "const": "docs/audit/nest-example-coverage.v2.json"
+            },
+            "schemaSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "semanticDigest": {
+              "$ref": "#/$defs/sha256"
+            }
+          },
+          "required": [
+            "artifactSha256",
+            "evidenceTransfer",
+            "generatorSha256",
+            "implementationSha256",
+            "path",
+            "schemaSha256",
+            "semanticDigest"
+          ],
+          "additionalProperties": false
+        },
+        "reviewedGeneratorSource": {
+          "type": "object",
+          "properties": {
+            "byteLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000
+            },
+            "executionBinding": {
+              "const": "not_established_path_bytes_read_after_interpreter_start"
+            },
+            "path": {
+              "const": "scripts/generate-nest-example-visualization-oracle.py"
+            },
+            "profile": {
+              "const": "python_stdlib_ast_differential_reviewed_source.v1"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          },
+          "required": [
+            "byteLength",
+            "executionBinding",
+            "path",
+            "profile",
+            "sha256"
+          ],
+          "additionalProperties": false
+        },
+        "sourceInventory": {
+          "type": "object",
+          "properties": {
+            "inventoryDigest": {
+              "$ref": "#/$defs/sha256"
+            },
+            "path": {
+              "const": "docs/audit/nest-example-source-inventory.v2.json"
+            },
+            "verifiedRegularPythonBodyCount": {
+              "const": 109
+            },
+            "verifiedSourceLeafCount": {
+              "const": 112
+            },
+            "verifiedSymlinkLiteralCount": {
+              "const": 3
+            }
+          },
+          "required": [
+            "inventoryDigest",
+            "path",
+            "verifiedRegularPythonBodyCount",
+            "verifiedSourceLeafCount",
+            "verifiedSymlinkLiteralCount"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "helperSources",
+        "predecessorCoverage",
+        "reviewedGeneratorSource",
+        "sourceInventory"
+      ],
+      "additionalProperties": false
+    },
+    "method": {
+      "type": "object",
+      "properties": {
+        "canonicalizationProfile": {
+          "const": "ascii_object_keys_integer_string_boolean_null_rfc8785_subset_v1"
+        },
+        "closedSetDerivation": {
+          "const": "AST call_and_keyword_shapes_plus_exact_helper_semantics"
+        },
+        "parser": {
+          "const": "python_stdlib_ast_no_import_no_execution"
+        },
+        "generatorExecutionAuthority": {
+          "const": "not_established"
+        },
+        "sourceVerification": {
+          "const": "all_112_source_leaf_sha256_and_byte_lengths_against_v2_inventory"
+        },
+        "taxonomyBasis": {
+          "const": "v2_projection_inherited_with_ast_derived_closed_correction_sets"
+        },
+        "upstreamTreeIdentity": {
+          "const": "inherited_exact_v2_inventory_claim_not_independently_reverified_by_oracle"
+        }
+      },
+      "required": [
+        "canonicalizationProfile",
+        "closedSetDerivation",
+        "parser",
+        "generatorExecutionAuthority",
+        "sourceVerification",
+        "taxonomyBasis",
+        "upstreamTreeIdentity"
+      ],
+      "additionalProperties": false
+    },
+    "derivedPathSets": {
+      "type": "object",
+      "properties": {
+        "rasterPlotFromDeviceCallProfiles": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 9,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "properties": {
+              "histogramArgument": {
+                "enum": [
+                  "helper_default_true",
+                  "literal_true"
+                ]
+              },
+              "histogramBinWidthMsLiteralValue": {
+                "enum": [
+                  "helper_default_5.0",
+                  "100.0"
+                ]
+              },
+              "lineAnchor": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^pynest/examples/.+\\.py$",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "histogramArgument",
+              "histogramBinWidthMsLiteralValue",
+              "lineAnchor",
+              "path"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "rasterPlotFromDevicePaths": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 9,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^pynest/examples/.+\\.py$",
+            "maxLength": 300
+          }
+        },
+        "sharedXAxisPaths": {
+          "type": "array",
+          "minItems": 14,
+          "maxItems": 14,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^pynest/examples/.+\\.py$",
+            "maxLength": 300
+          }
+        },
+        "sharedYAxisPaths": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^pynest/examples/.+\\.py$",
+            "maxLength": 300
+          }
+        },
+        "spatial2dCallProfiles": {
+          "type": "array",
+          "minItems": 12,
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "properties": {
+              "constructorLineAnchors": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 16,
+                "uniqueItems": true,
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                }
+              },
+              "consumerLineAnchors": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                }
+              },
+              "dimension": {
+                "const": 2
+              },
+              "equalScaleLineAnchors": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 16,
+                "uniqueItems": true,
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                }
+              },
+              "helperBranch": {
+                "const": "reviewed_2d_constructor_and_helper_branch_syntax"
+              },
+              "layerCreationLineAnchors": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 16,
+                "uniqueItems": true,
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                }
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^pynest/examples/.+\\.py$",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "constructorLineAnchors",
+              "consumerLineAnchors",
+              "dimension",
+              "equalScaleLineAnchors",
+              "helperBranch",
+              "layerCreationLineAnchors",
+              "path"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "spatialMaskPaths": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^pynest/examples/.+\\.py$",
+            "maxLength": 300
+          }
+        },
+        "spatialNeighborhoodMembershipPaths": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^pynest/examples/.+\\.py$",
+            "maxLength": 300
+          }
+        },
+        "spatialNodeMapPaths": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^pynest/examples/.+\\.py$",
+            "maxLength": 300
+          }
+        },
+        "spatialProbabilityFieldPaths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^pynest/examples/.+\\.py$",
+            "maxLength": 300
+          }
+        },
+        "spatialReviewedPaths": {
+          "type": "array",
+          "minItems": 12,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^pynest/examples/.+\\.py$",
+            "maxLength": 300
+          }
+        },
+        "trajectory2dCallProfiles": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "properties": {
+              "carrier": {
+                "const": "two_component_readout_and_target_output_coordinates"
+              },
+              "dimension": {
+                "const": 2
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^pynest/examples/.+\\.py$",
+                "maxLength": 300
+              },
+              "sourceLineAnchors": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                }
+              }
+            },
+            "required": [
+              "carrier",
+              "dimension",
+              "path",
+              "sourceLineAnchors"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "trajectory2dPaths": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^pynest/examples/.+\\.py$",
+            "maxLength": 300
+          }
+        }
+      },
+      "required": [
+        "rasterPlotFromDeviceCallProfiles",
+        "rasterPlotFromDevicePaths",
+        "sharedXAxisPaths",
+        "sharedYAxisPaths",
+        "spatial2dCallProfiles",
+        "spatialMaskPaths",
+        "spatialNeighborhoodMembershipPaths",
+        "spatialNodeMapPaths",
+        "spatialProbabilityFieldPaths",
+        "spatialReviewedPaths",
+        "trajectory2dCallProfiles",
+        "trajectory2dPaths"
+      ],
+      "additionalProperties": false
+    },
+    "correctionEvidence": {
+      "type": "array",
+      "minItems": 35,
+      "maxItems": 35,
+      "items": {
+        "type": "object",
+        "properties": {
+          "astEvidence": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "equal_xy_trajectory",
+                    "raster_helper_bundle",
+                    "response_curve",
+                    "shared_x_axis",
+                    "shared_y_axis",
+                    "single_panel_dual_dimension",
+                    "spatial_mask",
+                    "spatial_neighborhood_membership",
+                    "spatial_node_map",
+                    "spatial_probability_field"
+                  ]
+                },
+                "lineAnchors": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 64,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000
+                  }
+                }
+              },
+              "required": [
+                "kind",
+                "lineAnchors"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "categories": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "equal_xy_trajectory",
+                "raster_helper_bundle",
+                "response_curve",
+                "shared_x_axis",
+                "shared_y_axis",
+                "single_panel_dual_dimension",
+                "spatial_mask",
+                "spatial_neighborhood_membership",
+                "spatial_node_map",
+                "spatial_probability_field"
+              ]
+            }
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^pynest/examples/.+\\.py$",
+            "maxLength": 300
+          },
+          "predecessorProjectionDigest": {
+            "$ref": "#/$defs/sha256"
+          },
+          "v3ProjectionDigest": {
+            "$ref": "#/$defs/sha256"
+          }
+        },
+        "required": [
+          "astEvidence",
+          "categories",
+          "path",
+          "predecessorProjectionDigest",
+          "v3ProjectionDigest"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "expectedCanonicalProjections": {
+      "type": "array",
+      "minItems": 98,
+      "maxItems": 98,
+      "items": {
+        "type": "object",
+        "properties": {
+          "classification": {
+            "enum": [
+              "corrected",
+              "semantic_projection_unchanged"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^pynest/examples/.+\\.py$",
+            "maxLength": 300
+          },
+          "predecessorProjectionDigest": {
+            "$ref": "#/$defs/sha256"
+          },
+          "presentationDemands": {
+            "type": "array",
+            "maxItems": 14,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "animation_frames",
+                "color_scale",
+                "cross_capability_bundle",
+                "dual_y_axis",
+                "equal_xy_scale",
+                "error_bars",
+                "live_incremental_redraw",
+                "multi_panel",
+                "same_axis_overlay",
+                "shared_x_axis",
+                "shared_y_axis",
+                "single_panel",
+                "static_file_export",
+                "uncertainty_band"
+              ]
+            }
+          },
+          "semanticDemands": {
+            "type": "array",
+            "maxItems": 28,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "active_sender_normalized_rate",
+                "analog_trace",
+                "animation_sequence",
+                "categorical_state_grid",
+                "compartment_trace",
+                "connection_graph",
+                "covariance_matrix_lag_series",
+                "generic_distribution",
+                "image_frame",
+                "isi_distribution",
+                "learning_metric_series",
+                "multisignal_trace",
+                "optimization_search",
+                "phase_plane",
+                "population_rate",
+                "population_summary_trace",
+                "psth",
+                "response_curve",
+                "spatial_map_3d",
+                "spatial_neighborhood_membership_2d",
+                "spatial_node_map_2d",
+                "spatial_probability_field_2d",
+                "spike_raster",
+                "structural_plasticity_history",
+                "synaptic_weight_trace",
+                "trajectory_2d",
+                "weight_distribution",
+                "weight_matrix"
+              ]
+            }
+          },
+          "sourceSha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "v3ProjectionDigest": {
+            "$ref": "#/$defs/sha256"
+          },
+          "visualOperations": {
+            "type": "array",
+            "maxItems": 17,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "bar",
+                "error_bar",
+                "filled_band",
+                "heatmap",
+                "histogram",
+                "image",
+                "line",
+                "network_edges",
+                "point",
+                "probability_field",
+                "raster",
+                "spatial_mask",
+                "spatial_points_2d",
+                "spatial_points_3d",
+                "step",
+                "trajectory_2d",
+                "vector_field"
+              ]
+            }
+          }
+        },
+        "required": [
+          "classification",
+          "path",
+          "predecessorProjectionDigest",
+          "presentationDemands",
+          "semanticDemands",
+          "sourceSha256",
+          "v3ProjectionDigest",
+          "visualOperations"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "computedNonvisualOutputs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "axes": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "const": "I_mean"
+              },
+              {
+                "const": "I_std"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "carrier": {
+            "const": "IF_curve.rate"
+          },
+          "coverageDenominator": {
+            "const": "separate_nonvisual_computed_output_not_a_visualization_body"
+          },
+          "denominator": {
+            "const": "configured_self_n_neurons_times_self_t_sim_ms"
+          },
+          "denominatorMeaning": {
+            "const": "all_neurons_created_for_each_trial_not_only_senders_with_recorded_events"
+          },
+          "kind": {
+            "const": "computed_response_surface_2d_no_visualization_operation"
+          },
+          "normalizationFormula": {
+            "const": "n_events * 1000.0 / (1.0 * self.n_neurons * self.t_sim)"
+          },
+          "populationConnection": {
+            "const": "nest.Connect(self.neuron,self.spike_recorder,all_to_all)"
+          },
+          "path": {
+            "const": "pynest/examples/if_curve.py"
+          },
+          "sourceLineAnchors": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            }
+          },
+          "sourceLineAnchorMeaning": {
+            "const": "ast_derived_navigation_only_full_source_sha256_is_authority"
+          },
+          "sourceSha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "trialOrder": {
+            "const": "fresh_build_then_connect_then_simulate_then_read_n_events"
+          },
+          "value": {
+            "const": "configured_complete_population_mean_firing_rate_hz"
+          }
+        },
+        "required": [
+          "axes",
+          "carrier",
+          "coverageDenominator",
+          "denominator",
+          "denominatorMeaning",
+          "kind",
+          "normalizationFormula",
+          "populationConnection",
+          "path",
+          "sourceLineAnchors",
+          "sourceLineAnchorMeaning",
+          "sourceSha256",
+          "trialOrder",
+          "value"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "aggregateExpectations": {
+          "type": "object",
+          "properties": {
+            "activeSenderNormalizedRateDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "analogTraceDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "crossCapabilityBundleDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "dualYAxisDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "equalXYScaleDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "histogramOperationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "imageOperationCountCanonicalOnly": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "multiPanelDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "networkEdgesOperationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "populationRateDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "probabilityFieldOperationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "responseCurveDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "sharedXAxisDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "sharedYAxisDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "singlePanelDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "spatialMaskOperationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "spatialNeighborhoodMembershipDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "spatialNodeMapDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "spatialProbabilityFieldDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "trajectory2dDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "trajectory2dOperationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            }
+          },
+          "required": [
+            "activeSenderNormalizedRateDemandCount",
+            "analogTraceDemandCount",
+            "crossCapabilityBundleDemandCount",
+            "dualYAxisDemandCount",
+            "equalXYScaleDemandCount",
+            "histogramOperationCount",
+            "imageOperationCountCanonicalOnly",
+            "multiPanelDemandCount",
+            "networkEdgesOperationCount",
+            "populationRateDemandCount",
+            "probabilityFieldOperationCount",
+            "responseCurveDemandCount",
+            "sharedXAxisDemandCount",
+            "sharedYAxisDemandCount",
+            "singlePanelDemandCount",
+            "spatialMaskOperationCount",
+            "spatialNeighborhoodMembershipDemandCount",
+            "spatialNodeMapDemandCount",
+            "spatialProbabilityFieldDemandCount",
+            "trajectory2dDemandCount",
+            "trajectory2dOperationCount"
+          ],
+          "additionalProperties": false
+        },
+        "canonicalExampleCount": {
+          "const": 98
+        },
+        "computedNonvisualOutputCount": {
+          "const": 1
+        },
+        "correctedCanonicalProjectionCount": {
+          "const": 35
+        },
+        "helperSourceSha256VerifiedCount": {
+          "const": 2
+        },
+        "imageOperationCountAllRegularBodies": {
+          "const": 4
+        },
+        "sourceLeafSha256VerifiedCount": {
+          "const": 112
+        },
+        "unchangedCanonicalProjectionCount": {
+          "const": 63
+        }
+      },
+      "required": [
+        "aggregateExpectations",
+        "canonicalExampleCount",
+        "computedNonvisualOutputCount",
+        "correctedCanonicalProjectionCount",
+        "helperSourceSha256VerifiedCount",
+        "imageOperationCountAllRegularBodies",
+        "sourceLeafSha256VerifiedCount",
+        "unchangedCanonicalProjectionCount"
+      ],
+      "additionalProperties": false
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/nonEmpty"
+      }
+    },
+    "semanticBinding": {
+      "type": "object",
+      "properties": {
+        "digestScope": {
+          "const": "all_top_level_members_except_semanticBinding"
+        },
+        "identityAlgorithm": {
+          "const": "cortexel-nest-example-visualization-oracle.semantic.rfc8785-sha256.v1"
+        },
+        "semanticDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "digestScope",
+        "identityAlgorithm",
+        "semanticDigest"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "protocol",
+    "protocolVersion",
+    "description",
+    "upstream",
+    "authorities",
+    "method",
+    "derivedPathSets",
+    "correctionEvidence",
+    "expectedCanonicalProjections",
+    "computedNonvisualOutputs",
+    "summary",
+    "limitations",
+    "semanticBinding"
+  ],
+  "additionalProperties": false
+}

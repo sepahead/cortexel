@@ -6,6 +6,34 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — NEST example visualization coverage V3
+
+- Added a canonical V3 source-only classification for all 98 pinned NEST 3.10
+  canonical PyNEST example bodies. A standard-library Python AST oracle verifies
+  all 112 selected source-leaf identities and the exact raster/spatial helpers,
+  derives a closed 35-row correction union, and labels the other 63 taxonomy rows
+  as inherited V2 review. Exact raw authorities, domain-separated semantic
+  bindings, strict schemas, deterministic regeneration, ledger integration, and
+  property/negative tests fail closed on byte, digest, vocabulary, aggregate, or
+  projection drift.
+- Corrected raster-helper histogram/rate semantics, HH response-curve axes,
+  single-panel intrinsic-current dual-y presentation, two-dimensional spatial
+  membership/node/probability/mask operations, shared axes, and equal-scale
+  output-coordinate trajectories. Active-sender raster normalization remains
+  explicitly distinct from `if_curve.py`'s complete-configured-population
+  nonvisual response surface, and output-coordinate paths are not mislabeled as
+  phase-plane state dynamics. This adds classification evidence and a roadmap,
+  not example execution, adapter admission, renderer parity, or scientific
+  certification.
+- The differential oracle retains per-row AST evidence, binds each corrected 2D
+  spatial callsite to reviewed two-dimensional constructor and helper syntax,
+  binds generic trajectory plots to exact readout/target coordinate carriers,
+  and retains conservative explicit-binding anchors for `if_curve.py`'s
+  recorder-to-retained-surface path. This is not a complete Python alias,
+  reflection, mutation, control-flow, or runtime-execution proof.
+  Ordinary TypeScript build/check remains Python-free; the isolated no-site Python
+  self-check is a separate gate. Generator pathname bytes are identified only as
+  reviewed source, never misrepresented as proof of executed bytes.
 ### Changed — live built-result authority
 
 - Fully successful `FigureResult` objects now receive package-private, identity-based

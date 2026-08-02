@@ -1,0 +1,1438 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cortexel.dev/schema/audit/nest-example-coverage.v3.json",
+  "title": "Cortexel pinned NEST PyNEST-example visualization classification V3",
+  "type": "object",
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "gitSha1": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "nonEmpty": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8000
+    },
+    "semanticDemandId": {
+      "enum": [
+        "active_sender_normalized_rate",
+        "analog_trace",
+        "animation_sequence",
+        "categorical_state_grid",
+        "compartment_trace",
+        "connection_graph",
+        "covariance_matrix_lag_series",
+        "generic_distribution",
+        "image_frame",
+        "isi_distribution",
+        "learning_metric_series",
+        "multisignal_trace",
+        "optimization_search",
+        "phase_plane",
+        "population_rate",
+        "population_summary_trace",
+        "psth",
+        "response_curve",
+        "spatial_map_3d",
+        "spatial_neighborhood_membership_2d",
+        "spatial_node_map_2d",
+        "spatial_probability_field_2d",
+        "spike_raster",
+        "structural_plasticity_history",
+        "synaptic_weight_trace",
+        "trajectory_2d",
+        "weight_distribution",
+        "weight_matrix"
+      ]
+    },
+    "presentationDemandId": {
+      "enum": [
+        "animation_frames",
+        "color_scale",
+        "cross_capability_bundle",
+        "dual_y_axis",
+        "equal_xy_scale",
+        "error_bars",
+        "live_incremental_redraw",
+        "multi_panel",
+        "same_axis_overlay",
+        "shared_x_axis",
+        "shared_y_axis",
+        "single_panel",
+        "static_file_export",
+        "uncertainty_band"
+      ]
+    },
+    "visualOperationId": {
+      "enum": [
+        "bar",
+        "error_bar",
+        "filled_band",
+        "heatmap",
+        "histogram",
+        "image",
+        "line",
+        "network_edges",
+        "point",
+        "probability_field",
+        "raster",
+        "spatial_mask",
+        "spatial_points_2d",
+        "spatial_points_3d",
+        "step",
+        "trajectory_2d",
+        "vector_field"
+      ]
+    },
+    "body": {
+      "type": "object",
+      "properties": {
+        "entrypointId": {
+          "$ref": "#/$defs/sha256"
+        },
+        "canonicalSourceId": {
+          "$ref": "#/$defs/sha256"
+        },
+        "aliasPaths": {
+          "type": "array",
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          }
+        },
+        "documentationSelectedPaths": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          }
+        },
+        "runnerSelectedPaths": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          }
+        },
+        "role": {
+          "enum": [
+            "support_module",
+            "coordinated_component"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^pynest/examples/.+\\.py$",
+          "maxLength": 300
+        },
+        "sourceId": {
+          "$ref": "#/$defs/sha256"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "gitBlobSha1": {
+          "$ref": "#/$defs/gitSha1"
+        },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "gitMode": {
+          "enum": [
+            "100644",
+            "100755"
+          ]
+        },
+        "selectorMembership": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "docs_direct",
+              "runner_candidate",
+              "runner_default",
+              "runner_skipped"
+            ]
+          }
+        },
+        "visualizationStatus": {
+          "enum": [
+            "active_visualization",
+            "visualization_import_only",
+            "no_visualization_operation"
+          ]
+        },
+        "semanticDemands": {
+          "type": "array",
+          "maxItems": 28,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/semanticDemandId"
+          }
+        },
+        "presentationDemands": {
+          "type": "array",
+          "maxItems": 14,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/presentationDemandId"
+          }
+        },
+        "visualOperations": {
+          "type": "array",
+          "maxItems": 17,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/visualOperationId"
+          }
+        },
+        "sourceEvidence": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "const": "complete_pinned_source_body_review_not_executed"
+            },
+            "lineAnchors": {
+              "type": "array",
+              "maxItems": 16,
+              "uniqueItems": true,
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000
+              }
+            },
+            "lineAnchorMeaning": {
+              "const": "review_navigation_only_full_source_hash_is_the_byte_authority"
+            }
+          },
+          "required": [
+            "state",
+            "lineAnchors",
+            "lineAnchorMeaning"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "path",
+        "sourceId",
+        "sha256",
+        "gitBlobSha1",
+        "byteLength",
+        "gitMode",
+        "selectorMembership",
+        "visualizationStatus",
+        "semanticDemands",
+        "presentationDemands",
+        "visualOperations",
+        "sourceEvidence"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "visualizationStatus": {
+                "const": "active_visualization"
+              }
+            },
+            "required": [
+              "visualizationStatus"
+            ]
+          },
+          "then": {
+            "properties": {
+              "semanticDemands": {
+                "type": "array",
+                "minItems": 1
+              },
+              "presentationDemands": {
+                "type": "array",
+                "minItems": 1
+              },
+              "visualOperations": {
+                "type": "array",
+                "minItems": 1
+              },
+              "sourceEvidence": {
+                "type": "object",
+                "properties": {
+                  "lineAnchors": {
+                    "type": "array",
+                    "minItems": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "visualizationStatus": {
+                "const": "visualization_import_only"
+              }
+            },
+            "required": [
+              "visualizationStatus"
+            ]
+          },
+          "then": {
+            "properties": {
+              "semanticDemands": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "presentationDemands": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "visualOperations": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "sourceEvidence": {
+                "type": "object",
+                "properties": {
+                  "lineAnchors": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "visualizationStatus": {
+                "const": "no_visualization_operation"
+              }
+            },
+            "required": [
+              "visualizationStatus"
+            ]
+          },
+          "then": {
+            "properties": {
+              "semanticDemands": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "presentationDemands": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "visualOperations": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "sourceEvidence": {
+                "type": "object",
+                "properties": {
+                  "lineAnchors": {
+                    "type": "array",
+                    "maxItems": 0
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "semanticDemandDefinition": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/semanticDemandId"
+        },
+        "description": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "stableRepresentability": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "enum": [
+                "source_review_candidate",
+                "partial_source_review_candidate",
+                "no_stable_candidate"
+              ]
+            },
+            "skillCandidates": {
+              "type": "array",
+              "maxItems": 4,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/nonEmpty"
+              }
+            }
+          },
+          "required": [
+            "state",
+            "skillCandidates"
+          ],
+          "additionalProperties": false
+        },
+        "executableAdapter": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "enum": [
+                "one_profile_available_no_example_match",
+                "none"
+              ]
+            },
+            "adapterCandidates": {
+              "type": "array",
+              "maxItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/nonEmpty"
+              }
+            }
+          },
+          "required": [
+            "state",
+            "adapterCandidates"
+          ],
+          "additionalProperties": false
+        },
+        "renderer": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "enum": [
+                "packaged_candidate_no_upstream_comparison",
+                "partial_candidate_no_upstream_comparison",
+                "none"
+              ]
+            },
+            "rendererCandidates": {
+              "type": "array",
+              "maxItems": 4,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/nonEmpty"
+              }
+            }
+          },
+          "required": [
+            "state",
+            "rendererCandidates"
+          ],
+          "additionalProperties": false
+        },
+        "upstreamParity": {
+          "const": "not_run"
+        },
+        "scientificCertification": {
+          "const": "not_run"
+        },
+        "notes": {
+          "$ref": "#/$defs/nonEmpty"
+        }
+      },
+      "required": [
+        "id",
+        "description",
+        "stableRepresentability",
+        "executableAdapter",
+        "renderer",
+        "upstreamParity",
+        "scientificCertification",
+        "notes"
+      ],
+      "additionalProperties": false
+    },
+    "axis": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "state": {
+          "$ref": "#/$defs/nonEmpty"
+        }
+      },
+      "required": [
+        "id",
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "alias": {
+      "type": "object",
+      "properties": {
+        "aliasId": {
+          "$ref": "#/$defs/sha256"
+        },
+        "aliasPath": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "aliasSourceId": {
+          "$ref": "#/$defs/sha256"
+        },
+        "canonicalSourceId": {
+          "$ref": "#/$defs/sha256"
+        },
+        "classification": {
+          "const": "alias_not_an_additional_python_body"
+        },
+        "resolutionStatus": {
+          "const": "resolved"
+        },
+        "resolvedTargetPath": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "targetLiteral": {
+          "$ref": "#/$defs/nonEmpty"
+        }
+      },
+      "required": [
+        "aliasId",
+        "aliasPath",
+        "aliasSourceId",
+        "canonicalSourceId",
+        "classification",
+        "resolutionStatus",
+        "resolvedTargetPath",
+        "targetLiteral"
+      ],
+      "additionalProperties": false
+    },
+    "visualAsset": {
+      "type": "object",
+      "properties": {
+        "assetId": {
+          "$ref": "#/$defs/sha256"
+        },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000000
+        },
+        "evidenceState": {
+          "const": "checked_in_source_asset_not_execution_bound_output"
+        },
+        "extension": {
+          "enum": [
+            "gif",
+            "png",
+            "svg"
+          ]
+        },
+        "gitBlobSha1": {
+          "$ref": "#/$defs/gitSha1"
+        },
+        "gitMode": {
+          "const": "100644"
+        },
+        "path": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "pathBytesBase64": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "role": {
+          "const": "checked_in_upstream_visual_asset"
+        },
+        "scientificCertification": {
+          "const": "not_run"
+        },
+        "semanticMapping": {
+          "const": "not_assessed"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "upstreamParity": {
+          "const": "not_run"
+        }
+      },
+      "required": [
+        "assetId",
+        "byteLength",
+        "evidenceState",
+        "extension",
+        "gitBlobSha1",
+        "gitMode",
+        "path",
+        "pathBytesBase64",
+        "role",
+        "scientificCertification",
+        "semanticMapping",
+        "sha256",
+        "upstreamParity"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "protocol": {
+      "const": "cortexel-nest-example-visualization-coverage"
+    },
+    "protocolVersion": {
+      "const": 3
+    },
+    "semanticBinding": {
+      "type": "object",
+      "properties": {
+        "identityAlgorithm": {
+          "const": "cortexel-nest-example-visualization-coverage.semantic.rfc8785-sha256.v3"
+        },
+        "digestScope": {
+          "const": "all_top_level_members_except_semanticBinding"
+        },
+        "semanticDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "identityAlgorithm",
+        "digestScope",
+        "semanticDigest"
+      ],
+      "additionalProperties": false
+    },
+    "description": {
+      "$ref": "#/$defs/nonEmpty"
+    },
+    "upstream": {
+      "type": "object",
+      "properties": {
+        "project": {
+          "const": "NEST Simulator"
+        },
+        "release": {
+          "const": "v3.10"
+        },
+        "repository": {
+          "const": "https://github.com/nest/nest-simulator.git"
+        },
+        "commit": {
+          "const": "acca9704da248750219a027db99fec6cd1f9052a"
+        },
+        "rootTreeGitSha1": {
+          "const": "7f6f4f0407c4000cded433b86d658191dd82cd79"
+        },
+        "exampleRoot": {
+          "const": "pynest/examples"
+        }
+      },
+      "required": [
+        "project",
+        "release",
+        "repository",
+        "commit",
+        "rootTreeGitSha1",
+        "exampleRoot"
+      ],
+      "additionalProperties": false
+    },
+    "authorities": {
+      "type": "object",
+      "properties": {
+        "predecessor": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "const": "docs/audit/nest-example-coverage.v2.json"
+            },
+            "semanticDigest": {
+              "$ref": "#/$defs/sha256"
+            },
+            "artifactSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "artifactByteLength": {
+              "const": 146814
+            },
+            "schemaSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "implementationSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "generatorSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "evidenceTransfer": {
+              "const": "exact_source_identity_and_predecessor_projection_only"
+            }
+          },
+          "required": [
+            "path",
+            "semanticDigest",
+            "artifactSha256",
+            "artifactByteLength",
+            "schemaSha256",
+            "implementationSha256",
+            "generatorSha256",
+            "evidenceTransfer"
+          ],
+          "additionalProperties": false
+        },
+        "exampleSourceInventory": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "$ref": "#/$defs/nonEmpty"
+            },
+            "protocol": {
+              "$ref": "#/$defs/nonEmpty"
+            },
+            "protocolVersion": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "inventoryDigest": {
+              "$ref": "#/$defs/sha256"
+            },
+            "artifactSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "artifactByteLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000000
+            }
+          },
+          "required": [
+            "path",
+            "protocol",
+            "protocolVersion",
+            "inventoryDigest",
+            "artifactSha256",
+            "artifactByteLength"
+          ],
+          "additionalProperties": false
+        },
+        "documentationSourceInventory": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "$ref": "#/$defs/nonEmpty"
+            },
+            "protocol": {
+              "$ref": "#/$defs/nonEmpty"
+            },
+            "protocolVersion": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "inventoryDigest": {
+              "$ref": "#/$defs/sha256"
+            },
+            "artifactSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "artifactByteLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000000
+            }
+          },
+          "required": [
+            "path",
+            "protocol",
+            "protocolVersion",
+            "inventoryDigest",
+            "artifactSha256",
+            "artifactByteLength"
+          ],
+          "additionalProperties": false
+        },
+        "differentialSourceOracle": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "const": "docs/audit/nest-example-visualization-oracle.v1.json"
+            },
+            "protocol": {
+              "const": "cortexel-nest-example-visualization-oracle"
+            },
+            "protocolVersion": {
+              "const": 1
+            },
+            "semanticDigest": {
+              "$ref": "#/$defs/sha256"
+            },
+            "artifactSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "artifactByteLength": {
+              "const": 82420
+            },
+            "method": {
+              "const": "python_stdlib_ast_differential_no_import_no_execution"
+            },
+            "reviewedGeneratorSourceSha256": {
+              "const": "sha256:2bc4ce5baf35c6ca52ce07978982fc3e90879cd942a6345cb538ed3eec4b062c"
+            },
+            "reviewedGeneratorSourceByteLength": {
+              "const": 88910
+            },
+            "generatorExecutionAuthority": {
+              "const": "not_established"
+            }
+          },
+          "required": [
+            "path",
+            "protocol",
+            "protocolVersion",
+            "semanticDigest",
+            "artifactSha256",
+            "artifactByteLength",
+            "method",
+            "reviewedGeneratorSourceSha256",
+            "reviewedGeneratorSourceByteLength",
+            "generatorExecutionAuthority"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "predecessor",
+        "exampleSourceInventory",
+        "documentationSourceInventory",
+        "differentialSourceOracle"
+      ],
+      "additionalProperties": false
+    },
+    "axisSemantics": {
+      "type": "object",
+      "properties": {
+        "stableRepresentability": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "executableAdapter": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "renderer": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "upstreamParity": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "scientificCertification": {
+          "$ref": "#/$defs/nonEmpty"
+        }
+      },
+      "required": [
+        "stableRepresentability",
+        "executableAdapter",
+        "renderer",
+        "upstreamParity",
+        "scientificCertification"
+      ],
+      "additionalProperties": false
+    },
+    "semanticDemandDefinitions": {
+      "type": "array",
+      "minItems": 28,
+      "maxItems": 28,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/semanticDemandDefinition"
+      }
+    },
+    "canonicalExamples": {
+      "type": "array",
+      "minItems": 98,
+      "maxItems": 98,
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/body"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "entrypointId": true,
+              "canonicalSourceId": true,
+              "aliasPaths": true,
+              "documentationSelectedPaths": true,
+              "runnerSelectedPaths": true
+            },
+            "required": [
+              "entrypointId",
+              "canonicalSourceId",
+              "aliasPaths",
+              "documentationSelectedPaths",
+              "runnerSelectedPaths"
+            ],
+            "not": {
+              "type": "object",
+              "properties": {
+                "role": true
+              },
+              "required": [
+                "role"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "supportAndCoordinatedBodies": {
+      "type": "array",
+      "minItems": 11,
+      "maxItems": 11,
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/body"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "role": true
+            },
+            "required": [
+              "role"
+            ],
+            "not": {
+              "type": "object",
+              "properties": {
+                "entrypointId": true
+              },
+              "required": [
+                "entrypointId"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "orchestrationAliases": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "$ref": "#/$defs/alias"
+      }
+    },
+    "checkedInVisualAssets": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": {
+        "$ref": "#/$defs/visualAsset"
+      }
+    },
+    "documentationSurfaces": {
+      "type": "object",
+      "properties": {
+        "authoredDiagramDirectiveCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "denominator": {
+          "const": "separate_selected_documentation_source_inventory_not_example_body_coverage"
+        },
+        "documentationScriptActiveSaveCallCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "documentationScriptFigureDefinitionCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "evidenceState": {
+          "const": "source_definitions_and_stored_assets_only_not_built_or_executed"
+        },
+        "mappingState": {
+          "const": "not_assessed_in_this_example_body_classification"
+        },
+        "notebookPlotLikePngCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "notebookStoredPngCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "publicVisualizationModuleDefinitionCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "rstFigureOrImageReferenceCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "scientificCertification": {
+          "const": "not_run"
+        },
+        "selectedBoundBlobCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "upstreamParity": {
+          "const": "not_run"
+        }
+      },
+      "required": [
+        "authoredDiagramDirectiveCount",
+        "denominator",
+        "documentationScriptActiveSaveCallCount",
+        "documentationScriptFigureDefinitionCount",
+        "evidenceState",
+        "mappingState",
+        "notebookPlotLikePngCount",
+        "notebookStoredPngCount",
+        "publicVisualizationModuleDefinitionCount",
+        "rstFigureOrImageReferenceCount",
+        "scientificCertification",
+        "selectedBoundBlobCount",
+        "upstreamParity"
+      ],
+      "additionalProperties": false
+    },
+    "evidenceAxes": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/axis"
+      }
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "canonicalActiveVisualizationBodyCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "canonicalExampleBodyCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "canonicalNoVisualizationBodyCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "canonicalVisualizationImportOnlyBodyCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "checkedInVisualAssetCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "computedNonvisualOutputCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "correctedCanonicalProjectionCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "exampleSpecificExecutableAdapterMatchCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "exampleSpecificMappedOutputCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "executionBoundVisualOutputCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "orchestrationAliasCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "regularPythonActiveVisualizationBodyCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "regularPythonBodyCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "regularPythonNoVisualizationBodyCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "regularPythonVisualizationImportOnlyBodyCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "rendererUpstreamParityResultCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "runnerTargetProfileCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "scientificallyCertifiedOutputCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "semanticDemandDefinitionCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "supportOrCoordinatedActiveVisualizationBodyCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "supportOrCoordinatedBodyCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "supportOrCoordinatedNoVisualizationBodyCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "supportOrCoordinatedVisualizationImportOnlyBodyCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "unchangedCanonicalProjectionCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "upstreamExecutedOutputCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "canonicalAggregateProjection": {
+          "type": "object",
+          "properties": {
+            "activeSenderNormalizedRateDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "analogTraceDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "crossCapabilityBundleDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "dualYAxisDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "equalXYScaleDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "histogramOperationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "imageOperationCountCanonicalOnly": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "multiPanelDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "networkEdgesOperationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "populationRateDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "probabilityFieldOperationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "responseCurveDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "sharedXAxisDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "sharedYAxisDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "singlePanelDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "spatialMaskOperationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "spatialNeighborhoodMembershipDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "spatialNodeMapDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "spatialProbabilityFieldDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "trajectory2dDemandCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            },
+            "trajectory2dOperationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 98
+            }
+          },
+          "required": [
+            "activeSenderNormalizedRateDemandCount",
+            "analogTraceDemandCount",
+            "crossCapabilityBundleDemandCount",
+            "dualYAxisDemandCount",
+            "equalXYScaleDemandCount",
+            "histogramOperationCount",
+            "imageOperationCountCanonicalOnly",
+            "multiPanelDemandCount",
+            "networkEdgesOperationCount",
+            "populationRateDemandCount",
+            "probabilityFieldOperationCount",
+            "responseCurveDemandCount",
+            "sharedXAxisDemandCount",
+            "sharedYAxisDemandCount",
+            "singlePanelDemandCount",
+            "spatialMaskOperationCount",
+            "spatialNeighborhoodMembershipDemandCount",
+            "spatialNodeMapDemandCount",
+            "spatialProbabilityFieldDemandCount",
+            "trajectory2dDemandCount",
+            "trajectory2dOperationCount"
+          ],
+          "additionalProperties": false
+        },
+        "coverageClaim": {
+          "const": "source_semantic_classification_only"
+        }
+      },
+      "required": [
+        "canonicalActiveVisualizationBodyCount",
+        "canonicalExampleBodyCount",
+        "canonicalNoVisualizationBodyCount",
+        "canonicalVisualizationImportOnlyBodyCount",
+        "checkedInVisualAssetCount",
+        "computedNonvisualOutputCount",
+        "correctedCanonicalProjectionCount",
+        "exampleSpecificExecutableAdapterMatchCount",
+        "exampleSpecificMappedOutputCount",
+        "executionBoundVisualOutputCount",
+        "orchestrationAliasCount",
+        "regularPythonActiveVisualizationBodyCount",
+        "regularPythonBodyCount",
+        "regularPythonNoVisualizationBodyCount",
+        "regularPythonVisualizationImportOnlyBodyCount",
+        "rendererUpstreamParityResultCount",
+        "runnerTargetProfileCount",
+        "scientificallyCertifiedOutputCount",
+        "semanticDemandDefinitionCount",
+        "supportOrCoordinatedActiveVisualizationBodyCount",
+        "supportOrCoordinatedBodyCount",
+        "supportOrCoordinatedNoVisualizationBodyCount",
+        "supportOrCoordinatedVisualizationImportOnlyBodyCount",
+        "unchangedCanonicalProjectionCount",
+        "upstreamExecutedOutputCount",
+        "canonicalAggregateProjection",
+        "coverageClaim"
+      ],
+      "additionalProperties": false
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/nonEmpty"
+      }
+    },
+    "computedNonvisualOutputs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "axes": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "const": "I_mean"
+              },
+              {
+                "const": "I_std"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "carrier": {
+            "const": "IF_curve.rate"
+          },
+          "coverageDenominator": {
+            "const": "separate_nonvisual_computed_output_not_a_visualization_body"
+          },
+          "denominator": {
+            "const": "configured_self_n_neurons_times_self_t_sim_ms"
+          },
+          "denominatorMeaning": {
+            "const": "all_neurons_created_for_each_trial_not_only_senders_with_recorded_events"
+          },
+          "kind": {
+            "const": "computed_response_surface_2d_no_visualization_operation"
+          },
+          "normalizationFormula": {
+            "const": "n_events * 1000.0 / (1.0 * self.n_neurons * self.t_sim)"
+          },
+          "populationConnection": {
+            "const": "nest.Connect(self.neuron,self.spike_recorder,all_to_all)"
+          },
+          "path": {
+            "const": "pynest/examples/if_curve.py"
+          },
+          "sourceLineAnchors": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            }
+          },
+          "sourceLineAnchorMeaning": {
+            "const": "ast_derived_navigation_only_full_source_sha256_is_authority"
+          },
+          "sourceSha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "trialOrder": {
+            "const": "fresh_build_then_connect_then_simulate_then_read_n_events"
+          },
+          "value": {
+            "const": "configured_complete_population_mean_firing_rate_hz"
+          }
+        },
+        "required": [
+          "axes",
+          "carrier",
+          "coverageDenominator",
+          "denominator",
+          "denominatorMeaning",
+          "kind",
+          "normalizationFormula",
+          "populationConnection",
+          "path",
+          "sourceLineAnchors",
+          "sourceLineAnchorMeaning",
+          "sourceSha256",
+          "trialOrder",
+          "value"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "protocol",
+    "protocolVersion",
+    "semanticBinding",
+    "description",
+    "upstream",
+    "authorities",
+    "axisSemantics",
+    "semanticDemandDefinitions",
+    "canonicalExamples",
+    "supportAndCoordinatedBodies",
+    "orchestrationAliases",
+    "checkedInVisualAssets",
+    "documentationSurfaces",
+    "evidenceAxes",
+    "summary",
+    "limitations",
+    "computedNonvisualOutputs"
+  ],
+  "additionalProperties": false
+}

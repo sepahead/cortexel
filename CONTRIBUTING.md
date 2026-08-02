@@ -54,6 +54,8 @@ bun run build      # tsup → dist/ (ESM + CJS + d.ts) + skills.manifest.json
 bun run check      # generated parity + typecheck + test
 bun run check:formal # compile every pinned Lean proof with warnings as errors
 bun run check:ledger
+bun run check:nest-audit
+bun run check:nest-oracle-python
 bun run test:python
 bun run check:python
 bun run test:python-package
@@ -61,6 +63,15 @@ bun run audit
 bun run lint:package
 bun run test:package
 ```
+
+`check:nest-audit` verifies the retained differential NEST visualization oracle,
+its reviewed generator-source identity, exact V2 authorities, V3 projection, and
+both strict schemas without adding Python to the ordinary TypeScript build. The
+Python-specific `check:nest-oracle-python` uses isolated, no-site startup to repeat
+the retained oracle's canonical-byte and semantic-digest self-check. Neither command
+repeats source derivation without the exact selected NEST source projection. For the
+full stdlib-AST derivation recipe and its evidence boundary, see
+[`NEST-EXAMPLE-VISUALIZATION-COVERAGE-V3.md`](./docs/audit/NEST-EXAMPLE-VISUALIZATION-COVERAGE-V3.md).
 
 The Python distribution smoke deliberately refuses an ambient interpreter or build
 backend. The package itself supports Python 3.11+, but this reproducible build-evidence

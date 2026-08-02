@@ -146,7 +146,7 @@ environment, kernel clock, recorder wiring, sender-universe completeness, captur
 or export custody. Neither JavaScript nor the current Python package starts PyNEST.
 Historical adapter v3 and capture-authority v1/v2 inputs are migration identities only.
 The pinned
-[NEST 3.10 visualization-demand audit](./docs/audit/NEST-EXAMPLE-VISUALIZATION-COVERAGE-V2.md)
+[NEST 3.10 visualization-demand audit](./docs/audit/NEST-EXAMPLE-VISUALIZATION-COVERAGE-V3.md)
 classifies all official example bodies and makes the remaining representability,
 composition, adapter, execution, parity, and certification gaps explicit; it is not a
 claim that those examples are currently supported.

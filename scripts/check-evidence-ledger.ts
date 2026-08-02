@@ -27,6 +27,12 @@ import { validateNestExampleAudit } from './lib/nest-example-audit.js';
 import {
   validateNestExampleVisualizationCoverage,
 } from './lib/nest-example-visualization-coverage.js';
+import {
+  validateNestExampleVisualizationCoverageV3,
+  validateNestExampleVisualizationOracle,
+} from './lib/nest-example-visualization-coverage-v3.js';
+import type { NestDocumentationSourceInventory } from './lib/nest-documentation-source-inventory.js';
+import type { NestExampleSourceInventory } from './lib/nest-example-source-inventory.js';
 import { parseJsonSourceStrict } from './lib/strict-json-source.js';
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -54,6 +60,22 @@ export const NEST_EXAMPLE_VISUALIZATION_AUDIT_PATH = path.resolve(
 export const NEST_EXAMPLE_VISUALIZATION_AUDIT_SCHEMA_PATH = path.resolve(
   REPOSITORY_ROOT,
   'docs/audit/nest-example-coverage.v2.schema.json',
+);
+export const NEST_EXAMPLE_VISUALIZATION_AUDIT_V3_PATH = path.resolve(
+  REPOSITORY_ROOT,
+  'docs/audit/nest-example-coverage.v3.json',
+);
+export const NEST_EXAMPLE_VISUALIZATION_AUDIT_V3_SCHEMA_PATH = path.resolve(
+  REPOSITORY_ROOT,
+  'docs/audit/nest-example-coverage.v3.schema.json',
+);
+export const NEST_EXAMPLE_VISUALIZATION_ORACLE_PATH = path.resolve(
+  REPOSITORY_ROOT,
+  'docs/audit/nest-example-visualization-oracle.v1.json',
+);
+export const NEST_EXAMPLE_VISUALIZATION_ORACLE_SCHEMA_PATH = path.resolve(
+  REPOSITORY_ROOT,
+  'docs/audit/nest-example-visualization-oracle.v1.schema.json',
 );
 
 /** Closed status set. A status outside this set is a ledger defect, not a new state. */
@@ -473,6 +495,14 @@ export function runEvidenceLedgerCli(
   let nestExampleVisualizationAudit: unknown;
   let nestExampleVisualizationAuditSchema: unknown;
   let nestExampleVisualizationAuditRaw = '';
+  let nestExampleVisualizationAuditV3: unknown;
+  let nestExampleVisualizationAuditV3Schema: unknown;
+  let nestExampleVisualizationAuditV3Raw = '';
+  let nestExampleVisualizationOracle: unknown;
+  let nestExampleVisualizationOracleSchema: unknown;
+  let nestExampleVisualizationOracleRaw = '';
+  let nestExampleVisualizationOracleGeneratorBytes: Uint8Array<ArrayBufferLike> =
+    new Uint8Array();
   let nestExampleSourceArtifact: unknown;
   let nestExampleSourceArtifactRaw = '';
   let nestExampleHistoricalSourceArtifact: unknown;
@@ -513,6 +543,52 @@ export function runEvidenceLedgerCli(
         'docs/audit/nest-example-coverage.v2.schema.json',
       ),
       path.resolve(repositoryRoot, 'docs/audit/nest-example-coverage.v2.schema.json'),
+    );
+    const nestExampleVisualizationAuditV3Bytes = readDirectRepositoryFile(
+      repositoryRoot,
+      'docs/audit/nest-example-coverage.v3.json',
+    );
+    nestExampleVisualizationAuditV3Raw = new TextDecoder('utf-8', {
+      fatal: true,
+    }).decode(nestExampleVisualizationAuditV3Bytes);
+    nestExampleVisualizationAuditV3 = parseLedgerJsonStrict(
+      nestExampleVisualizationAuditV3Bytes,
+      path.resolve(repositoryRoot, 'docs/audit/nest-example-coverage.v3.json'),
+    );
+    nestExampleVisualizationAuditV3Schema = parseLedgerJsonStrict(
+      readDirectRepositoryFile(
+        repositoryRoot,
+        'docs/audit/nest-example-coverage.v3.schema.json',
+      ),
+      path.resolve(repositoryRoot, 'docs/audit/nest-example-coverage.v3.schema.json'),
+    );
+    const nestExampleVisualizationOracleBytes = readDirectRepositoryFile(
+      repositoryRoot,
+      'docs/audit/nest-example-visualization-oracle.v1.json',
+    );
+    nestExampleVisualizationOracleRaw = new TextDecoder('utf-8', {
+      fatal: true,
+    }).decode(nestExampleVisualizationOracleBytes);
+    nestExampleVisualizationOracle = parseLedgerJsonStrict(
+      nestExampleVisualizationOracleBytes,
+      path.resolve(
+        repositoryRoot,
+        'docs/audit/nest-example-visualization-oracle.v1.json',
+      ),
+    );
+    nestExampleVisualizationOracleSchema = parseLedgerJsonStrict(
+      readDirectRepositoryFile(
+        repositoryRoot,
+        'docs/audit/nest-example-visualization-oracle.v1.schema.json',
+      ),
+      path.resolve(
+        repositoryRoot,
+        'docs/audit/nest-example-visualization-oracle.v1.schema.json',
+      ),
+    );
+    nestExampleVisualizationOracleGeneratorBytes = readDirectRepositoryFile(
+      repositoryRoot,
+      'scripts/generate-nest-example-visualization-oracle.py',
     );
     const nestExampleHistoricalSourceArtifactBytes = readDirectRepositoryFile(
       repositoryRoot,
@@ -586,11 +662,30 @@ export function runEvidenceLedgerCli(
       nestDocumentationSourceArtifact,
       nestExampleVisualizationAuditRaw,
     );
+  const nestExampleVisualizationOracleProblems =
+    validateNestExampleVisualizationOracle(
+      nestExampleVisualizationOracle,
+      nestExampleVisualizationOracleSchema,
+      nestExampleVisualizationOracleRaw,
+      nestExampleVisualizationOracleGeneratorBytes,
+    );
+  const nestExampleVisualizationAuditV3Problems =
+    validateNestExampleVisualizationCoverageV3(
+      nestExampleVisualizationAuditV3,
+      nestExampleVisualizationAuditV3Schema,
+      nestExampleSourceArtifact as NestExampleSourceInventory,
+      nestDocumentationSourceArtifact as NestDocumentationSourceInventory,
+      nestExampleVisualizationAudit,
+      nestExampleVisualizationOracle,
+      nestExampleVisualizationAuditV3Raw,
+    );
 
   if (
     errors.length > 0 ||
     nestExampleAuditProblems.length > 0 ||
-    nestExampleVisualizationAuditProblems.length > 0
+    nestExampleVisualizationAuditProblems.length > 0 ||
+    nestExampleVisualizationOracleProblems.length > 0 ||
+    nestExampleVisualizationAuditV3Problems.length > 0
   ) {
     process.stderr.write('Evidence audit state is invalid:\n');
     for (const error of errors) process.stderr.write(`  - release ledger: ${error}\n`);
@@ -599,6 +694,12 @@ export function runEvidenceLedgerCli(
     }
     for (const problem of nestExampleVisualizationAuditProblems) {
       process.stderr.write(`  - NEST visualization audit V2: ${problem}\n`);
+    }
+    for (const problem of nestExampleVisualizationOracleProblems) {
+      process.stderr.write(`  - NEST visualization differential oracle V1: ${problem}\n`);
+    }
+    for (const problem of nestExampleVisualizationAuditV3Problems) {
+      process.stderr.write(`  - NEST visualization audit V3: ${problem}\n`);
     }
     return 1;
   }
@@ -612,7 +713,8 @@ export function runEvidenceLedgerCli(
   }
   process.stdout.write(
     'NEST audit: V1 source inventories valid with coverageClaim none; ' +
-    'V2 closes 98 canonical and 11 support/coordinated Python bodies as ' +
+    'V3 retains V2\'s 98 canonical and 11 support/coordinated Python-body denominators, ' +
+    'binds 35 differential AST corrections and 63 inherited projections as ' +
     'source_semantic_classification_only, with zero execution, parity, or ' +
     'scientific-certification evidence\n',
   );

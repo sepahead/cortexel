@@ -110,9 +110,14 @@ describe('evidence ledger — the committed ledger', () => {
       'docs/audit/nest-example-coverage.schema.json',
       'docs/audit/nest-example-coverage.v2.json',
       'docs/audit/nest-example-coverage.v2.schema.json',
+      'docs/audit/nest-example-coverage.v3.json',
+      'docs/audit/nest-example-coverage.v3.schema.json',
+      'docs/audit/nest-example-visualization-oracle.v1.json',
+      'docs/audit/nest-example-visualization-oracle.v1.schema.json',
       'docs/audit/nest-example-source-inventory.v1.json',
       'docs/audit/nest-example-source-inventory.v2.json',
       'docs/audit/nest-documentation-source-inventory.v1.json',
+      'scripts/generate-nest-example-visualization-oracle.py',
     ];
     try {
       for (const relativePath of relativePaths) {
@@ -147,6 +152,28 @@ describe('evidence ledger — the committed ledger', () => {
         visualizationAuditBytes,
         Buffer.from('\n', 'utf8'),
       ]));
+      expect(runEvidenceLedgerCli([], repository)).toBe(1);
+
+      writeFileSync(visualizationAuditPath, visualizationAuditBytes);
+      const visualizationAuditV3Path = path.join(
+        repository,
+        'docs/audit/nest-example-coverage.v3.json',
+      );
+      const visualizationAuditV3Bytes = readFileSync(visualizationAuditV3Path);
+      writeFileSync(visualizationAuditV3Path, Buffer.concat([
+        visualizationAuditV3Bytes,
+        Buffer.from('\n', 'utf8'),
+      ]));
+      expect(runEvidenceLedgerCli([], repository)).toBe(1);
+
+      writeFileSync(visualizationAuditV3Path, visualizationAuditV3Bytes);
+      const oracleGeneratorPath = path.join(
+        repository,
+        'scripts/generate-nest-example-visualization-oracle.py',
+      );
+      const oracleGeneratorBytes = readFileSync(oracleGeneratorPath);
+      oracleGeneratorBytes[0] = oracleGeneratorBytes[0]! ^ 1;
+      writeFileSync(oracleGeneratorPath, oracleGeneratorBytes);
       expect(runEvidenceLedgerCli([], repository)).toBe(1);
     } finally {
       rmSync(repository, { recursive: true, force: true });
