@@ -62,7 +62,7 @@ import {
   buildFigureFromJson,
   type FigureFailure,
   type FigureResult,
-} from '../render/buildFigure.js';
+} from '../render/figure-result-capability.internal.js';
 import {
   isSourceAdapterId,
   lookupSourceAdapter,

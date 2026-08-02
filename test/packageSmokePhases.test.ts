@@ -2990,6 +2990,28 @@ describe('two-phase package smoke contract', () => {
 
     // The explicit reviewed Node identity—not Bun globals—must decide closure.
     rmSync(join(nodeModules, 'runtime-match'), { recursive: true });
+    writeFileSync(join(nodeModules, '.package-lock.json'), `${JSON.stringify({
+      name: preparedLock.name,
+      version: preparedLock.version,
+      lockfileVersion: preparedLock.lockfileVersion,
+      requires: preparedLock.requires,
+      packages: {
+        'node_modules/cortexel': productionRecord,
+        'node_modules/runtime-negative-allowed': negativeAllowedRecord,
+        'node_modules/runtime-mixed-allowed': mixedAllowedRecord,
+        'node_modules/runtime-any': anyRuntimeRecord,
+      },
+    })}\n`);
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(
+      /first difference \$\["packages"\]\["node_modules\/runtime-match"\]/u,
+    );
+
     writeManifest('runtime-cpu-other', '7.0.0');
     writeFileSync(join(nodeModules, '.package-lock.json'), `${JSON.stringify({
       name: preparedLock.name,

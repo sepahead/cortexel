@@ -4,6 +4,11 @@ import { defineConfig, type Options } from 'tsup';
 
 const REQUEST_CAPABILITY_SOURCE = path.resolve(import.meta.dirname, 'src/core/request.ts');
 const REQUEST_CAPABILITY_SPECIFIER = '#cortexel-request-capability';
+const FIGURE_RESULT_CAPABILITY_SOURCE = path.resolve(
+  import.meta.dirname,
+  'src/render/figure-result-capability.internal.ts',
+);
+const FIGURE_RESULT_CAPABILITY_SPECIFIER = '#cortexel-figure-result-capability';
 const KNOWLEDGE_GRAPH_PRESENTATION_CAPABILITY_SOURCE = path.resolve(
   import.meta.dirname,
   'react/knowledgeGraphPresentation.internal.ts',
@@ -11,9 +16,49 @@ const KNOWLEDGE_GRAPH_PRESENTATION_CAPABILITY_SOURCE = path.resolve(
 const KNOWLEDGE_GRAPH_PRESENTATION_CAPABILITY_SPECIFIER =
   '#cortexel-knowledge-graph-presentation-capability';
 
+type SharedCapabilityResolution = {
+  readonly path: string;
+  readonly external: true;
+};
+
+/** Repository-private resolver seam: only an exact relative source import may bind authority. */
+export function resolveSharedCapabilityImportForBuild(args: {
+  readonly path: string;
+  readonly importer: string;
+  readonly kind: string;
+}): SharedCapabilityResolution | undefined {
+  if (
+    args.kind === 'entry-point' ||
+    args.importer.length === 0 ||
+    (!args.path.startsWith('./') && !args.path.startsWith('../')) ||
+    !/(?:^|\/)(?:request|figure-result-capability\.internal|knowledgeGraphPresentation\.internal)(?:\.js)?$/u
+      .test(args.path)
+  ) {
+    return undefined;
+  }
+  const typescriptPath = args.path.endsWith('.js')
+    ? args.path.replace(/\.js$/u, '.ts')
+    : `${args.path}.ts`;
+  const sourcePath = path.resolve(path.dirname(args.importer), typescriptPath);
+  if (sourcePath === REQUEST_CAPABILITY_SOURCE) {
+    return { path: REQUEST_CAPABILITY_SPECIFIER, external: true };
+  }
+  if (sourcePath === FIGURE_RESULT_CAPABILITY_SOURCE) {
+    return { path: FIGURE_RESULT_CAPABILITY_SPECIFIER, external: true };
+  }
+  if (sourcePath === KNOWLEDGE_GRAPH_PRESENTATION_CAPABILITY_SOURCE) {
+    return {
+      path: KNOWLEDGE_GRAPH_PRESENTATION_CAPABILITY_SPECIFIER,
+      external: true,
+    };
+  }
+  return undefined;
+}
+
 /**
- * Validated requests and prepared graph presentations are identity capabilities,
- * each backed by a module-private WeakSet. Bundling either authority module into
+ * Validated requests, successful figure results, and prepared graph presentations
+ * are identity capabilities, each backed by a module-private WeakSet. Bundling an
+ * authority module into
  * public entries would create multiple registries (especially for CommonJS), so
  * every public bundle resolves those source imports to one package-private CommonJS
  * runtime module. ESM and CommonJS can both load the same CJS module-cache entry;
@@ -23,27 +68,9 @@ const capabilityExternalizer: NonNullable<Options['esbuildPlugins']>[number] = {
   name: 'cortexel-shared-capabilities',
   setup(build) {
     build.onResolve({
-      filter: /(?:request|knowledgeGraphPresentation\.internal)(?:\.js)?$/,
-    }, (args) => {
-      if (args.kind === 'entry-point' || args.importer.length === 0) return undefined;
-      const typescriptPath = args.path.endsWith('.js')
-        ? args.path.replace(/\.js$/u, '.ts')
-        : `${args.path}.ts`;
-      const sourcePath = path.resolve(
-        path.dirname(args.importer),
-        typescriptPath,
-      );
-      if (sourcePath === REQUEST_CAPABILITY_SOURCE) {
-        return { path: REQUEST_CAPABILITY_SPECIFIER, external: true };
-      }
-      if (sourcePath === KNOWLEDGE_GRAPH_PRESENTATION_CAPABILITY_SOURCE) {
-        return {
-          path: KNOWLEDGE_GRAPH_PRESENTATION_CAPABILITY_SPECIFIER,
-          external: true,
-        };
-      }
-      return undefined;
-    });
+      filter:
+        /^\.\.?\/(?:.*\/)?(?:request|figure-result-capability\.internal|knowledgeGraphPresentation\.internal)(?:\.js)?$/,
+    }, resolveSharedCapabilityImportForBuild);
   },
 };
 
@@ -65,6 +92,9 @@ export default defineConfig({
     // Private runtime singleton: package `imports` points both module formats to
     // this CJS file, while the public `exports` map keeps it off the API surface.
     'internal/request-capability': 'src/core/request.ts',
+    'internal/figure-result-capability':
+      'src/render/figure-result-capability.internal.ts',
+    'internal/figure-result-brand': 'src/core/figure-result-brand.ts',
     'internal/knowledge-graph-presentation-capability':
       'react/knowledgeGraphPresentation.internal.ts',
     'internal/knowledge-graph-presentation-brand':
@@ -93,6 +123,7 @@ export default defineConfig({
   treeshake: false,
   esbuildPlugins: [capabilityExternalizer],
   external: [
+    '#cortexel-figure-result-brand',
     '#cortexel-knowledge-graph-presentation-brand',
     '#cortexel-validated-request-brand',
     'react',

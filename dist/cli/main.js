@@ -3,6 +3,9 @@ import {
   migrateLegacyRequest
 } from "../chunk-A2GUFIQI.js";
 import {
+  ERROR_STAGES
+} from "../chunk-TS7LRQB2.js";
+import {
   AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
   SKILL_AUTHORING,
   SOURCE_ADAPTER_CATALOG_DIGEST,
@@ -17,15 +20,6 @@ import {
   lookupSourceAdapterDescriptorDigest
 } from "../chunk-HNZNJAWH.js";
 import {
-  buildFigureFromJson
-} from "../chunk-COQKIXRX.js";
-import "../chunk-U7D5HKZJ.js";
-import "../chunk-QZWIZIZR.js";
-import {
-  ERROR_STAGES
-} from "../chunk-3R5OZ4HO.js";
-import "../chunk-XGABDL4O.js";
-import {
   EXPERIMENTAL_CAPABILITY_IDS,
   SKILL_CATALOG,
   STABLE_SKILL_IDS,
@@ -33,16 +27,16 @@ import {
 } from "../chunk-3YDCB72V.js";
 import {
   nestSpikeRecorderToRaster
-} from "../chunk-CLHJSX5J.js";
+} from "../chunk-RC3A4IBC.js";
+import "../chunk-2N3ZC6OE.js";
 import "../chunk-OGJBOXWL.js";
+import {
+  getBudgetLimits
+} from "../chunk-AHJODCDL.js";
 import {
   SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER,
   classifySourceAdapterExampleEnvelope
 } from "../chunk-WVFXQTTZ.js";
-import "../chunk-2N3ZC6OE.js";
-import {
-  getBudgetLimits
-} from "../chunk-AHJODCDL.js";
 import {
   CATALOG_DIGEST_DOMAIN,
   getBuildIdentity
@@ -82,6 +76,9 @@ import {
   parseAndValidateRequest,
   validateRequestValue
 } from "#cortexel-request-capability";
+import {
+  buildFigureFromJson
+} from "#cortexel-figure-result-capability";
 
 // src/cli/commands.ts
 var CLI_COMMANDS = [

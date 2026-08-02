@@ -11,7 +11,7 @@ import {
   dimensionOf,
   divideExactIntegerByConvertedDifference,
   normalizeDerivativeByExactAxisExtent
-} from "./chunk-3R5OZ4HO.js";
+} from "./chunk-PCM3AS5Y.js";
 import {
   binary64RelativeDifferenceWithinTolerance,
   exactBinary64Mean,
@@ -3781,8 +3781,6 @@ function verifyHistogramValues(input) {
 }
 
 export {
-  validateArtifactStructure,
-  validateStructure,
   MATRIX_AXIS_ORDER,
   MatrixDerivationError,
   deriveAdjacencyMatrix,
@@ -3795,6 +3793,8 @@ export {
   deriveDegreeDistribution,
   deriveDelayDistribution,
   deriveWeightDistribution,
-  verifyHistogramValues
+  verifyHistogramValues,
+  validateArtifactStructure,
+  validateStructure
 };
-//# sourceMappingURL=chunk-U7D5HKZJ.js.map
+//# sourceMappingURL=chunk-JLJJFI2O.js.map

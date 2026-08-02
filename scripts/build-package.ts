@@ -42,6 +42,8 @@ export function removeAlternateEsmRuntimeArtifacts(
   fileSystem: PackageBuildFileSystem = NATIVE_PACKAGE_BUILD_FILE_SYSTEM,
 ): void {
   const targets = [
+    'figure-result-capability.js',
+    'figure-result-capability.js.map',
     'knowledge-graph-presentation-capability.js',
     'knowledge-graph-presentation-capability.js.map',
     'request-capability.js',

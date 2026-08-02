@@ -10,6 +10,8 @@ import {
 function expectedCleanupTargets(): string[] {
   const internalDist = path.resolve(import.meta.dirname, '../dist/internal');
   return [
+    'figure-result-capability.js',
+    'figure-result-capability.js.map',
     'knowledge-graph-presentation-capability.js',
     'knowledge-graph-presentation-capability.js.map',
     'request-capability.js',

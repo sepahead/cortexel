@@ -3,7 +3,9 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import tsupConfig from '../tsup.config.js';
+import tsupConfig, {
+  resolveSharedCapabilityImportForBuild,
+} from '../tsup.config.js';
 import { buildManifest as buildLegacySkillsManifest } from '../scripts/emit-manifest.js';
 import {
   buildEntryOutputBases,
@@ -96,6 +98,42 @@ function expectProblem(problems: readonly string[], fragment: string): void {
 }
 
 describe('capability maturity and concrete availability', () => {
+  it('externalizes only exact relative imports of the three authority sources', () => {
+    expect(resolveSharedCapabilityImportForBuild({
+      path: '../core/request.js',
+      importer: path.join(ROOT, 'src/figure/index.ts'),
+      kind: 'import-statement',
+    })).toEqual({ path: '#cortexel-request-capability', external: true });
+    expect(resolveSharedCapabilityImportForBuild({
+      path: './figure-result-capability.internal.js',
+      importer: path.join(ROOT, 'src/render/index.ts'),
+      kind: 'import-statement',
+    })).toEqual({ path: '#cortexel-figure-result-capability', external: true });
+    expect(resolveSharedCapabilityImportForBuild({
+      path: '../../react/knowledgeGraphPresentation.internal.js',
+      importer: path.join(ROOT, 'src/knowledge-graph/index.ts'),
+      kind: 'import-statement',
+    })).toEqual({
+      path: '#cortexel-knowledge-graph-presentation-capability',
+      external: true,
+    });
+
+    for (const specifier of [
+      'request.js',
+      path.join(ROOT, 'src/core/request.js'),
+      './not-request.js',
+      './request.js.extra',
+      './figure-result-capability.internal.js.map',
+      '#private/request.js',
+    ]) {
+      expect(resolveSharedCapabilityImportForBuild({
+        path: specifier,
+        importer: path.join(ROOT, 'src/core/index.ts'),
+        kind: 'import-statement',
+      }), specifier).toBeUndefined();
+    }
+  });
+
   it('accepts the living registry against package, build, source, and migration evidence', () => {
     expect(capabilitySourceProblems(registry, evidence)).toEqual([]);
   });
@@ -162,6 +200,12 @@ describe('capability maturity and concrete availability', () => {
       'src/core/request.ts',
     );
     expect(
+      (tsupEntry as Record<string, unknown>)['internal/figure-result-capability'],
+    ).toBe('src/render/figure-result-capability.internal.ts');
+    expect((tsupEntry as Record<string, unknown>)['internal/figure-result-brand']).toBe(
+      'src/core/figure-result-brand.ts',
+    );
+    expect(
       (tsupEntry as Record<string, unknown>)[
         'internal/knowledge-graph-presentation-capability'
       ],
@@ -175,6 +219,13 @@ describe('capability maturity and concrete availability', () => {
       'src/core/validated-request-brand.ts',
     );
     expect(packageJson.imports).toEqual({
+      '#cortexel-figure-result-brand': {
+        types: './dist/internal/figure-result-brand.d.ts',
+        import: './dist/internal/figure-result-brand.js',
+        require: './dist/internal/figure-result-brand.cjs',
+      },
+      '#cortexel-figure-result-capability':
+        './dist/internal/figure-result-capability.cjs',
       '#cortexel-knowledge-graph-presentation-capability':
         './dist/internal/knowledge-graph-presentation-capability.cjs',
       '#cortexel-knowledge-graph-presentation-brand': {
@@ -191,6 +242,9 @@ describe('capability maturity and concrete availability', () => {
     });
     expect(buildEntryIds({
       'figure/index': 'src/figure/index.ts',
+      'internal/figure-result-capability':
+        'src/render/figure-result-capability.internal.ts',
+      'internal/figure-result-brand': 'src/core/figure-result-brand.ts',
       'internal/knowledge-graph-presentation-capability':
         'react/knowledgeGraphPresentation.internal.ts',
       'internal/knowledge-graph-presentation-brand':

@@ -1,4 +1,8 @@
 import {
+  exactBinary64Mean,
+  exactBinary64Sum
+} from "./chunk-XGABDL4O.js";
+import {
   AdjacencyMatrixParamsSchema,
   CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS,
   CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS,
@@ -38,10 +42,6 @@ import {
   safeErrorMessage,
   safePrimitiveDiagnostic
 } from "./chunk-VSZKJBXV.js";
-import {
-  exactBinary64Mean,
-  exactBinary64Sum
-} from "./chunk-XGABDL4O.js";
 
 // core/skills/corpusKnowledgeGraph.ts
 import { z } from "zod";
@@ -3483,4 +3483,4 @@ export {
   synapseCollectionToWeightHistogramParams,
   getPositionToSpatialMap2DParams
 };
-//# sourceMappingURL=chunk-BG54EURA.js.map
+//# sourceMappingURL=chunk-OGFS3R4G.js.map

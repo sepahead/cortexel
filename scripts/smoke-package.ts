@@ -5844,6 +5844,14 @@ const runtimeFigureContractProbe = `
   }
   if (capabilityRegistry.registry !== 'cortexel-capabilities' ||
       requestSchema.$id !== 'https://sepahead.github.io/cortexel/schemas/v1/figure-request.v1.schema.json' ||
+      packageMetadata.imports?.['#cortexel-figure-result-capability'] !==
+        './dist/internal/figure-result-capability.cjs' ||
+      JSON.stringify(packageMetadata.imports?.['#cortexel-figure-result-brand']) !==
+        JSON.stringify({
+          types: './dist/internal/figure-result-brand.d.ts',
+          import: './dist/internal/figure-result-brand.js',
+          require: './dist/internal/figure-result-brand.cjs',
+        }) ||
       packageMetadata.imports?.['#cortexel-knowledge-graph-presentation-capability'] !==
         './dist/internal/knowledge-graph-presentation-capability.cjs' ||
       JSON.stringify(
@@ -6103,10 +6111,15 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   if (!packedPaths.includes('dist/internal/request-capability.cjs')) {
     throw new Error('tarball is missing the shared request-capability runtime');
   }
+  if (!packedPaths.includes('dist/internal/figure-result-capability.cjs')) {
+    throw new Error('tarball is missing the shared built-figure-result capability runtime');
+  }
   if (!packedPaths.includes('dist/internal/knowledge-graph-presentation-capability.cjs')) {
     throw new Error('tarball is missing the shared knowledge-graph capability runtime');
   }
   for (const forbiddenAlternateRuntime of [
+    'dist/internal/figure-result-capability.js',
+    'dist/internal/figure-result-capability.js.map',
     'dist/internal/request-capability.js',
     'dist/internal/request-capability.js.map',
     'dist/internal/knowledge-graph-presentation-capability.js',
@@ -6119,6 +6132,10 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     }
   }
   for (const nominalBrandPath of [
+    'dist/internal/figure-result-brand.cjs',
+    'dist/internal/figure-result-brand.d.cts',
+    'dist/internal/figure-result-brand.d.ts',
+    'dist/internal/figure-result-brand.js',
     'dist/internal/knowledge-graph-presentation-brand.cjs',
     'dist/internal/knowledge-graph-presentation-brand.d.cts',
     'dist/internal/knowledge-graph-presentation-brand.d.ts',
@@ -6411,10 +6428,16 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       // unchecked registry mutation or the private WeakSet/WeakMap objects themselves.
       const packageScopedRequire = createRequire(require.resolve('cortexel/package.json'));
       const internalCapability = packageScopedRequire('#cortexel-request-capability');
+      const internalFigureResultCapability = packageScopedRequire(
+        '#cortexel-figure-result-capability'
+      );
       const internalGraphCapability = packageScopedRequire(
         '#cortexel-knowledge-graph-presentation-capability'
       );
       const nominalBrandRuntime = packageScopedRequire('#cortexel-validated-request-brand');
+      const figureResultNominalBrandRuntime = packageScopedRequire(
+        '#cortexel-figure-result-brand'
+      );
       const graphNominalBrandRuntime = packageScopedRequire(
         '#cortexel-knowledge-graph-presentation-brand'
       );
@@ -6431,6 +6454,22 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       }
       if (JSON.stringify(Object.keys(nominalBrandRuntime)) !== JSON.stringify([])) {
         throw new Error('type-only validated-request brand exposes runtime authority');
+      }
+      const expectedFigureResultInternalExports = [
+        'assertLiveBuiltFigureResult',
+        'buildFigure',
+        'buildFigureFromJson',
+        'buildFigureFromValidated',
+        'isLiveBuiltFigureResult',
+      ];
+      if (JSON.stringify(Object.keys(internalFigureResultCapability).sort()) !==
+          JSON.stringify(expectedFigureResultInternalExports) ||
+          internalFigureResultCapability.buildFigure !== esmRenderer.buildFigure ||
+          internalFigureResultCapability.buildFigure !== cjsRenderer.buildFigure ||
+          JSON.stringify(Object.keys(figureResultNominalBrandRuntime)) !== JSON.stringify([])) {
+        throw new Error(
+          'shared built-figure-result capability exposes excess or unchecked authority or split identity'
+        );
       }
       const expectedGraphInternalExports = [
         'KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1',
@@ -6718,10 +6757,118 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         ['repaired ESM to CJS', cjsRenderer.buildFigureFromValidated(esmRepaired.request)],
         ['repaired CJS to ESM', esmRenderer.buildFigureFromValidated(cjsRepaired.request)],
       ];
+      const expectedFigureResultKeys = [
+        'ok',
+        'artifact',
+        'svg',
+        'plan',
+        'table',
+        'disclosures',
+      ];
+      const assertRecursivelyFrozen = (root) => {
+        const seen = new WeakSet();
+        const pending = [root];
+        while (pending.length > 0) {
+          const current = pending.pop();
+          if (seen.has(current)) continue;
+          seen.add(current);
+          if (!Object.isFrozen(current)) {
+            throw new Error('built-figure result contains mutable nested state');
+          }
+          for (const key of Reflect.ownKeys(current)) {
+            const descriptor = Object.getOwnPropertyDescriptor(current, key);
+            const child = descriptor && Object.hasOwn(descriptor, 'value')
+              ? descriptor.value
+              : null;
+            if (child !== null && typeof child === 'object') pending.push(child);
+          }
+        }
+      };
       for (const [label, result] of combinations) {
-        if (!result.ok || !result.svg.startsWith('<svg')) {
+        if (!result.ok || !result.svg.startsWith('<svg') ||
+            !internalFigureResultCapability.isLiveBuiltFigureResult(result)) {
           throw new Error(label + ' request-capability handoff failed');
         }
+        if (JSON.stringify(Reflect.ownKeys(result)) !==
+              JSON.stringify(expectedFigureResultKeys) ||
+            Object.getOwnPropertySymbols(result).length !== 0 ||
+            result.table !== result.plan.table) {
+          throw new Error(label + ' result is not the exact ordinary six-key record');
+        }
+        assertRecursivelyFrozen(result);
+      }
+      const populationContract = require(
+        'cortexel/contract/skills/neuro.population_rate.v1.json'
+      );
+      const unrenderablePopulation = structuredClone(
+        populationContract.examples.valid[0]
+      );
+      unrenderablePopulation.presentation = {
+        ...unrenderablePopulation.presentation,
+        width: 160,
+      };
+      const validatedUnrenderable = esmFigure.validateRequestValue(
+        unrenderablePopulation
+      );
+      if (!validatedUnrenderable.ok) {
+        throw new Error('packed width-160 population-rate negative is not valid input');
+      }
+      const layoutFailure = cjsRenderer.buildFigureFromValidated(
+        validatedUnrenderable.request
+      );
+      if (layoutFailure.ok ||
+          JSON.stringify(layoutFailure.errors.map((error) => error.code)) !==
+            JSON.stringify(['RENDER_LAYOUT_UNAVAILABLE']) ||
+          internalFigureResultCapability.isLiveBuiltFigureResult(layoutFailure)) {
+        throw new Error('validated but unrenderable request received result authority');
+      }
+      const liveResult = combinations[0][1];
+      const reconstructedResult = {
+        ok: true,
+        artifact: liveResult.artifact,
+        svg: liveResult.svg,
+        plan: liveResult.plan,
+        table: liveResult.table,
+        disclosures: liveResult.disclosures,
+      };
+      let figureResultProxyTraps = 0;
+      const hostileResultProxy = new Proxy({}, {
+        get() { figureResultProxyTraps++; throw new Error('unexpected result get'); },
+        getOwnPropertyDescriptor() {
+          figureResultProxyTraps++;
+          throw new Error('unexpected result descriptor read');
+        },
+        getPrototypeOf() {
+          figureResultProxyTraps++;
+          throw new Error('unexpected result prototype read');
+        },
+        ownKeys() { figureResultProxyTraps++; throw new Error('unexpected result key read'); },
+      });
+      const spreadResult = { ...liveResult };
+      if (JSON.stringify(Reflect.ownKeys(spreadResult)) !==
+            JSON.stringify(expectedFigureResultKeys) ||
+          internalFigureResultCapability.isLiveBuiltFigureResult(spreadResult)) {
+        throw new Error('ordinary six-key spread inherited built-result authority');
+      }
+      for (const candidate of [
+        spreadResult,
+        structuredClone(liveResult),
+        JSON.parse(JSON.stringify(liveResult)),
+        reconstructedResult,
+        hostileResultProxy,
+      ]) {
+        if (internalFigureResultCapability.isLiveBuiltFigureResult(candidate)) {
+          throw new Error('built-figure-result identity was transferable or forgeable');
+        }
+      }
+      try {
+        internalFigureResultCapability.assertLiveBuiltFigureResult(hostileResultProxy);
+        throw new Error('built-figure-result guard admitted a hostile Proxy');
+      } catch (error) {
+        if (!(error instanceof TypeError)) throw error;
+      }
+      if (figureResultProxyTraps !== 0) {
+        throw new Error('built-figure-result rejection inspected a hostile Proxy');
       }
       const copiedToken = { ...esmValidated.request };
       const proxiedToken = new Proxy(esmValidated.request, {});
@@ -6737,6 +6884,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         }
       }
       for (const specifier of [
+        'cortexel/internal/figure-result-capability',
+        'cortexel/dist/internal/figure-result-capability.cjs',
         'cortexel/internal/request-capability',
         'cortexel/dist/internal/request-capability.cjs',
         'cortexel/internal/knowledge-graph-presentation-capability',
@@ -6755,6 +6904,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         }
       }
       for (const specifier of [
+        'cortexel/contract/../internal/figure-result-capability.cjs',
+        'cortexel/contract/%2e%2e/internal/figure-result-capability.cjs',
         'cortexel/contract/../internal/request-capability.cjs',
         'cortexel/contract/%2e%2e/internal/request-capability.cjs',
         'cortexel/contract/../internal/knowledge-graph-presentation-capability.cjs',
@@ -6785,6 +6936,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         throw new Error('consumer reached Cortexel package-private import mapping');
       }
       for (const specifier of [
+        '#cortexel-figure-result-brand',
+        '#cortexel-figure-result-capability',
         '#cortexel-validated-request-brand',
         '#cortexel-knowledge-graph-presentation-capability',
         '#cortexel-knowledge-graph-presentation-brand',
@@ -7823,6 +7976,10 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         'brand-consumer.cts',
         'brand-producer.cts',
         'brand-consumer.mts',
+        'figure-result-brand-producer.mts',
+        'figure-result-brand-consumer.cts',
+        'figure-result-brand-producer.cts',
+        'figure-result-brand-consumer.mts',
         'graph-brand-producer.mts',
         'graph-brand-consumer.cts',
         'graph-brand-producer.cts',
@@ -7963,6 +8120,13 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         void AUTHORING_CAPABILITY_CATALOG[narrowedCapabilityId];
       }
       const figureResult = {} as FigureResult;
+      type PublicFigureResult = Pick<
+        FigureResult,
+        Extract<keyof FigureResult, string>
+      >;
+      declare const structuralFigureResult: PublicFigureResult;
+      // @ts-expect-error a complete structural result lacks the private nominal brand
+      const forgedFigureResult: FigureResult = structuralFigureResult;
       const figureFailure = {} as FigureFailure;
       const nestExport = {} as NestSpikeExport;
       const nestOptions = {} as NestSpikeOptions;
@@ -8037,16 +8201,25 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       type ForbiddenDeepRenderModule = typeof import('cortexel/dist/render-svg/index.js');
       // @ts-expect-error the shared capability registry is package-private
       type ForbiddenCapabilityModule = typeof import('cortexel/internal/request-capability');
+      type ForbiddenFigureResultCapabilityModule =
+        // @ts-expect-error the built-result capability registry is package-private
+        typeof import('cortexel/internal/figure-result-capability');
       type ForbiddenGraphCapabilityModule =
         // @ts-expect-error the graph capability registry is package-private
         typeof import('cortexel/internal/knowledge-graph-presentation-capability');
       // @ts-expect-error package imports do not leak into the consumer package scope
       type ForbiddenPrivateImport = typeof import('#cortexel-request-capability');
+      type ForbiddenFigureResultPrivateImport =
+        // @ts-expect-error built-result package imports do not leak into consumer scope
+        typeof import('#cortexel-figure-result-capability');
       type ForbiddenGraphPrivateImport =
         // @ts-expect-error graph package imports do not leak into the consumer package scope
         typeof import('#cortexel-knowledge-graph-presentation-capability');
       // @ts-expect-error the package-private nominal brand is not a consumer import
       type ForbiddenNominalBrandImport = typeof import('#cortexel-validated-request-brand');
+      type ForbiddenFigureResultNominalBrandImport =
+        // @ts-expect-error the built-result nominal brand is package-private
+        typeof import('#cortexel-figure-result-brand');
       type ForbiddenGraphNominalBrandImport =
         // @ts-expect-error the graph nominal brand is package-private
         typeof import('#cortexel-knowledge-graph-presentation-brand');
@@ -8140,6 +8313,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         headlessGraph.serializePreparedKnowledgeGraphPresentation,
         accessibleGraphContext.view,
         accessibleGraphContext.sourceInputAssurance.boundary,
+        forgedFigureResult,
         forgedPreparedGraph,
         forgedPreparedGraphView,
       ];
@@ -8183,6 +8357,13 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         void authoring.CAPABILITY_CATALOG[narrowedCapabilityId];
       }
       const figureResult = {} as renderSvg.FigureResult;
+      type PublicFigureResult = Pick<
+        renderSvg.FigureResult,
+        Extract<keyof renderSvg.FigureResult, string>
+      >;
+      declare const structuralFigureResult: PublicFigureResult;
+      // @ts-expect-error a complete structural result lacks the private nominal brand
+      const forgedFigureResult: renderSvg.FigureResult = structuralFigureResult;
       const figureFailure = {} as renderSvg.FigureFailure;
       const nestExport = {} as nestAdapter.NestSpikeExport;
       const nestOptions = {} as nestAdapter.NestSpikeOptions;
@@ -8259,16 +8440,25 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       type ForbiddenDeepRenderModule = typeof import('cortexel/dist/render-svg/index.cjs');
       // @ts-expect-error the shared capability registry is package-private
       type ForbiddenCapabilityModule = typeof import('cortexel/internal/request-capability');
+      type ForbiddenFigureResultCapabilityModule =
+        // @ts-expect-error the built-result capability registry is package-private
+        typeof import('cortexel/internal/figure-result-capability');
       type ForbiddenGraphCapabilityModule =
         // @ts-expect-error the graph capability registry is package-private
         typeof import('cortexel/internal/knowledge-graph-presentation-capability');
       // @ts-expect-error package imports do not leak into the consumer package scope
       type ForbiddenPrivateImport = typeof import('#cortexel-request-capability');
+      type ForbiddenFigureResultPrivateImport =
+        // @ts-expect-error built-result package imports do not leak into consumer scope
+        typeof import('#cortexel-figure-result-capability');
       type ForbiddenGraphPrivateImport =
         // @ts-expect-error graph package imports do not leak into the consumer package scope
         typeof import('#cortexel-knowledge-graph-presentation-capability');
       // @ts-expect-error the package-private nominal brand is not a consumer import
       type ForbiddenNominalBrandImport = typeof import('#cortexel-validated-request-brand');
+      type ForbiddenFigureResultNominalBrandImport =
+        // @ts-expect-error the built-result nominal brand is package-private
+        typeof import('#cortexel-figure-result-brand');
       type ForbiddenGraphNominalBrandImport =
         // @ts-expect-error the graph nominal brand is package-private
         typeof import('#cortexel-knowledge-graph-presentation-brand');
@@ -8357,6 +8547,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         headlessGraph.serializePreparedKnowledgeGraphPresentation,
         accessibleGraphContext.view,
         accessibleGraphContext.sourceInputAssurance.boundary,
+        forgedFigureResult,
         forgedPreparedGraph,
         forgedPreparedGraphView,
       ];
@@ -8394,6 +8585,42 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       import type { CjsRepairedRequest } from './brand-producer.cjs';
       declare const request: CjsRepairedRequest;
       buildFigureFromValidated(request);
+    `,
+  );
+  phaseWriteFile(
+    join(consumer, 'figure-result-brand-producer.mts'),
+    `
+      import { buildFigure } from 'cortexel/render-svg';
+      export type EsmFigureResult =
+        Extract<ReturnType<typeof buildFigure>, { readonly ok: true }>;
+    `,
+  );
+  phaseWriteFile(
+    join(consumer, 'figure-result-brand-consumer.cts'),
+    `
+      import renderSvg = require('cortexel/render-svg');
+      import type { EsmFigureResult } from './figure-result-brand-producer.mjs';
+      declare const result: EsmFigureResult;
+      const accepted: renderSvg.FigureResult = result;
+      void accepted;
+    `,
+  );
+  phaseWriteFile(
+    join(consumer, 'figure-result-brand-producer.cts'),
+    `
+      import renderSvg = require('cortexel/render-svg');
+      export type CjsFigureResult =
+        Extract<ReturnType<typeof renderSvg.buildFigure>, { readonly ok: true }>;
+    `,
+  );
+  phaseWriteFile(
+    join(consumer, 'figure-result-brand-consumer.mts'),
+    `
+      import type { FigureResult } from 'cortexel/render-svg';
+      import type { CjsFigureResult } from './figure-result-brand-producer.cjs';
+      declare const result: CjsFigureResult;
+      const accepted: FigureResult = result;
+      void accepted;
     `,
   );
   phaseWriteFile(

@@ -6,6 +6,27 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — live built-result authority
+
+- Fully successful `FigureResult` objects now receive package-private, identity-based
+  runtime authority only after validation, derivation, closed-plan construction,
+  request-bound OutputAuthority translation, SVG and output-budget checks, artifact
+  assembly, and artifact postconditions all pass. The returned value remains an exact
+  ordinary record with the six own string keys `ok`, `artifact`, `svg`, `plan`, `table`,
+  and `disclosures`; it has no symbol-keyed runtime marker, and its complete reachable
+  object tree is frozen before the exact result identity enters a module-private
+  registry. A package-private type-only brand keeps the supported ESM and CommonJS
+  declaration graphs nominally compatible without adding a runtime member or granting
+  runtime authority: a result type produced through either format is accepted by the
+  other, while a complete string-key structural lookalike is no longer assignable to
+  `FigureResult`. The registry singleton is shared only by the supported package entry
+  points that load one physical installation through the same Node module-cache realm.
+  Copies, spreads, structured clones, serialized or reconstructed records, Proxy
+  wrappers, another module-cache realm, and another physical installation do not
+  inherit authority. This is an internal prerequisite for future composition only: it
+  adds no public builder, `FigureBundleV1` contract, cross-figure comparison claim, or
+  transferable receipt.
+
 ### Changed — composition-safe SVG foundation
 
 - The normative SVG serializer now shares one closed writer with a package-private

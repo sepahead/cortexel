@@ -149,6 +149,12 @@
     "./package.json": "./package.json"
   },
   "imports": {
+    "#cortexel-figure-result-brand": {
+      "types": "./dist/internal/figure-result-brand.d.ts",
+      "import": "./dist/internal/figure-result-brand.js",
+      "require": "./dist/internal/figure-result-brand.cjs"
+    },
+    "#cortexel-figure-result-capability": "./dist/internal/figure-result-capability.cjs",
     "#cortexel-knowledge-graph-presentation-capability": "./dist/internal/knowledge-graph-presentation-capability.cjs",
     "#cortexel-knowledge-graph-presentation-brand": {
       "types": "./dist/internal/knowledge-graph-presentation-brand.d.ts",

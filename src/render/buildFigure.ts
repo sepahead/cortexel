@@ -180,14 +180,42 @@ import {
   exactBinary64WeightedSum,
 } from '../core/exact-binary64.js';
 import type { ErrorCode, ErrorStage } from '../generated/registry.js';
+import type { FigureResultNominalBrand } from '#cortexel-figure-result-brand';
 
-export interface FigureResult {
+const LIVE_BUILT_FIGURE_RESULTS = new WeakSet<object>();
+
+export interface FigureResult extends FigureResultNominalBrand {
   readonly ok: true;
   readonly artifact: Record<string, unknown>;
   readonly svg: string;
   readonly plan: RenderPlanV1;
   readonly table: RenderPlanV1['table'];
   readonly disclosures: readonly Disclosure[];
+}
+
+/**
+ * O(1) identity check for an exact fully successful result from this loaded authority
+ * module instance. WeakSet membership is checked before any candidate property is
+ * read, so even a hostile Proxy is rejected without invoking its traps.
+ */
+export function isLiveBuiltFigureResult(value: unknown): value is FigureResult {
+  return value !== null &&
+    typeof value === 'object' &&
+    LIVE_BUILT_FIGURE_RESULTS.has(value);
+}
+
+/** Package-private guard for future composition consumers. */
+export function assertLiveBuiltFigureResult(
+  value: unknown,
+): asserts value is FigureResult {
+  if (!isLiveBuiltFigureResult(value)) {
+    throw new TypeError(
+      'figure composition requires the exact live result returned by a fully ' +
+        'successful Cortexel build in this loaded authority-module instance. Copies, spreads, ' +
+        'structured clones, serialized records, proxies, reconstructed outputs, and ' +
+        'tokens from another module instance have no built-result authority.',
+    );
+  }
 }
 
 export interface FigureFailure {
@@ -14065,7 +14093,19 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
   const artifactStructure = validateArtifactStructure(artifact);
   if (!artifactStructure.ok) return { ok: false, errors: artifactStructure.errors };
 
-  return { ok: true, artifact, svg: report.svg, plan, table: plan.table, disclosures: context.disclosures };
+  // Artifact assembly and every request/derivation/plan/output postcondition above must
+  // finish before identity is minted. Deep-freeze the complete result first; only the
+  // exact final object is then admitted to the private live-result registry.
+  const result = deepFreeze({
+    ok: true,
+    artifact,
+    svg: report.svg,
+    plan,
+    table: plan.table,
+    disclosures: context.disclosures,
+  }) as FigureResult;
+  LIVE_BUILT_FIGURE_RESULTS.add(result);
+  return result;
 }
 
 function appendDisclosureSummarySuffix(

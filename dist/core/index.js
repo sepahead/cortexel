@@ -37,7 +37,8 @@ import {
   synapseCollectionToWeightHistogramParams,
   synapseCollectionToWeightMatrixParams,
   weightRecorderToSceneData
-} from "../chunk-BG54EURA.js";
+} from "../chunk-OGFS3R4G.js";
+import "../chunk-XGABDL4O.js";
 import {
   AXIS_COLORS,
   AdjacencyMatrixParamsSchema,
@@ -177,7 +178,6 @@ import {
 import {
   KNOWLEDGE_GRAPH_LIMITS
 } from "../chunk-VSZKJBXV.js";
-import "../chunk-XGABDL4O.js";
 import "../chunk-ZYBCCIMH.js";
 export {
   AXIS_COLORS,

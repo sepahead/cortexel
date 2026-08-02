@@ -20,4 +20,4 @@ export {
   buildFigureFromValidated,
   type FigureResult,
   type FigureFailure,
-} from './buildFigure.js';
+} from './figure-result-capability.internal.js';
