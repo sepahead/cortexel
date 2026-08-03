@@ -30,6 +30,7 @@ import {
   graphEdgeTargetBoundaryInto,
   graphCameraTargetDamping,
   graphQueryMatchIds,
+  graphLayoutSignature,
   graphSignature,
   isKnowledgeGraphLiveForceWithinBudget,
   knowledgeGraphLiveForceAvailability,
@@ -112,6 +113,7 @@ import {
   KnowledgeGraph3DScene,
   KnowledgeGraphA11yList,
   KnowledgeGraphLegend,
+  knowledgeGraphNodeUsesFocusScale,
   type KnowledgeGraph3DNode,
 } from '../react/KnowledgeGraph3DScene';
 import type { KnowledgeGraph3DParams } from '../core/skills/params';
@@ -580,6 +582,11 @@ describe('graph helpers', () => {
   it('frames the whole graph from rendered geometry, not inactive label envelopes', () => {
     const nodeRadius = 4;
     const glyph = 'sphere_outline' as const;
+    const focusNeighbors = new Set(['neighbor']);
+    expect(knowledgeGraphNodeUsesFocusScale('focus', 'focus', focusNeighbors)).toBe(true);
+    expect(knowledgeGraphNodeUsesFocusScale('neighbor', 'focus', focusNeighbors)).toBe(true);
+    expect(knowledgeGraphNodeUsesFocusScale('peripheral', 'focus', focusNeighbors)).toBe(false);
+    expect(knowledgeGraphNodeUsesFocusScale('focus', null, focusNeighbors)).toBe(false);
     const renderedExtent = knowledgeGraphRenderedNodeRadialExtent(
       nodeRadius,
       glyph,
@@ -622,6 +629,17 @@ describe('graph helpers', () => {
       currentDistance: 260,
       projection,
     });
+    const sceneSource = readFileSync(
+      new URL('../react/KnowledgeGraph3DScene.tsx', import.meta.url),
+      'utf8',
+    );
+    expect(sceneSource.match(/knowledgeGraphNodeUsesFocusScale\(/g)).toHaveLength(5);
+    const framingSource = sceneSource.slice(
+      sceneSource.indexOf('const radius = knowledgeGraphAutoFrameNodeRadialExtent('),
+      sceneSource.indexOf('_box.expandByPoint(_a.set('),
+    );
+    expect(framingSource).toContain('focusSet');
+    expect(framingSource).toContain('knowledgeGraphNodeUsesFocusScale(');
     expect(hypotheticalLabelExtent).toBeGreaterThan(renderedExtent * 10);
     expect(hypotheticalLabelFit.distance).toBeGreaterThan(renderedFit.distance * 3);
   });
@@ -2094,6 +2112,7 @@ describe('graph helpers', () => {
     const second = snapshotGraphLayoutInputs(nodes, edges);
 
     expect(second.graphKey).not.toBe(first.graphKey);
+    expect(second.layoutKey).not.toBe(first.layoutKey);
     expect(first.nodes).toEqual([{ id: 'a', radius: 4 }]);
     expect(first.edges[0]).toMatchObject({
       source: 'a',
@@ -2245,11 +2264,21 @@ describe('graph helpers', () => {
     // three visual encodings must consume the same routed quadratic.
     expect(source.match(/setEdgeCurve\(/g)).toHaveLength(4);
     expect(source.match(/graphEdgeCurvePointInto\(/g)).toHaveLength(2);
-    expect(source).toContain('uniqueGraphTopologyLinks(validEdges)');
+    expect(source).toContain('uniqueGraphTopologyLinks(topologyEdges)');
     expect(GRAPH_EDGE_CURVE_SEGMENTS).toBe(12);
     // Lines, arrowheads, and flow particles must all consume the same pure edge
     // query predicate; otherwise a dimmed relationship can keep glowing/moving.
     expect(source.match(/graphEdgeMatchesQuery\(/g)).toHaveLength(3);
+    const simulationEffect = source.slice(
+      source.indexOf('// (Re)create the 3D force simulation whenever the graph changes.'),
+      source.indexOf('// A graph-key or motion-policy change must never expose matrices'),
+    );
+    expect(simulationEffect).toContain(
+      "const layoutNode = layoutNodes[index.get(node.id) as number]",
+    );
+    expect(simulationEffect).toContain('layoutKey');
+    expect(simulationEffect).not.toContain('graphKey');
+    expect(simulationEffect).not.toContain('visualNodes');
   });
 
   it('gives the relationship disclosure summary a touch-sized target', () => {
@@ -2894,7 +2923,7 @@ describe('graph helpers', () => {
   });
 });
 
-describe('graphSignature (content key that stops needless sim restarts)', () => {
+describe('graph render and force-layout content signatures', () => {
   const graph = () => ({
     nodes: [
       { id: 'a', radius: 4 },
@@ -2907,6 +2936,41 @@ describe('graphSignature (content key that stops needless sim restarts)', () => 
     const g1 = graph();
     const g2 = graph(); // fresh object/array identities, same content
     expect(graphSignature(g1.nodes, g1.edges)).toBe(graphSignature(g2.nodes, g2.edges));
+  });
+
+  it('separates force topology from render-only assertion and style identity', () => {
+    const base = graph();
+    const restyled = graph();
+    restyled.edges = restyled.edges.map((edge) => ({
+      ...edge,
+      id: 'assertion:restyled',
+      color: '#000',
+      kind: 'variant_of',
+      directed: false,
+      particles: false,
+      edgeStrokePattern: 'dotted',
+    }));
+    expect(graphSignature(base.nodes, restyled.edges)).not.toBe(
+      graphSignature(base.nodes, base.edges),
+    );
+    expect(graphLayoutSignature(base.nodes, restyled.edges)).toBe(
+      graphLayoutSignature(base.nodes, base.edges),
+    );
+
+    const duplicateAssertion = {
+      ...restyled.edges[0],
+      id: 'assertion:duplicate',
+    };
+    expect(graphLayoutSignature(base.nodes, [
+      restyled.edges[0],
+      duplicateAssertion,
+    ])).toBe(graphLayoutSignature(base.nodes, base.edges));
+
+    const topologyNodes = [...base.nodes, { id: 'c', radius: 4 }];
+    const changedTopology = [{ ...base.edges[0], target: 'c' }];
+    expect(graphLayoutSignature(topologyNodes, changedTopology)).not.toBe(
+      graphLayoutSignature(topologyNodes, base.edges),
+    );
   });
 
   it('changes on structure, radius, glyph/stroke styling, and ORDER', () => {

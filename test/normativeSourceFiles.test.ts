@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   rmSync,
   symlinkSync,
+  truncateSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -13,7 +14,10 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { enumerateNormativeContractFiles } from '../scripts/lib/normative-source-files.js';
+import {
+  enumerateNormativeContractFiles,
+  NORMATIVE_CONTRACT_LIMITS,
+} from '../scripts/lib/normative-source-files.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SOURCE = path.join(ROOT, 'contract');
@@ -148,6 +152,63 @@ describe('closed recursive normative-source inventory', () => {
       writeFileSync(path.join(temporary, 'registries', 'notes.txt'), 'not normative JSON\n');
       expect(() => enumerateNormativeContractFiles(temporary)).toThrow(
         'non-JSON file appears in a normative contract directory: registries/notes.txt',
+      );
+    });
+  });
+
+  it('bounds manifest, normative-file, aggregate, depth, and directory work', () => {
+    withContractCopy((temporary) => {
+      truncateSync(
+        path.join(temporary, 'manifest.v1.json'),
+        NORMATIVE_CONTRACT_LIMITS.manifestBytes + 1,
+      );
+      expect(() => enumerateNormativeContractFiles(temporary)).toThrow(
+        /manifest\.v1\.json exceeds the reviewed byte bound/u,
+      );
+    });
+
+    withContractCopy((temporary) => {
+      const target = path.join(temporary, 'registries', 'oversized.v1.json');
+      writeFileSync(target, '');
+      truncateSync(target, NORMATIVE_CONTRACT_LIMITS.fileBytes + 1);
+      expect(() => enumerateNormativeContractFiles(temporary)).toThrow(
+        /file exceeds the reviewed physical profile/u,
+      );
+    });
+
+    withContractCopy((temporary) => {
+      const directory = path.join(temporary, 'registries', 'aggregate');
+      mkdirSync(directory);
+      for (let index = 0; index < 9; index += 1) {
+        const target = path.join(directory, `part-${index}.json`);
+        writeFileSync(target, '');
+        truncateSync(target, NORMATIVE_CONTRACT_LIMITS.fileBytes);
+      }
+      expect(() => enumerateNormativeContractFiles(temporary)).toThrow(
+        /aggregate byte bound/u,
+      );
+    });
+
+    withContractCopy((temporary) => {
+      let directory = path.join(temporary, 'registries');
+      for (let index = 0; index < NORMATIVE_CONTRACT_LIMITS.depth; index += 1) {
+        directory = path.join(directory, `d${index}`);
+        mkdirSync(directory);
+      }
+      writeFileSync(path.join(directory, 'too-deep.json'), '{}\n');
+      expect(() => enumerateNormativeContractFiles(temporary)).toThrow(
+        /path exceeds the reviewed bound/u,
+      );
+    });
+
+    withContractCopy((temporary) => {
+      const directory = path.join(temporary, 'registries', 'wide');
+      mkdirSync(directory);
+      for (let index = 0; index <= NORMATIVE_CONTRACT_LIMITS.directoryEntries; index += 1) {
+        writeFileSync(path.join(directory, `entry-${index}.json`), '{}\n');
+      }
+      expect(() => enumerateNormativeContractFiles(temporary)).toThrow(
+        /per-directory entry bound/u,
       );
     });
   });

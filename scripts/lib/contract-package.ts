@@ -12,7 +12,6 @@ import {
   chmodSync,
   lstatSync,
   mkdirSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -23,12 +22,29 @@ import { sha256Digest } from '../../src/core/sha256.js';
 import { parseJsonSourceStrict } from './strict-json-source.js';
 import { buildContractManifest } from './contract-manifest.js';
 import { AUTHORING_SCHEMA_COMPILATION_PROFILE_V1 } from './stable-catalog.js';
+import { inspectBoundedPackageTree } from './bounded-package-tree.js';
 import {
   compareNormativePathsUtf8,
   enumerateNormativeContractFiles,
+  NORMATIVE_CONTRACT_LIMITS,
+  readNormativeContractFile,
 } from './normative-source-files.js';
 
 const MANIFEST_FILE = 'manifest.v1.json';
+const CONTRACT_DESTINATION_TREE_LIMITS = Object.freeze({
+  files: NORMATIVE_CONTRACT_LIMITS.files + 1,
+  directories: NORMATIVE_CONTRACT_LIMITS.directories + 1,
+  nodes: NORMATIVE_CONTRACT_LIMITS.nodes + 2,
+  directoryEntries: NORMATIVE_CONTRACT_LIMITS.directoryEntries,
+  pathSegments: NORMATIVE_CONTRACT_LIMITS.depth + 2,
+  segmentBytes: NORMATIVE_CONTRACT_LIMITS.segmentBytes,
+  fileBytes: Math.max(
+    NORMATIVE_CONTRACT_LIMITS.fileBytes,
+    NORMATIVE_CONTRACT_LIMITS.manifestBytes,
+  ),
+  aggregateBytes:
+    NORMATIVE_CONTRACT_LIMITS.aggregateBytes + NORMATIVE_CONTRACT_LIMITS.manifestBytes,
+} as const);
 
 export { enumerateNormativeContractFiles } from './normative-source-files.js';
 
@@ -103,8 +119,16 @@ function requireSafeDestinationBoundary(destinationRoot: string): void {
   }
 }
 
-function readJson(absolute: string, label: string): unknown {
-  return parseJsonSourceStrict(readFileSync(absolute), label);
+function readJson(
+  contractRoot: string,
+  relative: string,
+  label: string,
+  maximumBytes: number = NORMATIVE_CONTRACT_LIMITS.fileBytes,
+): unknown {
+  return parseJsonSourceStrict(
+    readNormativeContractFile(contractRoot, relative, maximumBytes),
+    label,
+  );
 }
 
 function manifestRecords(value: unknown, problems: string[]): NormativeSourceRecord[] {
@@ -182,7 +206,12 @@ export function contractPackageProblems(contractRoot: string): string[] {
     if (!manifestStat.isFile()) {
       throw new Error(`contract/${MANIFEST_FILE} is not a regular file`);
     }
-    const parsedManifest = readJson(manifestFile, `contract/${MANIFEST_FILE}`);
+    const parsedManifest = readJson(
+      contractRoot,
+      MANIFEST_FILE,
+      `contract/${MANIFEST_FILE}`,
+      NORMATIVE_CONTRACT_LIMITS.manifestBytes,
+    );
     if (!isRecord(parsedManifest)) {
       throw new Error(`contract/${MANIFEST_FILE} must contain a JSON object`);
     }
@@ -213,7 +242,7 @@ export function contractPackageProblems(contractRoot: string): string[] {
   for (const relative of actualRelative) {
     const manifestPath = `contract/${relative}`;
     try {
-      const value = readJson(path.join(contractRoot, relative), manifestPath);
+      const value = readJson(contractRoot, relative, manifestPath);
       parsedByRelative.set(relative, value);
       const digest = sha256Digest(canonicalize(value as never));
       actualInventory.push({ path: manifestPath, digest });
@@ -419,13 +448,26 @@ export function copyContractForPackage(sourceRoot: string, destinationRoot: stri
 
   const relativeFiles = packagedContractRelativeFiles(sourceRoot);
   requireSafeDestinationBoundary(destinationRoot);
+  if (lstatIfPresent(path.resolve(destinationRoot)) !== undefined) {
+    inspectBoundedPackageTree(
+      path.resolve(destinationRoot),
+      'dist/contract',
+      CONTRACT_DESTINATION_TREE_LIMITS,
+    );
+  }
   rmSync(destinationRoot, { recursive: true, force: true });
   mkdirSync(destinationRoot, { recursive: true, mode: 0o755 });
   requireDirectDirectory(destinationRoot, 'packaged contract destination root');
   for (const relative of relativeFiles) {
     const destination = path.join(destinationRoot, relative);
     mkdirSync(path.dirname(destination), { recursive: true, mode: 0o755 });
-    writeFileSync(destination, readFileSync(path.join(sourceRoot, relative)), { mode: 0o644 });
+    writeFileSync(destination, readNormativeContractFile(
+      sourceRoot,
+      relative,
+      relative === MANIFEST_FILE
+        ? NORMATIVE_CONTRACT_LIMITS.manifestBytes
+        : NORMATIVE_CONTRACT_LIMITS.fileBytes,
+    ), { mode: 0o644 });
     chmodSync(destination, 0o644);
   }
 
@@ -434,8 +476,11 @@ export function copyContractForPackage(sourceRoot: string, destinationRoot: stri
     throw new Error(`packaged contract verification failed:\n${destinationProblems.join('\n')}`);
   }
   for (const relative of relativeFiles) {
-    const source = readFileSync(path.join(sourceRoot, relative));
-    const destination = readFileSync(path.join(destinationRoot, relative));
+    const maximumBytes = relative === MANIFEST_FILE
+      ? NORMATIVE_CONTRACT_LIMITS.manifestBytes
+      : NORMATIVE_CONTRACT_LIMITS.fileBytes;
+    const source = readNormativeContractFile(sourceRoot, relative, maximumBytes);
+    const destination = readNormativeContractFile(destinationRoot, relative, maximumBytes);
     if (!source.equals(destination)) {
       throw new Error(`packaged contract is not a byte-for-byte copy: ${relative}`);
     }

@@ -101,7 +101,7 @@ python3.14 -B -m py_compile scripts/smoke-python-package.py scripts/inspect-posi
 dependency. Do not invoke `scripts/smoke-python-package.py` directly from an ambient
 interpreter. From a Cortexel source checkout, follow the complete **Python 3.14 package
 evidence** recipe in the root `CONTRIBUTING.md`: it provisions the exact isolated
-Python 3.14 runtime, uv 0.11.16 executable, retained five-wheel backend authority,
+Python 3.14 runtime, uv 0.12.1 executable, retained five-wheel backend authority,
 empty-environment offline install, and `-I -S -B` smoke entry point. For release
 evidence, use that recipe's result-mode block and independent strict receipt reader.
 

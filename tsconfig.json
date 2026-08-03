@@ -27,5 +27,5 @@
     },
     "types": ["node"]
   },
-  "include": ["index.ts", "core/**/*", "react/**/*", "src/**/*", "test/**/*", "scripts/**/*", "tsup.config.ts", "types/**/*"]
+  "include": ["index.ts", "core/**/*", "react/**/*", "src/**/*", "test/**/*", "scripts/**/*", "build.config.ts", "types/**/*"]
 }

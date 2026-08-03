@@ -459,7 +459,7 @@ export interface PackageDistributionIdentity {
   readonly pythonProjectVersion: unknown;
 }
 
-export const SUPPORTED_NODE_ENGINE_RANGE = '^22.0.0 || ^24.0.0 || ^26.0.0';
+export const SUPPORTED_NODE_ENGINE_RANGE = '^22.12.0 || ^24.0.0 || ^26.0.0';
 
 /** Rules that apply to both an intentionally private development tree and a release. */
 export function packageDistributionIdentityProblems(

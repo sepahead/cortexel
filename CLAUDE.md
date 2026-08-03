@@ -18,7 +18,7 @@ bun run typecheck   # tsc --noEmit
 bun run test        # vitest run
 bun run check       # generated parity + typecheck + test
 bun run check:formal # compile every pinned Lean proof with warnings as errors
-bun run build       # tsup + verified dist/contract copy + legacy skills manifest
+bun run build       # tsdown + verified dist/contract copy + legacy skills manifest
 bun run audit       # dependency advisory gate
 bun run lint:package # publint export/package metadata gate
 bun run test:package # clean-install ESM/CJS runtime + consumer type smoke
@@ -26,8 +26,13 @@ bun run test:package # clean-install ESM/CJS runtime + consumer type smoke
 
 Run both `bun run check` and `bun run check:formal` before finishing.
 
-Use `bun`. Supported Node runtimes are exactly the maintained majors 22, 24, and
-26 (`^22.0.0 || ^24.0.0 || ^26.0.0`); the package and CI enforce that policy.
+Use `bun`. Published-package Node support is `^22.12.0 || ^24.0.0 || ^26.0.0`;
+22.12 is the first Node 22 release that can load the ESM-only graph peer from the
+CommonJS graph entry without a flag. Source development additionally requires
+Node `^22.18.0 || ^24.11.0 || ^26.0.0`, retaining the current tsdown build-tool
+floors without admitting unsupported intervening or future majors. CI pins the build
+runtime and separately exercises the exact floor/current pairs 22.12.0/22.23.2,
+24.0.0/24.19.0, and 26.0.0/26.6.0 with each release's exact bundled npm.
 There is no separate linter; TypeScript strict mode is the gate.
 `bunfig.toml` deliberately sets `env = false` and a regression test checks nested Bun
 scripts. That is not a filesystem sandbox: package managers and dependencies may still
@@ -43,7 +48,7 @@ explicitly.
 | `core/skills/` | the skill axis: ids/registry/router, strict params/provenance, Cortexel + host invocation gates, authoring, examples, verification |
 | `react/` | render layer: strict `VizSpecRenderer`, React-only canonical SVG charts, `Expandable*`, `neuronShaders`, and (subpath-only) `KnowledgeGraph3DScene` + `knowledgeGraph` |
 | `src/` | FigureRequestV1 kernel, headless SVG renderer, NEST adapter, offline CLI, and generated contract projections |
-| `contract/` | Normative FigureRequestV1 registries/schemas/skills; copied exactly once to `dist/contract` after tsup cleans |
+| `contract/` | Normative FigureRequestV1 registries/schemas/skills; copied exactly once to `dist/contract` after the code build cleans |
 | `types/` | ambient shims for deps that ship none (`d3-force-3d`) |
 | `scripts/emit-manifest.ts` | generates `dist/skills.manifest.json` from the registry |
 | `test/` | vitest; several tests are *executable guards* for the invariants below |
@@ -68,11 +73,37 @@ These are the things a change most easily breaks. Treat them as hard constraints
 
 Git-dependency consumers install without a build step, so `dist/` is checked in and
 **CI fails if it drifts from source** (`git diff --exit-code -- dist`). After any
-change under `core/`, `react/`, `src/`, `index.ts`, `scripts/`, or `tsup.config.ts`, run
+change under `core/`, `react/`, `src/`, `index.ts`, `scripts/`, or `build.config.ts`, run
 `bun run build` and stage the regenerated `dist/`. Contract generation is checked in
 two independent zero-state trees for byte-identical output. Do not generalize that
 evidence to the complete compiled package: clean-tree, toolchain-pinned tarball
 reproducibility remains a separate release gate until it has a retained receipt.
+
+Runtime maps have a separate reviewed input boundary in
+`scripts/lib/package-source-map-authority.ts`: exact source identities and the
+aggregate decoded-content digest are intentional review data, not a generated glob.
+After an intentional mapped-source change, inspect the new source closure before
+updating the reported observed digest; never bless an unexpected identity merely to
+make the build pass. The map gate proves syntax/owner linkage, bounded ECMA-426 mapping
+grammar and coordinate/table/name coverage, exact embedded canonical-UTF-8 input bytes,
+and mapped-name text at the declared original coordinate—not general source-to-output
+semantic correspondence. Its hard allocation limits are review authority: raise them
+only after measuring and reviewing the exact emitted closure, never in response to an
+untrusted map. HTTP `SourceMap` headers are
+host-owned and outside the package-byte gate.
+
+The package build's private request/result/presentation WeakSet modules are graph
+capabilities, not ordinary bundle inputs. `build.config.ts` runs their exact-tuple
+resolver before tsdown's plugins and a separate ownership audit after graph discovery
+and final bundle mutation. Keep both layers: each private module must remain an exact,
+importer-free entry and its one pass-specific private facade. Resolver-only tests are
+insufficient because another plugin can short-circuit `resolveId`. Emitted paths below
+`dist/` have an 86-byte ceiling so the full `dist/...` package-relative identity stays
+within the reviewed 91-byte USTAR name profile. Keep tsdown and Rolldown exact-pinned
+and physically co-resolved. The first pre-ordered `outputOptions` authority rejects
+separate output plugins before they execute, initially admitted intermediate hooks are
+descriptor-sealed, and the final post-ordered authority checks the transformed state;
+neither bookend is redundant.
 
 ### 2. Honesty fails closed — and it is a security property
 
@@ -142,6 +173,26 @@ Mirrored in [CONTRIBUTING.md](./CONTRIBUTING.md); laws 3–5 have executable gua
   exact-lock 3.0.6 or re-audit another resolved version. Neither the lexical first-party
   guard nor the 3.0.6 inspection transfers an allocation or performance claim to that
   wider peer range.
+- **An npm zero exit does not prove optional-peer materialization.** The full package
+  smoke still requires every selected peer and transitive package. It may repeat the
+  identical `npm ci` once with its same private `full` cache only after the first command
+  succeeds and an exact reduced-closure proof isolates missing `optional:true` records.
+  Never broaden that classifier, parse npm log text as authority, or accept the reduced
+  tree. Version/pack control, core, charts, and full use four disjoint initially empty
+  cache directories; one consumer must never inherit another consumer's cache state.
+  Coldness is a one-time command-adjacent prepare-local state transition, not a
+  pathname assumption: bind the canonical workspace, controlling ancestry, role, and
+  captured directory identity; enumerate at most one dirent and require none; rebind;
+  set/recheck the environment; then admit only the active role's npm policy. Control completes after
+  pack, consumer roles only after the ordinary complete closure. Keep `full` active
+  across its bounded retry and never rerun its cold check. This proves only the initial
+  empty observation; it does not freeze the cache against an external same-UID writer.
+  Lock/integrity checks and later reduced/complete closure proofs are separate evidence.
+  Every npm command requires its role's prepared canonical current-UID mode-`0700`
+  cache identity, the exact private user/global configs, and an absent cwd-local
+  `.npmrc`; retry authority rechecks raw manifest/lock bytes, both tarballs, modes,
+  cache authority, and config identity again at the immediate second-command boundary.
+  The second result must pass the ordinary complete closure proof.
 - **`KnowledgeGraph3DScene` is not re-exported from `cortexel/react`** — it's the only
   scene needing the d3 peer, so it lives at `cortexel/react/knowledge-graph` to keep
   the base react entry d3-free. Its pure logic is in `react/knowledgeGraph.ts`

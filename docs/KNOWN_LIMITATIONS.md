@@ -703,7 +703,10 @@ The machine-readable state of every release gate is in
   conformance corpus rather than silently becoming two semantic authorities. Until the
   packages are published and these paths exist, a source checkout remains part of setup.
 - **Package-smoke authority is not a hostile process sandbox.** Prepared-state v2
-  seals the original source Node executable and npm package tree. Prepare and execute
+  seals the original source Node executable and npm package tree. Only the reviewed
+  npm 10 and npm 11 majors are admitted; current npm 12 is deliberately rejected until
+  its exact install topology and residue behavior have a separate reviewed profile and
+  CI lane. Prepare and execute
   each descriptor-acquire those exact Node bytes into one ephemeral, operation-scoped
   private runtime; source and staged digests must equal the prepared digest, and both
   authorities are re-bound around every command. Only the staged copy is used as the
@@ -712,14 +715,40 @@ The machine-readable state of every release gate is in
   Homebrew-relative `libnode.<number>.dylib` companions, not a closed dynamic-library
   dependency inventory, so this still does not bind Node's dynamic libraries,
   operating-system services, or the TypeScript harness runtime. Ordinary child
-  commands have an exact 300,000 ms bound; only the three closed, sequential
-  cold-cache npm materializations (`core`, `charts`, and `full`) have the shared
+  commands have an exact 300,000 ms bound; npm version/pack uses a separate control
+  cache, while the three closed, sequential npm materializations (`core`, `charts`,
+  and `full`) each start with a disjoint empty private cache and have the shared
   reviewed-POSIX maximum of 900,000 ms each. These are per-command bounds, not an
   aggregate phase deadline, network-availability guarantee, or hostile hard deadline.
-  No retry or caller-controlled timeout is admitted, and bound failures identify only
-  a fixed operation label plus the numeric bound. CI's 60-minute job timeout is an
-  outer operational cap; it does not cover the theoretical sum of every sequential
-  per-command maximum and is not a completion receipt. On the reviewed path,
+  Empty first use is established by a prepare-local per-role
+  `unused` -> `active` -> `complete` state machine. Command-adjacent cold activation
+  rebinds the exact canonical workspace, captured ancestry and cache inode, enumerates
+  at most one dirent and requires none, rebinds, and only then publishes the role's
+  environment path as active. Control completes after pack; consumer roles complete only after
+  their ordinary complete-closure proof. The full retry stays active in the same
+  nonempty-after-attempt-one cache and does not rerun that cold check. This is bounded
+  initial pre/post observation, not atomic exclusion of a hostile concurrent same-UID
+  filesystem writer, which can race afterward. Exact lock/integrity checks and later
+  reduced/complete closure proofs are separate evidence.
+  Core and charts run once. Full permits one identical retry in that same `full` cache,
+  never a cache warmed by core or charts, only when the
+  first command exits zero and exact hidden-lock plus reduced-filesystem proofs show
+  no difference except a nonempty `optional:true` subset that npm pruned. The retry
+  never accepts that subset: its final state must satisfy the complete lock, package,
+  scope, `.bin`, and filesystem closure. No command failure, required-package gap,
+  ambiguous metadata, caller-controlled retry, or caller-controlled timeout is
+  admitted. In particular, an npm 10 optional failure that retains an otherwise empty
+  scope is conservatively nonretryable because its reduced filesystem closure is not
+  exact; a fresh prepare is required. All npm invocations use exact owner-only
+  user/global configs and reject a cwd-local `.npmrc`. Every npm-command boundary also
+  rechecks the active role's canonical current-UID mode-`0700` directory identity;
+  retry authorization and its immediate command boundary recheck that cache authority,
+  config identity, raw manifest/lock bytes and modes, and both tarball copies. The
+  finalized workspace seal, rather than the per-command directory-identity check, binds
+  the resulting cache contents. Bound failures identify only a fixed operation label plus the numeric
+  bound. CI's 60-minute job timeout is an outer operational cap; it does not cover the
+  theoretical sum of every sequential per-command maximum and is not a completion
+  receipt. On the reviewed path,
   a live detached guardian is the sole process-group signal authority
   and the supervisor owns its exclusive control lease. Worker completion and
   guardian-local failures trigger the guardian directly; bounds, handled

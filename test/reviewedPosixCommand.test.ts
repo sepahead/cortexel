@@ -81,6 +81,111 @@ interface FaultedSupervisorOutcome {
   readonly lifetimeData: Buffer;
 }
 
+interface FaultedSupervisorBrokerRecord {
+  readonly completion: {
+    readonly code: number | null;
+    readonly signal: NodeJS.Signals | null;
+  };
+  readonly diagnosticBase64: string;
+  readonly lifetimeDataBase64: string;
+  readonly protocolBase64: string;
+  readonly schema: 'cortexel-test-faulted-supervisor-broker-result.v1';
+  readonly targetStderrBase64: string;
+  readonly targetStdoutBase64: string;
+}
+
+const FAULTED_SUPERVISOR_BROKER_SCHEMA =
+  'cortexel-test-faulted-supervisor-broker-result.v1' as const;
+
+// Bun 1.3.14 on macOS intermittently fails its internal connection step after
+// roughly twenty sequential node:child_process spawns with four extra pipes,
+// even after each child's close event and with no descriptor growth. The
+// reviewed boundary itself executes under Node, so use one ordinary three-pipe
+// Bun-to-Node test broker per case and create the exact extended descriptor set
+// with Node. This is not a retry or a weaker assertion: the broker reports every
+// byte only after the supervisor close event has drained all inherited pipes.
+const FAULTED_SUPERVISOR_BROKER_SOURCE = `'use strict';
+  const { spawn } = require('node:child_process');
+  const payloadEnvironmentName = ${JSON.stringify(REVIEWED_POSIX_SUPERVISOR_PAYLOAD_ENV)};
+  const resultSchema = ${JSON.stringify(FAULTED_SUPERVISOR_BROKER_SCHEMA)};
+  const requestChunks = [];
+  let brokerFailed = false;
+  const fail = (error) => {
+    if (brokerFailed) return;
+    brokerFailed = true;
+    const detail = error && error.stack ? error.stack : String(error);
+    process.stderr.write(detail + '\\n');
+    process.exitCode = 1;
+  };
+  process.stdin.on('data', (chunk) => requestChunks.push(Buffer.from(chunk)));
+  process.stdin.once('error', fail);
+  process.stdin.once('end', () => {
+    if (brokerFailed) return;
+    let request;
+    try {
+      request = JSON.parse(Buffer.concat(requestChunks).toString('utf8'));
+      if (
+        request === null ||
+        typeof request !== 'object' ||
+        typeof request.cwd !== 'string' ||
+        typeof request.payload !== 'string' ||
+        typeof request.supervisorSource !== 'string'
+      ) {
+        throw new Error('faulted supervisor broker request is invalid');
+      }
+    } catch (error) {
+      fail(error);
+      return;
+    }
+    const child = spawn(process.execPath, ['-e', request.supervisorSource], {
+      cwd: request.cwd,
+      env: { [payloadEnvironmentName]: request.payload },
+      stdio: ['pipe', 'pipe', 'pipe', 'ignore', 'pipe', 'pipe', 'pipe', 'pipe'],
+    });
+    const protocol = [];
+    const diagnostic = [];
+    const targetStdout = [];
+    const targetStderr = [];
+    const lifetimeData = [];
+    const collect = (stream, chunks) => {
+      if (stream !== null) stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    };
+    collect(child.stdout, protocol);
+    collect(child.stderr, diagnostic);
+    collect(child.stdio[4], targetStdout);
+    collect(child.stdio[5], targetStderr);
+    collect(child.stdio[6], []);
+    collect(child.stdio[7], lifetimeData);
+    child.stdin.on('error', () => {});
+    child.stdin.write('ARM\\n');
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGKILL');
+    }, 15_000);
+    child.once('error', (error) => {
+      clearTimeout(timer);
+      fail(error);
+    });
+    child.once('close', (code, signal) => {
+      clearTimeout(timer);
+      if (brokerFailed) return;
+      if (timedOut) {
+        fail(new Error('faulted supervisor fixture did not close'));
+        return;
+      }
+      process.stdout.write(JSON.stringify({
+        completion: { code, signal },
+        diagnosticBase64: Buffer.concat(diagnostic).toString('base64'),
+        lifetimeDataBase64: Buffer.concat(lifetimeData).toString('base64'),
+        protocolBase64: Buffer.concat(protocol).toString('base64'),
+        schema: resultSchema,
+        targetStderrBase64: Buffer.concat(targetStderr).toString('base64'),
+        targetStdoutBase64: Buffer.concat(targetStdout).toString('base64'),
+      }) + '\\n');
+    });
+  });`;
+
 function waitForPath(path: string, timeoutMs = 8_000): void {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -383,23 +488,20 @@ describe('reviewed POSIX command boundary', () => {
       targetExecutable: reviewedNode,
       timeoutMs: 10_000,
     });
-    const child = spawn(
-      reviewedNode,
-      ['-e', supervisorWithGuardianFixture(guardianFixture)],
-      {
-        cwd: workspace,
-        env: { [REVIEWED_POSIX_SUPERVISOR_PAYLOAD_ENV]: payload },
-        stdio: ['pipe', 'pipe', 'pipe', 'ignore', 'pipe', 'pipe', 'pipe', 'pipe'],
-      },
-    );
+    const child = spawn(reviewedNode, ['-e', FAULTED_SUPERVISOR_BROKER_SOURCE], {
+      cwd: workspace,
+      env: environment,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
     const completionPromise = new Promise<{
       readonly code: number | null;
       readonly signal: NodeJS.Signals | null;
     }>((resolveCompletion, rejectCompletion) => {
+      let timedOut = false;
       const timer = setTimeout(() => {
+        timedOut = true;
         child.kill('SIGKILL');
-        rejectCompletion(new Error('faulted supervisor fixture did not close'));
-      }, 15_000);
+      }, 20_000);
       child.once('error', (error) => {
         clearTimeout(timer);
         rejectCompletion(error);
@@ -408,36 +510,80 @@ describe('reviewed POSIX command boundary', () => {
       // not merely an observed exitCode, so all inherited pipes are drained.
       child.once('close', (code, signal) => {
         clearTimeout(timer);
+        if (timedOut) {
+          rejectCompletion(new Error('faulted supervisor broker did not close'));
+          return;
+        }
         resolveCompletion({ code, signal });
       });
     });
-    const protocol: Buffer[] = [];
-    const diagnostic: Buffer[] = [];
-    const targetStdout: Buffer[] = [];
-    const targetStderr: Buffer[] = [];
-    const lifetimeData: Buffer[] = [];
-    const collect = (stream: NodeJS.ReadableStream | null, chunks: Buffer[]): void => {
-      stream?.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
-    };
-    const descriptors = child.stdio as unknown as readonly (
-      NodeJS.ReadableStream | null
-    )[];
-    collect(child.stdout, protocol);
-    collect(child.stderr, diagnostic);
-    collect(descriptors[4] ?? null, targetStdout);
-    collect(descriptors[5] ?? null, targetStderr);
-    collect(descriptors[6] ?? null, []);
-    collect(descriptors[7] ?? null, lifetimeData);
+    const brokerOutput: Buffer[] = [];
+    const brokerDiagnostic: Buffer[] = [];
+    child.stdout?.on('data', (chunk: Buffer) => brokerOutput.push(Buffer.from(chunk)));
+    child.stderr?.on('data', (chunk: Buffer) => brokerDiagnostic.push(Buffer.from(chunk)));
     child.stdin?.on('error', () => {});
-    child.stdin?.write('ARM\n');
+    child.stdin?.end(JSON.stringify({
+      cwd: workspace,
+      payload,
+      supervisorSource: supervisorWithGuardianFixture(guardianFixture),
+    }));
     const completion = await completionPromise;
+    const diagnostic = Buffer.concat(brokerDiagnostic).toString('utf8');
+    if (completion.code !== 0 || completion.signal !== null) {
+      throw new Error(
+        `faulted supervisor broker failed (${JSON.stringify(completion)}): ${diagnostic}`,
+      );
+    }
+    if (diagnostic !== '') {
+      throw new Error(`faulted supervisor broker emitted stderr: ${diagnostic}`);
+    }
+    const serializedRecord = Buffer.concat(brokerOutput).toString('utf8');
+    if (!serializedRecord.endsWith('\n') || serializedRecord.indexOf('\n') !== serializedRecord.length - 1) {
+      throw new Error('faulted supervisor broker emitted a noncanonical record');
+    }
+    const record = JSON.parse(serializedRecord) as FaultedSupervisorBrokerRecord;
+    if (
+      record === null ||
+      typeof record !== 'object' ||
+      Array.isArray(record) ||
+      Object.keys(record).sort().join('\n') !== [
+        'completion',
+        'diagnosticBase64',
+        'lifetimeDataBase64',
+        'protocolBase64',
+        'schema',
+        'targetStderrBase64',
+        'targetStdoutBase64',
+      ].join('\n') ||
+      record.schema !== FAULTED_SUPERVISOR_BROKER_SCHEMA ||
+      record.completion === null ||
+      typeof record.completion !== 'object' ||
+      Array.isArray(record.completion) ||
+      Object.keys(record.completion).sort().join('\n') !== 'code\nsignal' ||
+      (record.completion.code !== null && !Number.isInteger(record.completion.code)) ||
+      (record.completion.signal !== null && typeof record.completion.signal !== 'string') ||
+      typeof record.protocolBase64 !== 'string' ||
+      typeof record.diagnosticBase64 !== 'string' ||
+      typeof record.targetStdoutBase64 !== 'string' ||
+      typeof record.targetStderrBase64 !== 'string' ||
+      typeof record.lifetimeDataBase64 !== 'string'
+    ) {
+      throw new Error('faulted supervisor broker result is invalid');
+    }
+    const decodeCanonicalBase64 = (value: string, field: string): Buffer => {
+      const decoded = Buffer.from(value, 'base64');
+      if (decoded.toString('base64') !== value) {
+        throw new Error(`faulted supervisor broker ${field} is not canonical base64`);
+      }
+      return decoded;
+    };
     return {
-      completion,
-      protocol: Buffer.concat(protocol),
-      diagnostic: Buffer.concat(diagnostic),
-      targetStdout: Buffer.concat(targetStdout),
-      targetStderr: Buffer.concat(targetStderr),
-      lifetimeData: Buffer.concat(lifetimeData),
+      completion: record.completion,
+      protocol: decodeCanonicalBase64(record.protocolBase64, 'protocol'),
+      diagnostic: decodeCanonicalBase64(record.diagnosticBase64, 'diagnostic'),
+      targetStdout: decodeCanonicalBase64(record.targetStdoutBase64, 'target stdout'),
+      targetStderr: decodeCanonicalBase64(record.targetStderrBase64, 'target stderr'),
+      lifetimeData: decodeCanonicalBase64(record.lifetimeDataBase64, 'lifetime data'),
     };
   };
 

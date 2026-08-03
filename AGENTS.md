@@ -28,22 +28,29 @@
 ## Start here for FigureRequestV1
 
 For new agent integrations, use the stable FigureRequestV1 surface before the legacy
-guide below. Discovery is offline and versioned:
+guide below. This development package is not published: install one reviewed, immutable
+40-hex-character Git commit (or a locally reviewed tarball), then address that exact
+local CLI module. Do not use a floating branch, global binary, or a command that may
+fall back to a registry/cache when the local package is absent:
 
 ```bash
-cortexel catalog --json
-cortexel describe neuro.spike_raster --json --section example
-cortexel describe neuro.spike_raster --json --section schema
-cortexel source catalog --json
-cortexel source describe nest-spike-recorder --json
-cortexel source example nest-spike-recorder > capture.template.json
+CORTEXEL_COMMIT=REPLACE_WITH_40_HEX_REVIEWED_COMMIT_SHA
+npm install --save-exact "github:sepahead/cortexel#$CORTEXEL_COMMIT"
+CORTEXEL_CLI=./node_modules/cortexel/dist/cli/main.js
+node "$CORTEXEL_CLI" identity --json
+node "$CORTEXEL_CLI" catalog --json
+node "$CORTEXEL_CLI" describe neuro.spike_raster --json --section example
+node "$CORTEXEL_CLI" describe neuro.spike_raster --json --section schema
+node "$CORTEXEL_CLI" source catalog --json
+node "$CORTEXEL_CLI" source describe nest-spike-recorder --json
+node "$CORTEXEL_CLI" source example nest-spike-recorder > capture.template.json
 # Replace every synthetic value with a caller-owned capture, remove the nested
 # guard, and write only inputTemplate to capture.json before continuing.
-cortexel source render nest-spike-recorder capture.json --output figure.svg --format json
+node "$CORTEXEL_CLI" source render nest-spike-recorder capture.json --output figure.svg --format json
 # When an intermediate request is useful for composition or review:
-cortexel source adapt nest-spike-recorder capture.json > request.json
-cortexel validate request.json
-cortexel render request.json --output figure.svg
+node "$CORTEXEL_CLI" source adapt nest-spike-recorder capture.json > request.json
+node "$CORTEXEL_CLI" validate request.json
+node "$CORTEXEL_CLI" render request.json --output figure.svg
 ```
 
 `--section example` is the recommended prompt-budget starting point. It returns an envelope whose
@@ -364,9 +371,11 @@ development package is not published, pin a reviewed Git commit (or install a lo
 packed tarball). A host using the 3D entry also installs its explicit optional peers:
 
 ```bash
-npm install github:sepahead/cortexel#<FULL_COMMIT_SHA>
+CORTEXEL_COMMIT=REPLACE_WITH_40_HEX_REVIEWED_COMMIT_SHA
+npm install --save-exact "github:sepahead/cortexel#$CORTEXEL_COMMIT"
 npm install react@^19 react-dom@^19 three@">=0.184 <0.186" \
-  @react-three/fiber@^9.6 d3-force-3d@3.0.6
+  @react-three/fiber@^9.6
+npm install --save-exact d3-force-3d@3.0.6
 npm install --save-dev @types/react@^19 @types/three@">=0.184 <0.186"
 ```
 

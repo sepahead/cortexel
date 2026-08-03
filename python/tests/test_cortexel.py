@@ -9,18 +9,19 @@ import json
 import math
 import os
 import sys
-import tomllib
 import unittest
 from collections.abc import Mapping
 from fractions import Fraction
 from importlib.resources import files
 from importlib.resources.abc import Traversable
 
+import tomllib
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-import cortexel  # noqa: E402
-from cortexel.canonicalize import canonicalize, CanonicalizationError  # noqa: E402
-from cortexel.generated import (  # noqa: E402
+import cortexel
+from cortexel.canonicalize import CanonicalizationError, canonicalize
+from cortexel.generated import (
     BUDGET_PROFILES,
     CANONICALIZATION_ALGORITHMS,
     NUMERIC_ALGORITHMS,
@@ -30,25 +31,25 @@ from cortexel.generated import (  # noqa: E402
     STABLE_SKILL_IDS,
     UNITS,
 )
-from cortexel.parse_json import parse_json_strict, JsonParseError  # noqa: E402
-from cortexel.validate import (  # noqa: E402
-    CortexelError,
-    _collect_quantities,
-    _collect_bare_units,
+from cortexel.parse_json import JsonParseError, parse_json_strict
+from cortexel.validate import (
     _UNIT_CODE_PROPERTY_NAMES,
+    CortexelError,
+    _collect_bare_units,
+    _collect_quantities,
     _derive_exact_aggregate_count_rate_in_unit,
+    _finalize_errors,
     _is_rounded_aggregate_count_rate_in_unit,
+    _load_schema,
     _materialize_width_intervals,
     _nearest_integer_ties_positive_infinity,
     _snapshot_materialized,
     _unit_scale,
-    _finalize_errors,
-    _load_schema,
     _validate_psth,
-    _validate_units,
-    _validate_spike_raster,
     _validate_response_raw_binned_peak_audit,
     _validate_schema,
+    _validate_spike_raster,
+    _validate_units,
 )
 
 CONTRACT_SKILLS = os.path.normpath(
@@ -365,9 +366,11 @@ class TestCanonicalization(unittest.TestCase):
             "sha256:d056a09c651dab55ceb8f30b349ec21de471bdf5ce4a94db7f29dc9594f54ec3",
         )
         for invalid in ([], [""], ["n1", "n1"], ["\ud800"]):
-            with self.subTest(invalid=repr(invalid)):
-                with self.assertRaises(CanonicalizationError):
-                    cortexel.canonical_identifier_set_digest(invalid)
+            with (
+                self.subTest(invalid=repr(invalid)),
+                self.assertRaises(CanonicalizationError),
+            ):
+                cortexel.canonical_identifier_set_digest(invalid)
 
         class StringSubclass(str):
             pass
@@ -376,9 +379,11 @@ class TestCanonicalization(unittest.TestCase):
             pass
 
         for invalid in (("n1",), ListSubclass(["n1"]), [StringSubclass("n1")]):
-            with self.subTest(non_json_domain=repr(invalid)):
-                with self.assertRaises(CanonicalizationError):
-                    cortexel.canonical_identifier_set_digest(invalid)
+            with (
+                self.subTest(non_json_domain=repr(invalid)),
+                self.assertRaises(CanonicalizationError),
+            ):
+                cortexel.canonical_identifier_set_digest(invalid)
 
     def test_executes_every_normative_identifier_set_vector(self):
         algorithm = CANONICALIZATION_ALGORITHMS[
@@ -447,9 +452,11 @@ class TestCanonicalization(unittest.TestCase):
 
     def test_rejects_ill_formed_unicode_values_and_keys_with_the_public_error(self):
         for value in ("\ud800", {"\udc00": 1}, {1: "not a JSON member"}):
-            with self.subTest(value=repr(value)):
-                with self.assertRaises(CanonicalizationError):
-                    canonicalize(value)
+            with (
+                self.subTest(value=repr(value)),
+                self.assertRaises(CanonicalizationError),
+            ):
+                canonicalize(value)
 
     def test_rejects_arbitrary_precision_integers_without_rejecting_large_floats(self):
         with self.assertRaises(CanonicalizationError):
@@ -2033,8 +2040,10 @@ class TestValidation(unittest.TestCase):
             [
                 (
                     "PROVENANCE_SOURCE_CLOCK_INCONSISTENT",
-                    "/data/window/captureAuthority/runtimeStatus/"
-                    "captureBiologicalTimeTics",
+                    (
+                        "/data/window/captureAuthority/runtimeStatus/"
+                        "captureBiologicalTimeTics"
+                    ),
                 ),
                 (
                     "PROVENANCE_SOURCE_CLOCK_INCONSISTENT",
@@ -2173,18 +2182,24 @@ class TestValidation(unittest.TestCase):
             [
                 (
                     "SCIENCE_WINDOW_INVALID",
-                    "/data/window/captureAuthority/bufferEpoch/"
-                    "beganAtBiologicalTimeTics",
+                    (
+                        "/data/window/captureAuthority/bufferEpoch/"
+                        "beganAtBiologicalTimeTics"
+                    ),
                 ),
                 (
                     "SCIENCE_WINDOW_INVALID",
-                    "/data/window/captureAuthority/recordingPlan/"
-                    "lastMutationAtBiologicalTimeTics",
+                    (
+                        "/data/window/captureAuthority/recordingPlan/"
+                        "lastMutationAtBiologicalTimeTics"
+                    ),
                 ),
                 (
                     "SCIENCE_WINDOW_INVALID",
-                    "/data/window/captureAuthority/runtimeStatus/"
-                    "captureBiologicalTimeTics",
+                    (
+                        "/data/window/captureAuthority/runtimeStatus/"
+                        "captureBiologicalTimeTics"
+                    ),
                 ),
             ],
         )
@@ -2240,8 +2255,10 @@ class TestValidation(unittest.TestCase):
             [(error.code, error.instance_path) for error in direct_errors],
             [(
                 "SCIENCE_WINDOW_INVALID",
-                "/data/window/captureAuthority/runtimeStatus/"
-                "captureBiologicalTimeTics",
+                (
+                    "/data/window/captureAuthority/runtimeStatus/"
+                    "captureBiologicalTimeTics"
+                ),
             )],
         )
 
@@ -2255,8 +2272,10 @@ class TestValidation(unittest.TestCase):
             [(error.code, error.instance_path) for error in direct_errors],
             [(
                 "PROVENANCE_SOURCE_CLOCK_INCONSISTENT",
-                "/data/window/captureAuthority/runtimeStatus/"
-                "captureBiologicalTimeTics",
+                (
+                    "/data/window/captureAuthority/runtimeStatus/"
+                    "captureBiologicalTimeTics"
+                ),
             )],
         )
 
@@ -2274,8 +2293,10 @@ class TestValidation(unittest.TestCase):
             [(error.code, error.instance_path) for error in direct_errors],
             [(
                 "SCIENCE_WINDOW_INVALID",
-                "/data/window/captureAuthority/runtimeStatus/"
-                "captureBiologicalTimeTics",
+                (
+                    "/data/window/captureAuthority/runtimeStatus/"
+                    "captureBiologicalTimeTics"
+                ),
             )],
         )
 
@@ -2303,13 +2324,17 @@ class TestValidation(unittest.TestCase):
         for field_path, expected_path in (
             (
                 ("bufferEpoch", "beganAtBiologicalTimeTics"),
-                "/data/window/captureAuthority/bufferEpoch/"
-                "beganAtBiologicalTimeTics",
+                (
+                    "/data/window/captureAuthority/bufferEpoch/"
+                    "beganAtBiologicalTimeTics"
+                ),
             ),
             (
                 ("recordingPlan", "lastMutationAtBiologicalTimeTics"),
-                "/data/window/captureAuthority/recordingPlan/"
-                "lastMutationAtBiologicalTimeTics",
+                (
+                    "/data/window/captureAuthority/recordingPlan/"
+                    "lastMutationAtBiologicalTimeTics"
+                ),
             ),
         ):
             with self.subTest(field=field_path[0]):

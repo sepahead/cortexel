@@ -27,7 +27,7 @@ from collections.abc import Mapping, Sequence
 from fractions import Fraction
 from importlib.resources import files
 from importlib.resources.abc import Traversable
-from typing import Any, NotRequired, Optional, TypeAlias, TypeGuard, TypedDict, cast
+from typing import Any, NotRequired, TypeAlias, TypedDict, TypeGuard, cast
 from urllib.parse import unquote
 
 from .generated.catalog import (
@@ -36,8 +36,8 @@ from .generated.catalog import (
     QUANTITY_KIND_DIMENSIONS,
     REQUEST_CONTRACT,
     SKILL_REVISIONS,
-    UNITS,
     UNIT_ALIASES,
+    UNITS,
 )
 from .parse_json import parse_json_strict
 
@@ -78,7 +78,7 @@ class ResponseEventScope(TypedDict):
     kind: str
     selectionId: str
     selectedEventTrainCount: int
-    recordedSenderCount: Optional[int]
+    recordedSenderCount: int | None
     membershipKind: str
 
 
@@ -97,8 +97,8 @@ class CortexelError:
         message: str,
         *,
         severity: str = "error",
-        omitted_count: Optional[int] = None,
-        validator_id: Optional[str] = None,
+        omitted_count: int | None = None,
+        validator_id: str | None = None,
     ) -> None:
         self.code = code
         self.stage = stage
@@ -203,7 +203,7 @@ def _load_schema(relative: str) -> JsonRecord:
 
 def _resolve_ref(
     ref: str,
-    document_root: Optional[JsonRecord],
+    document_root: JsonRecord | None,
 ) -> tuple[Any, JsonRecord]:
     """Resolve a ``$ref`` and retain the resource that owns its fragment.
 
@@ -416,8 +416,8 @@ def _snapshot_node(
 
 def _snapshot_materialized(
     value: Any,
-    limits: Optional[Mapping[str, int]] = None,
-) -> tuple[Any, Optional[CortexelError]]:
+    limits: Mapping[str, int] | None = None,
+) -> tuple[Any, CortexelError | None]:
     """Total, detached Python counterpart of TypeScript's safe snapshot boundary."""
     state: SnapshotState = {
         "limits": _STANDARD_LIMITS if limits is None else limits,
@@ -428,9 +428,9 @@ def _snapshot_materialized(
         return _snapshot_node(value, "", 0, state), None
     except _SnapshotFailure as error:
         return None, error.diagnostic
-    except Exception:
-        # Never inspect or stringify an unexpected exception: it may originate in an
-        # exotic host value. The public boundary stays total and fails closed.
+    except Exception:  # noqa: BLE001
+        # This public same-realm boundary must convert every ordinary host exception.
+        # Never inspect or stringify it: it may originate in an exotic host value.
         return None, CortexelError(
             "INTERNAL_INVARIANT_VIOLATED",
             "internal",
@@ -471,7 +471,7 @@ def _schema_matches(
     value: Any,
     schema: Any,
     path: str,
-    document_root: Optional[JsonRecord],
+    document_root: JsonRecord | None,
 ) -> bool:
     local: ErrorList = []
     _validate_schema(value, schema, path, local, document_root)
@@ -501,7 +501,7 @@ def _validate_schema(
     schema: Any,
     path: str,
     errors: ErrorList,
-    document_root: Optional[JsonRecord] = None,
+    document_root: JsonRecord | None = None,
 ) -> None:
     if document_root is None and isinstance(schema, dict):
         document_root = schema
@@ -525,15 +525,15 @@ def _validate_schema(
         _validate_schema(value, resolved, path, errors, resolved_root)
         # Draft 2020-12 applies siblings of $ref as well.
 
-    if "const" in schema:
-        if not _json_equal(value, schema["const"]):
-            errors.append(CortexelError("SCHEMA_ENUM_MISMATCH", "structural", path,
-                                        f"expected the constant {schema['const']!r}"))
+    if "const" in schema and not _json_equal(value, schema["const"]):
+        errors.append(CortexelError("SCHEMA_ENUM_MISMATCH", "structural", path,
+                                    f"expected the constant {schema['const']!r}"))
 
-    if "enum" in schema:
-        if not any(_json_equal(value, candidate) for candidate in schema["enum"]):
-            errors.append(CortexelError("SCHEMA_ENUM_MISMATCH", "structural", path,
-                                        "the value is outside the closed enumeration"))
+    if "enum" in schema and not any(
+        _json_equal(value, candidate) for candidate in schema["enum"]
+    ):
+        errors.append(CortexelError("SCHEMA_ENUM_MISMATCH", "structural", path,
+                                    "the value is outside the closed enumeration"))
 
     if "oneOf" in schema:
         branch_errors: ErrorList = []
@@ -691,9 +691,8 @@ def _type_matches(value: Any, types: list[Any]) -> bool:
             return True
         if t == "null" and value is None:
             return True
-        if t == "integer":
-            if _is_json_integer(value):
-                return True
+        if t == "integer" and _is_json_integer(value):
+            return True
         if t == "number" and isinstance(value, (int, float)) and not isinstance(value, bool):
             return True
     return False
@@ -790,15 +789,15 @@ _TIME_PREBINNED_SKILLS = frozenset({
 })
 
 
-def _record(value: object) -> Optional[JsonRecord]:
+def _record(value: object) -> JsonRecord | None:
     return value if isinstance(value, dict) else None
 
 
-def _array(value: object) -> Optional[JsonArray]:
+def _array(value: object) -> JsonArray | None:
     return value if isinstance(value, list) else None
 
 
-def _legal_known_unit(node: Optional[JsonRecord]) -> Optional[str]:
+def _legal_known_unit(node: JsonRecord | None) -> str | None:
     """Return a canonical unit only when a neighbouring quantity kind permits it."""
     if node is None:
         return None
@@ -829,7 +828,10 @@ def _registered_unit_dimension(unit: str) -> str:
     entry = UNITS.get(unit)
     dimension = entry.get("dimension") if entry is not None else None
     if not isinstance(dimension, str):
-        raise RuntimeError(f"generated unit {unit!r} has no string dimension")
+        # This is a generated-registry invariant failure, not bad caller typing.
+        raise RuntimeError(  # noqa: TRY004
+            f"generated unit {unit!r} has no string dimension"
+        )
     return dimension
 
 
@@ -853,7 +855,7 @@ def _axes_are_compatible(source_unit: str, target_unit: str) -> bool:
     )
 
 
-def _reciprocal_unit(unit: str) -> Optional[str]:
+def _reciprocal_unit(unit: str) -> str | None:
     """Return the registry's exact reciprocal code, never a dimension-only guess."""
     candidate = f"/{unit}"
     return candidate if candidate in UNITS else None
@@ -870,7 +872,7 @@ def _contextual_unit_error(path: str, message: str) -> CortexelError:
 
 
 def _require_time_unit(
-    node: Optional[JsonRecord],
+    node: JsonRecord | None,
     path: str,
     meaning: str,
 ) -> ErrorList:
@@ -902,8 +904,8 @@ def _require_scalar_time_unit(unit: Any, path: str, meaning: str) -> ErrorList:
 
 def _bind_uncertainty_unit(
     errors: ErrorList,
-    uncertainty: Optional[JsonRecord],
-    values: Optional[JsonRecord],
+    uncertainty: JsonRecord | None,
+    values: JsonRecord | None,
     path: str,
     label: str,
 ) -> None:
@@ -920,7 +922,7 @@ def _bind_uncertainty_unit(
     ))
 
 
-def _legal_synaptic_weight_axis_unit(node: Optional[JsonRecord]) -> Optional[str]:
+def _legal_synaptic_weight_axis_unit(node: JsonRecord | None) -> str | None:
     """Return a canonical unit from the closed synaptic-weight dimension family."""
     if node is None:
         return None
@@ -937,8 +939,8 @@ def _legal_synaptic_weight_axis_unit(node: Optional[JsonRecord]) -> Optional[str
 
 def _bind_weight_trace_axis_carrier(
     errors: ErrorList,
-    carrier: Optional[JsonRecord],
-    target_unit: Optional[str],
+    carrier: JsonRecord | None,
+    target_unit: str | None,
     path: str,
     label: str,
 ) -> None:
@@ -1639,40 +1641,52 @@ def _spike_raster_source_clock_errors(
         (
             version == "3.10.0",
             "/source/systemVersion",
-            f"the revision-{profile_revision} serialized clock profile admits only "
-            "the exact pinned NEST 3.10.0 runtime declaration.",
+            (
+                f"the revision-{profile_revision} serialized clock profile admits only "
+                "the exact pinned NEST 3.10.0 runtime declaration."
+            ),
         ),
         (
             capture_version == version,
             "/data/window/captureAuthority/runtimeStatus/nestVersion",
-            "the capture-authority runtime version must exactly equal "
-            "source.systemVersion.",
+            (
+                "the capture-authority runtime version must exactly equal "
+                "source.systemVersion."
+            ),
         ),
         (
             runtime_status.get("timeBuildProfile") ==
             "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1",
             "/data/window/captureAuthority/runtimeStatus/timeBuildProfile",
-            "source projection revision 5 requires the exact pinned NEST 3.10 "
-            "Time build profile (int64 tic_t, int64 long, IEEE-754 binary64).",
+            (
+                "source projection revision 5 requires the exact pinned NEST 3.10 "
+                "Time build profile (int64 tic_t, int64 long, IEEE-754 binary64)."
+            ),
         ),
         (
             isinstance(digest, str) and
             re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is not None,
             "/source/sourceDigest",
-            "the exported recorder object must be bound by a full lowercase "
-            "sha256: sourceDigest.",
+            (
+                "the exported recorder object must be bound by a full lowercase "
+                "sha256: sourceDigest."
+            ),
         ),
         (
             window.get("recordingBackend") == "memory",
             "/data/window/recordingBackend",
-            f"revision {profile_revision} admits only the NEST memory recording "
-            "backend.",
+            (
+                f"revision {profile_revision} admits only the NEST memory recording "
+                "backend."
+            ),
         ),
         (
             window.get("timeEncoding") == "native_binary64_ms",
             "/data/window/timeEncoding",
-            f"revision {profile_revision} admits only native_binary64_ms "
-            "(time_in_steps=false), not reconstructed step/offset clocks.",
+            (
+                f"revision {profile_revision} admits only native_binary64_ms "
+                "(time_in_steps=false), not reconstructed step/offset clocks."
+            ),
         ),
         (
             event_times.get("unit") == "ms",
@@ -1682,8 +1696,10 @@ def _spike_raster_source_clock_errors(
         (
             data.get("timeBase") == "absolute_clock",
             "/data/timeBase",
-            "a NEST origin-relative recorder clock is an absolute source clock and "
-            "cannot be relabelled trial_relative.",
+            (
+                "a NEST origin-relative recorder clock is an absolute source clock and "
+                "cannot be relabelled trial_relative."
+            ),
         ),
     )
     return [
@@ -2015,8 +2031,10 @@ def _validate_spike_raster(request: JsonRecord, errors: ErrorList) -> None:
                                 "resolution_tics",
                                 resolution_tics,
                                 resolution_ms,
-                                "/data/window/captureAuthority/runtimeStatus/"
-                                "resolutionMs",
+                                (
+                                    "/data/window/captureAuthority/runtimeStatus/"
+                                    "resolutionMs"
+                                ),
                                 "resolutionMs",
                             ),
                             (
@@ -2522,7 +2540,7 @@ def _materialize_width_intervals(
     }
 
 
-def _materialized_width_count(start: float, stop: float, width: float) -> Optional[int]:
+def _materialized_width_count(start: float, stop: float, width: float) -> int | None:
     result = _materialize_width_intervals(start, stop, width)
     return int(result["intervalCount"]) if result["accepted"] else None
 
@@ -2686,7 +2704,7 @@ def _psth_exact_unit_sum(terms: list[tuple[float, str]], target_unit: str) -> fl
 def _psth_bin_edges(
     bins: JsonRecord,
     errors: ErrorList,
-) -> Optional[list[float]]:
+) -> list[float] | None:
     """Resolve the shared width/edge declaration without importing TypeScript output."""
     mode = bins.get("mode")
     if mode == "edges":
@@ -2901,8 +2919,8 @@ def _psth_derived_values(
     normalization: str,
     sender_count: int,
     value_unit: str,
-) -> list[Optional[float]]:
-    values: list[Optional[float]] = []
+) -> list[float | None]:
+    values: list[float | None] = []
     for index, count in enumerate(counts):
         denominator = denominators[index]
         if count is None or denominator is None:
@@ -3775,7 +3793,7 @@ def _validate_response_raw_binned_peak_audit(
     response_path: str,
     divisor: int,
     errors: ErrorList,
-) -> Optional[dict[str, float]]:
+) -> dict[str, float] | None:
     """Validate identified raw max-bin counts and derive count-level estimates."""
     data = request.get("data")
     basis = response.get("basis")
@@ -4077,7 +4095,7 @@ def _validate_response_peak_basis(
 def _validate_response_event_scope(
     data: JsonRecord,
     errors: ErrorList,
-) -> Optional[ResponseEventScope]:
+) -> ResponseEventScope | None:
     """Bind the declared event train/population before interpreting any scalar response."""
     scope = data.get("eventScope")
     if not isinstance(scope, dict):
@@ -4257,7 +4275,7 @@ def _validate_response_curve(request: JsonRecord, errors: ErrorList) -> None:
     is_rate = method in ("mean_firing_rate", "peak_firing_rate")
     normalization = response.get("rateNormalization")
     event_scope = _validate_response_event_scope(data, errors)
-    divisor: Optional[int] = None
+    divisor: int | None = None
 
     if is_rate and event_scope is not None:
         if normalization == "single_train_rate":

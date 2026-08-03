@@ -25,7 +25,6 @@ import sysconfig
 import tempfile
 import threading
 import time
-import tomllib
 import urllib.request
 import venv
 import zipfile
@@ -33,12 +32,13 @@ import zlib
 from pathlib import Path, PurePosixPath
 from typing import Literal, NoReturn, overload
 
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON_PROJECT = ROOT / "python"
 PACKAGED_CONTRACT = PYTHON_PROJECT / "src" / "cortexel" / "contract"
 SOURCE_DATE_EPOCH = "946684800"  # 2000-01-01T00:00:00Z
-EXPECTED_UV_VERSION = "0.11.16"
+EXPECTED_UV_VERSION = "0.12.1"
 EXPECTED_PACKAGE_BUILD_PYTHON = (3, 14)
 IO_CHUNK_BYTES = 1024 * 1024
 MAX_SOURCE_FILE_BYTES = 16 * 1024 * 1024
@@ -1314,7 +1314,7 @@ def expected_uv_entry_point_script(
     module: str,
     function: str,
 ) -> bytes:
-    """Reproduce uv 0.11.16's exact POSIX entry-point launcher."""
+    """Reproduce uv 0.12.1's exact POSIX entry-point launcher."""
 
     if any(character in runtime_python for character in ("\0", "\n", "\r")):
         fail("the reviewed Python path contains an unsupported control character")
@@ -1328,7 +1328,7 @@ def expected_uv_entry_point_script(
         )
     else:
         shebang = f"#!{runtime_python}"
-    return (
+    return (  # noqa: UP012 -- exact launcher bytes use a named codec.
         f"{shebang}\n"
         "# -*- coding: utf-8 -*-\n"
         "import sys\n"
@@ -1911,7 +1911,9 @@ def _run_checked_with_guardian(
     process: subprocess.Popen[bytes] | None = None
     launch_error: BaseException | None = None
     additional_launch_errors = 0
-    config_file = tempfile.TemporaryFile(mode="w+b")
+    # This descriptor has an explicit one-way close/fail-stop boundary below; a
+    # context manager could attempt a second close after an ambiguous close failure.
+    config_file = tempfile.TemporaryFile(mode="w+b")  # noqa: SIM115
 
     def latch_launch_error(error: BaseException, *, resource: str) -> None:
         nonlocal additional_launch_errors, launch_error
@@ -1932,7 +1934,7 @@ def _run_checked_with_guardian(
             return
         try:
             os.close(file_descriptor)
-        except BaseException:
+        except BaseException:  # noqa: BLE001
             # close(2) failure is an ambiguous one-way boundary: the descriptor
             # may still be live or its number may already be reusable. Continuing
             # cannot revoke both possibilities; kernel process teardown can.
@@ -1970,7 +1972,7 @@ def _run_checked_with_guardian(
             if lease_write is not None:
                 try:
                     os.close(lease_write)
-                except BaseException:
+                except BaseException:  # noqa: BLE001
                     # A possibly-live writer can pin the guardian forever. The
                     # smoke boundary is a CLI worker, so fail-stop and let the
                     # kernel close every capability without a numeric retry.
@@ -1981,7 +1983,8 @@ def _run_checked_with_guardian(
     def close_protocol_descriptor(file_descriptor: int) -> None:
         try:
             os.close(file_descriptor)
-        except BaseException:
+        except BaseException:  # noqa: BLE001
+            # Every close failure is an ambiguous descriptor-identity boundary.
             _fail_stop_after_ambiguous_descriptor_close()
 
     def close_output_stream(stream_name: str) -> None:
@@ -1989,7 +1992,8 @@ def _run_checked_with_guardian(
         if stream is not None:
             try:
                 stream.close()
-            except BaseException:
+            except BaseException:  # noqa: BLE001
+                # Buffered close may execute arbitrary cleanup before closing the fd.
                 _fail_stop_after_ambiguous_descriptor_close()
 
     try:
@@ -2027,12 +2031,13 @@ def _run_checked_with_guardian(
             )
         except OSError as exc:
             raise RuntimeError(f"{label} guardian could not be launched") from exc
-    except BaseException as exc:
+    except BaseException as exc:  # noqa: BLE001
+        # All pre-publication failures must flow through exact descriptor cleanup.
         latch_launch_error(exc, resource="guardian launch")
     finally:
         try:
             config_file.close()
-        except BaseException:
+        except BaseException:  # noqa: BLE001
             # Never retry through fileno(): the number may already name an
             # unrelated object. Process teardown closes either possible object.
             _fail_stop_after_ambiguous_descriptor_close()
@@ -2067,7 +2072,8 @@ def _run_checked_with_guardian(
             try:
                 for stream_name, stream in streams.items():
                     descriptors[stream.fileno()] = stream_name
-            except BaseException as exc:
+            except BaseException as exc:  # noqa: BLE001
+                # Stream setup failure still requires lease revocation and one reap.
                 setup_error = exc
         body_error = launch_error or setup_error
         deadline = time.monotonic() + timeout
@@ -2075,7 +2081,8 @@ def _run_checked_with_guardian(
             if body_error is None and guardian_status is None:
                 try:
                     _raise_if_subprocess_cancellation_pending()
-                except BaseException as exc:
+                except BaseException as exc:  # noqa: BLE001
+                    # Pending control-flow signals are operation failures, then cleanup.
                     body_error = exc
                 if body_error is None and time.monotonic() >= deadline:
                     body_error = RuntimeError(
@@ -2105,7 +2112,8 @@ def _run_checked_with_guardian(
                 ]
             except InterruptedError:
                 continue
-            except BaseException as exc:
+            except BaseException as exc:  # noqa: BLE001
+                # Any polling failure revokes the lease before bounded drain continues.
                 latch_cleanup_error(exc)
                 close_lease()
                 if drain_deadline is None:
@@ -2121,7 +2129,8 @@ def _run_checked_with_guardian(
                     chunk = os.read(descriptor, IO_CHUNK_BYTES)
                 except InterruptedError:
                     continue
-                except BaseException as exc:
+                except BaseException as exc:  # noqa: BLE001
+                    # Any read failure revokes the lease and closes this exact stream.
                     latch_cleanup_error(exc)
                     close_lease()
                     del descriptors[descriptor]
@@ -2144,7 +2153,8 @@ def _run_checked_with_guardian(
                                 nonce=nonce,
                                 label=label,
                             )
-                        except BaseException as exc:
+                        except BaseException as exc:  # noqa: BLE001
+                            # Status parsing cannot bypass the remaining drain and reap.
                             latch_cleanup_error(exc)
                         if drain_deadline is None:
                             drain_deadline = (
@@ -2180,13 +2190,14 @@ def _run_checked_with_guardian(
                 output_bytes_seen += len(chunk)
                 if capture_output:
                     captured[stream_name].extend(chunk)
-    except BaseException as exc:
+    except BaseException as exc:  # noqa: BLE001
+        # Every post-spawn escape must pass through lease/stream cleanup and one reap.
         try:
             if body_error is None:
                 body_error = exc
             else:
                 latch_cleanup_error(exc)
-        except BaseException:
+        except BaseException:  # noqa: BLE001
             # Preserve an already-materialized exception without allowing error
             # aggregation itself to bypass the lifecycle finally block.
             if body_error is None:
@@ -2202,19 +2213,21 @@ def _run_checked_with_guardian(
             descriptors.clear()
             for stream_name in tuple(streams):
                 close_output_stream(stream_name)
-        except BaseException:
+        except BaseException:  # noqa: BLE001
             # No exception may escape the post-spawn region with a possibly-live
             # lease or armed Popen. Kernel teardown is the only total fallback.
             _fail_stop_after_ambiguous_descriptor_close()
 
     try:
         _reap_guardian_once(process, label=label)
-    except BaseException as exc:
+    except BaseException as exc:  # noqa: BLE001
+        # Reap failures are terminal ownership failures or retained cleanup evidence.
         if process.returncode is None:
             _fail_stop_after_ambiguous_descriptor_close()
         try:
             latch_cleanup_error(exc)
-        except BaseException:
+        except BaseException:  # noqa: BLE001
+            # Error aggregation is subordinate to the already-crossed reap boundary.
             cleanup_error = exc
 
     if cleanup_error is not None and additional_cleanup_errors > 4:

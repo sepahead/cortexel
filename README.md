@@ -156,17 +156,20 @@ claim that those examples are currently supported.
 The unreleased development package must be installed from a reviewed full Git commit
 or a locally reviewed tarball, never from a floating branch. Its engine range is Node
 22, 24, or 26; that declared range is not evidence that the still-open release matrix
-has passed. Inside an npm project, replace the placeholder once and invoke the local bin
-without relying on a global install:
+has passed. Inside an npm project, replace the placeholder with exactly 40 hexadecimal
+commit characters and invoke that installation's CLI module directly—without global,
+registry-fallback, or `npm exec` selection:
 
 ```bash
-npm install --save-exact github:sepahead/cortexel#<REVIEWED_FULL_COMMIT_SHA>
-npm exec -- cortexel identity --json
+CORTEXEL_COMMIT=REPLACE_WITH_40_HEX_REVIEWED_COMMIT_SHA
+npm install --save-exact "github:sepahead/cortexel#$CORTEXEL_COMMIT"
+node ./node_modules/cortexel/dist/cli/main.js identity --json
 ```
 
-The examples below use bare `cortexel` for readability. Prefix them with `npm exec --`
-for a project-local install. From a repository checkout, `bun src/cli/main.ts ...`
-exercises the same implementation:
+The examples below use bare `cortexel` for readability. In an agent harness, bind that
+name to the reviewed local module path above (or to a host-owned package script); do not
+let a missing local package trigger registry or cache selection. From a repository
+checkout, `bun src/cli/main.ts ...` exercises the same implementation:
 
 ```bash
 # What contract and identity is this build?
@@ -318,10 +321,12 @@ Because `0.10.0-dev.0` is not published, install a reviewed full Git SHA (or a l
 packed tarball), never a floating branch:
 
 ```bash
-npm install github:sepahead/cortexel#<FULL_COMMIT_SHA>
+CORTEXEL_COMMIT=REPLACE_WITH_40_HEX_REVIEWED_COMMIT_SHA
+npm install --save-exact "github:sepahead/cortexel#$CORTEXEL_COMMIT"
 # Only for the interactive 3D graph entry:
 npm install react@^19 react-dom@^19 three@">=0.184 <0.186" \
-  @react-three/fiber@^9.6 d3-force-3d@3.0.6
+  @react-three/fiber@^9.6
+npm install --save-exact d3-force-3d@3.0.6
 npm install --save-dev @types/react@^19 @types/three@">=0.184 <0.186"
 ```
 

@@ -77,9 +77,12 @@ change the semantics of the package candidate that was tested.
 
 ## Packaged copy
 
-After tsup cleans `dist/`, `scripts/prepare-package.ts` independently enumerates the
+After the code build cleans `dist/`, `scripts/prepare-package.ts` independently enumerates the
 normative JSON source set, verifies every per-file digest and both aggregate identities
 against this manifest, and writes the exact source bytes once under `dist/contract/`.
+Both source and any pre-existing destination are traversed under explicit node, depth,
+entry, path, file, and aggregate-byte ceilings; consumed bytes use stable descriptor
+reads, and an over-limit destination is left intact rather than recursively replaced.
 It then verifies the installed-layout copy again. Package export aliases such as
 `cortexel/contract/manifest.json`, registry paths, schema paths, and skill paths all
 point into that one physical tree; the legacy `cortexel/skills.manifest.json` remains a

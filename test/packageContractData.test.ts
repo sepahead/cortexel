@@ -266,6 +266,24 @@ describe('packaged normative contract', () => {
     }
   });
 
+  it('refuses to recursively replace an unbounded destination tree', () => {
+    const temporary = mkdtempSync(path.join(tmpdir(), 'cortexel-contract-wide-output-'));
+    try {
+      const destination = path.join(temporary, 'dist', 'contract');
+      mkdirSync(destination, { recursive: true });
+      for (let index = 0; index < 257; index += 1) {
+        writeFileSync(path.join(destination, `entry-${index}.json`), '{}\n');
+      }
+      const sentinel = path.join(destination, 'entry-0.json');
+      expect(() => copyContractForPackage(SOURCE, destination)).toThrow(
+        /per-directory entry bound/u,
+      );
+      expect(readFileSync(sentinel, 'utf8')).toBe('{}\n');
+    } finally {
+      rmSync(temporary, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it('declares the npm-required shebang in the CLI source', () => {
     const cli = path.join(ROOT, 'src', 'cli', 'main.ts');
     expect(readFileSync(cli, 'utf8').startsWith('#!/usr/bin/env node\n')).toBe(true);

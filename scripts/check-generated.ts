@@ -15,10 +15,10 @@
 
 import { execFileSync } from 'node:child_process';
 import {
-  cpSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  realpathSync,
   symlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -33,11 +33,12 @@ import {
 import {
   assertNoOutsideGeneratedOutputMutations,
   GENERATED_OUTPUT_ROOTS,
-  isGeneratorControllingInputPath,
+  materializeGeneratorControllingInputSnapshot,
   snapshotGeneratedOutputInventory,
   snapshotGeneratorControllingInputs,
   snapshotOutsideGeneratedOutputs,
 } from './lib/generated-output-authority.js';
+import { resolveReviewedTsxCli } from './lib/reviewed-tsx-cli.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GENERATOR_TIMEOUT_MS = 60_000;
@@ -48,11 +49,6 @@ const target = process.argv[1];
 if (typeof target !== 'string') process.exit(64);
 rmSync(target, { recursive: true, force: true });
 `;
-
-function copyAllowed(source: string): boolean {
-  const relative = path.relative(ROOT, source);
-  return isGeneratorControllingInputPath(relative);
-}
 
 function snapshotGeneratedTree(root: string): Map<string, Buffer> {
   return snapshotGeneratedOutputInventory(root);
@@ -95,11 +91,7 @@ function prepareIsolatedTree(
   destination: string,
   expectedInputs: GeneratedSnapshot,
 ): void {
-  cpSync(ROOT, destination, {
-    recursive: true,
-    dereference: false,
-    filter: (source) => copyAllowed(source),
-  });
+  materializeGeneratorControllingInputSnapshot(destination, expectedInputs);
 
   // Reuse installed tooling without copying hundreds of megabytes. The generated
   // tree itself never follows or snapshots this link.
@@ -123,9 +115,9 @@ function runGenerator(
   root: string,
   output: 'full' | 'errors-only',
   temporaryRoot: string,
+  reviewedTsxCli: string,
 ): void {
-  const tsxCli = path.join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs');
-  execFileSync(process.execPath, [tsxCli, 'scripts/generate-contract.ts'], {
+  execFileSync(process.execPath, [reviewedTsxCli, 'scripts/generate-contract.ts'], {
     cwd: root,
     // Never capture a pipe here. A descendant that retains an inherited pipe FD can
     // keep synchronous collection open after the direct generator child has exited.
@@ -152,7 +144,7 @@ function runGenerator(
 }
 
 function removeTemporaryGenerationTree(temporaryParent: string): void {
-  const resolvedTemporaryRoot = path.resolve(tmpdir());
+  const resolvedTemporaryRoot = realpathSync(tmpdir());
   const resolvedTarget = path.resolve(temporaryParent);
   const relative = path.relative(resolvedTemporaryRoot, resolvedTarget);
   if (
@@ -195,12 +187,17 @@ function removeTemporaryGenerationTree(temporaryParent: string): void {
 }
 
 function main(): number {
+  // tsx 4.23 resolves its own runtime relative to the invoked CLI. Bind that CLI
+  // to the canonical installed package before creating either zero-state tree;
+  // `cwd` and the generator source remain inside each isolated tree below.
+  const reviewedTsxCli = resolveReviewedTsxCli(ROOT);
   const originalGenerated = snapshotGeneratedTree(ROOT);
   const originalInputs = snapshotGeneratorControllingInputs(ROOT);
   // Unix-domain socket paths are length-bounded on macOS. Keep the isolated
   // namespace deliberately short while retaining separate runtime state for
   // the two determinism passes.
-  const temporaryParent = mkdtempSync(path.join(tmpdir(), 'cxg-'));
+  const temporaryRoot = realpathSync(tmpdir());
+  const temporaryParent = realpathSync(mkdtempSync(path.join(temporaryRoot, 'cxg-')));
   const firstRoot = path.join(temporaryParent, 'first');
   const secondRoot = path.join(temporaryParent, 'second');
   const firstRuntime = path.join(temporaryParent, 'r1');
@@ -213,7 +210,7 @@ function main(): number {
     process.stdout.write('Regenerating the contract in two independent zero-state trees...\n');
     prepareIsolatedTree(firstRoot, originalInputs);
     const firstOutsideBefore = snapshotOutsideGeneratedOutputs(firstRoot);
-    runGenerator(firstRoot, 'full', firstRuntime);
+    runGenerator(firstRoot, 'full', firstRuntime, reviewedTsxCli);
     assertNoOutsideGeneratedOutputMutations(
       firstOutsideBefore,
       snapshotOutsideGeneratedOutputs(firstRoot),
@@ -226,7 +223,7 @@ function main(): number {
     // copy with the complete generated namespace absent instead.
     prepareIsolatedTree(secondRoot, originalInputs);
     const secondOutsideBefore = snapshotOutsideGeneratedOutputs(secondRoot);
-    runGenerator(secondRoot, 'errors-only', secondRuntime);
+    runGenerator(secondRoot, 'errors-only', secondRuntime, reviewedTsxCli);
     assertNoOutsideGeneratedOutputMutations(
       secondOutsideBefore,
       snapshotOutsideGeneratedOutputs(secondRoot),

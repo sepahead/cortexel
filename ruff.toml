@@ -1,0 +1,18 @@
+target-version = "py311"
+
+[lint.per-file-ignores]
+# These three entrypoints are intentionally data files in Git. Every supported
+# invocation binds an explicit reviewed Python interpreter instead of trusting an
+# ambient shebang lookup, so making them directly executable would weaken the gate.
+"scripts/inspect-posix-acl.py" = ["EXE001"]
+"scripts/smoke-python-package.py" = ["EXE001"]
+
+# This generator is additionally retained as an exact SHA-256-bound evidence
+# source. Mechanical import/branch rewrites require an intentional oracle and
+# downstream-ledger migration; the other Ruff 0.16 rules still inspect the file.
+"scripts/generate-nest-example-visualization-oracle.py" = [
+  "EXE001",
+  "I001",
+  "SIM114",
+  "UP035",
+]

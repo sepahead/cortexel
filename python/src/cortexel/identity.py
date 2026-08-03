@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from .generated.catalog import (
+    ARTIFACT_CONTRACT,
+    CATALOG_DIGEST,
+    CONTRACT_DIGEST,
     PACKAGE_VERSION,
     REQUEST_CONTRACT,
-    ARTIFACT_CONTRACT,
-    CONTRACT_DIGEST,
-    CATALOG_DIGEST,
     STABLE_SKILL_IDS,
 )
 

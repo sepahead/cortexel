@@ -9,7 +9,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
     "cortexel_nest_example_visualization_oracle",
@@ -235,9 +234,11 @@ class NestVisualizationOracleAstTest(unittest.TestCase):
             ),
         )
         for raster, spatial, message in mutations:
-            with self.subTest(message=message):
-                with self.assertRaisesRegex(oracle.OracleError, message):
-                    self._verify_helpers(raster, spatial)
+            with (
+                self.subTest(message=message),
+                self.assertRaisesRegex(oracle.OracleError, message),
+            ):
+                self._verify_helpers(raster, spatial)
 
     def test_raster_call_profile_requires_the_enabled_bounded_histogram_branch(self) -> None:
         valid = ast.parse(
@@ -285,9 +286,11 @@ class NestVisualizationOracleAstTest(unittest.TestCase):
                 "n_events / simtime",
             ),
         ):
-            with self.subTest(mutation=mutation):
-                with self.assertRaises(oracle.OracleError):
-                    oracle._verify_hh_response_curve_shape(ast.parse(mutation))
+            with (
+                self.subTest(mutation=mutation),
+                self.assertRaises(oracle.OracleError),
+            ):
+                oracle._verify_hh_response_curve_shape(ast.parse(mutation))
 
     def test_intrinsic_shape_is_one_base_panel_with_one_derived_twin_axis(self) -> None:
         oracle._verify_intrinsic_single_panel_dual_axis_shape(
@@ -299,9 +302,11 @@ class NestVisualizationOracleAstTest(unittest.TestCase):
             INTRINSIC_DUAL_AXIS.replace("Vax.twinx()", "Vax.twiny()"),
             INTRINSIC_DUAL_AXIS.replace("Current [pA]", "Voltage [mV]"),
         ):
-            with self.subTest(mutation=mutation):
-                with self.assertRaises(oracle.OracleError):
-                    oracle._verify_intrinsic_single_panel_dual_axis_shape(ast.parse(mutation))
+            with (
+                self.subTest(mutation=mutation),
+                self.assertRaises(oracle.OracleError),
+            ):
+                oracle._verify_intrinsic_single_panel_dual_axis_shape(ast.parse(mutation))
 
     def test_if_curve_binds_complete_recorder_grid_and_retained_carriers(self) -> None:
         profile = oracle._verify_if_curve_complete_population_shape(
@@ -380,9 +385,11 @@ class NestVisualizationOracleAstTest(unittest.TestCase):
             ),
         )
         for mutation in mutations:
-            with self.subTest(mutation=mutation):
-                with self.assertRaises(oracle.OracleError):
-                    oracle._verify_if_curve_complete_population_shape(ast.parse(mutation))
+            with (
+                self.subTest(mutation=mutation),
+                self.assertRaises(oracle.OracleError),
+            ):
+                oracle._verify_if_curve_complete_population_shape(ast.parse(mutation))
 
     def test_trajectory_binds_readout_target_coordinates_and_equal_scale(self) -> None:
         profile = oracle._verify_output_coordinate_trajectory_shape(
@@ -398,9 +405,11 @@ class NestVisualizationOracleAstTest(unittest.TestCase):
             OUTPUT_TRAJECTORY.replace('label="target"', 'label="state"'),
             OUTPUT_TRAJECTORY.replace('ax.axis("equal")', 'ax.axis("auto")'),
         ):
-            with self.subTest(mutation=mutation):
-                with self.assertRaises(oracle.OracleError):
-                    oracle._verify_output_coordinate_trajectory_shape(ast.parse(mutation))
+            with (
+                self.subTest(mutation=mutation),
+                self.assertRaises(oracle.OracleError),
+            ):
+                oracle._verify_output_coordinate_trajectory_shape(ast.parse(mutation))
 
     def test_spatial_callsite_binds_helper_layer_to_a_2d_constructor(self) -> None:
         profile = oracle._verify_spatial_2d_callsite_shape(ast.parse(SPATIAL_2D_CALLSITE))
@@ -460,9 +469,11 @@ unsafe_inspector = inspect_population
 unsafe_inspector(other)
 """,
         ):
-            with self.subTest(mutation=mutation):
-                with self.assertRaises(oracle.OracleError):
-                    oracle._verify_spatial_2d_callsite_shape(ast.parse(mutation))
+            with (
+                self.subTest(mutation=mutation),
+                self.assertRaises(oracle.OracleError),
+            ):
+                oracle._verify_spatial_2d_callsite_shape(ast.parse(mutation))
 
     def test_inventory_authority_rejects_byte_drift_digest_drift_and_duplicates(self) -> None:
         original = oracle.SOURCE_INVENTORY_PATH.read_bytes()
@@ -470,9 +481,11 @@ unsafe_inspector(other)
             candidate_path = Path(directory) / "inventory.json"
 
             candidate_path.write_bytes(original + b"\n")
-            with patch.object(oracle, "SOURCE_INVENTORY_PATH", candidate_path):
-                with self.assertRaisesRegex(oracle.OracleError, "byte length drifted"):
-                    oracle._load_pinned_source_inventory()
+            with (
+                patch.object(oracle, "SOURCE_INVENTORY_PATH", candidate_path),
+                self.assertRaisesRegex(oracle.OracleError, "byte length drifted"),
+            ):
+                oracle._load_pinned_source_inventory()
 
             changed = json.loads(original)
             changed["upstream"]["release"] = "forged"
@@ -495,9 +508,9 @@ unsafe_inspector(other)
                     "PINNED_SOURCE_INVENTORY_ARTIFACT_SHA256",
                     sha256(changed_bytes),
                 ),
+                self.assertRaisesRegex(oracle.OracleError, "digest does not bind"),
             ):
-                with self.assertRaisesRegex(oracle.OracleError, "digest does not bind"):
-                    oracle._load_pinned_source_inventory()
+                oracle._load_pinned_source_inventory()
 
             duplicate_bytes = b'{"member":1,"member":2}'
             candidate_path.write_bytes(duplicate_bytes)
@@ -513,9 +526,9 @@ unsafe_inspector(other)
                     "PINNED_SOURCE_INVENTORY_ARTIFACT_SHA256",
                     sha256(duplicate_bytes),
                 ),
+                self.assertRaisesRegex(oracle.OracleError, "strict JSON failed"),
             ):
-                with self.assertRaisesRegex(oracle.OracleError, "strict JSON failed"):
-                    oracle._load_pinned_source_inventory()
+                oracle._load_pinned_source_inventory()
 
     def test_retained_oracle_rejects_duplicate_and_stale_semantic_bindings(self) -> None:
         with self.assertRaisesRegex(oracle.OracleError, "strict UTF-8 JSON"):

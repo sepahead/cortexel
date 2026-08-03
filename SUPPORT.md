@@ -19,8 +19,9 @@ back — and that refusal is the feature, not the failure.
    - [`docs/KNOWN_LIMITATIONS.md`](./docs/KNOWN_LIMITATIONS.md) — the honest list of
      what the current development tree does not yet do. If your problem is listed
      there, it is a known gap with a named release gate, not an undiagnosed bug.
-   - [`contract/registries/capabilities.v1.json`](./contract/registries/capabilities.v1.json)
-     — the authoritative stable / experimental / removed matrix. Check a capability's
+   - [`dist/contract/registries/capabilities.v1.json`](./dist/contract/registries/capabilities.v1.json)
+     — the packaged exact copy of the authoritative stable / experimental / removed
+     matrix. Check a capability's
      `status` and `availability` before reporting that an absent or legacy capability
      "doesn't work like the stable ones." The packaged legacy knowledge-graph export is
      **experimental**; the current FigureRequestV1 catalog has no 3D, knowledge-graph,
@@ -30,7 +31,7 @@ back — and that refusal is the feature, not the failure.
    invocation is rejected, Cortexel returns a machine-readable repair block
    (`formatInvocationErrors`) with a `hint`, a copyable `example`, and a `didYouMean`
    for mistyped ids, and every stable error code is enumerated in
-   [`contract/registries/error-codes.v1.json`](./contract/registries/error-codes.v1.json).
+   [`dist/contract/registries/error-codes.v1.json`](./dist/contract/registries/error-codes.v1.json).
    The exact code and the repair block resolve the large majority of "why won't it
    validate?" questions without a maintainer round-trip.
 

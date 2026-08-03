@@ -1,3 +1,4 @@
+//#region src/core/validated-request-brand.d.ts
 /**
  * One package-private nominal type identity for every conditional declaration graph.
  *
@@ -8,7 +9,7 @@
  */
 declare const VALIDATED_REQUEST_NOMINAL_IDENTITY: unique symbol;
 interface ValidatedRequestNominalBrand {
-    readonly [VALIDATED_REQUEST_NOMINAL_IDENTITY]: true;
+  readonly [VALIDATED_REQUEST_NOMINAL_IDENTITY]: true;
 }
-
-export type { ValidatedRequestNominalBrand };
+//#endregion
+export { ValidatedRequestNominalBrand };

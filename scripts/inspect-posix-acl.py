@@ -6,11 +6,10 @@ from __future__ import annotations
 import ctypes
 import errno
 import os
-from pathlib import Path
 import stat
 import sys
+from pathlib import Path
 from typing import NoReturn
-
 
 _LINUX_REVIEWED_POSIX_ACL_FILESYSTEMS = {
     0x0000EF53: "ext-family",

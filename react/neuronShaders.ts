@@ -1,5 +1,5 @@
 // Point-neuron shaders as TS string constants (no Vite `?raw` coupling, so this
-// builds under tsup and is importable anywhere). Each GL point is ray-cast into a
+// builds under the package bundler and is importable anywhere). Each GL point is ray-cast into a
 // shaded sphere — the design-law "single neuron = sphere". The cluster→grid
 // expansion is applied on the THREE.Points transform (not hidden in a shader
 // offset), so CPU raycasting/culling and the visible neuron positions agree.

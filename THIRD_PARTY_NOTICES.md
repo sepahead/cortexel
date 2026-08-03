@@ -2,6 +2,24 @@
 
 This file covers third-party source code and colour data copied into Cortexel. Package dependencies are distributed separately under their own licenses.
 
+## Rolldown generated runtime helper
+
+Local use: the generated CommonJS compatibility helper emitted under
+`dist/rolldown-runtime-*.cjs` by the exact reviewed Rolldown 1.2.2 build. This
+helper is shipped inside the Cortexel package rather than as a separately
+installed dependency.
+
+Rolldown is Copyright (c) 2024-present VoidZero Inc. & Contributors and is
+licensed under the MIT License. Rolldown also identifies portions derived from
+Rollup (Copyright (c) 2017 its contributors) and Evan Wallace's esbuild runtime
+(Copyright (c) 2020 Evan Wallace), both under the MIT License. Cortexel
+conservatively distributes all three upstream notices in
+`LICENSES/Rolldown.txt`.
+
+Exact reviewed sources: `rolldown@1.2.2` files `LICENSE` and
+`THIRD-PARTY-LICENSE`; upstream tag
+<https://github.com/rolldown/rolldown/releases/tag/v1.2.2>.
+
 ## Scientific Colour Maps 8.0.1
 
 Local use: sampled and rounded `batlow`, `vik`, and `romaO` colour data, plus Cortexel-derived semantic, categorical, and GLSL palettes in `core/colormaps.ts` and the palette registry.

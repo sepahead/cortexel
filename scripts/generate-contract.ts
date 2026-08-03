@@ -28,7 +28,7 @@ import Ajv2020 from 'ajv/dist/2020.js';
 
 import { canonicalize } from '../src/core/canonicalize.js';
 import { sha256Hex } from '../src/core/sha256.js';
-import tsupConfig from '../tsup.config.js';
+import { CORTEXEL_PACKAGE_BUILD_CONFIG } from '../build.config.js';
 import { buildManifest as buildLegacySkillsManifest } from './emit-manifest.js';
 import {
   canonicalizationEntryDigest,
@@ -673,13 +673,9 @@ const sourceExportIds = new Set(
     return id === null ? [] : [id];
   }),
 );
-const tsupOptions = Array.isArray(tsupConfig) ? tsupConfig[0] : tsupConfig;
-const tsupEntry = typeof tsupOptions === 'object' && tsupOptions !== null &&
-  !Array.isArray(tsupOptions)
-  ? (tsupOptions as { entry?: unknown }).entry
-  : undefined;
+const packageBuildEntry = CORTEXEL_PACKAGE_BUILD_CONFIG.entry;
 const configuredPackageExports = packageExportIds(packageJson);
-const configuredBuildEntries = buildEntryIds(tsupEntry);
+const configuredBuildEntries = buildEntryIds(packageBuildEntry);
 const figureRuntimeIsPackaged = [
   'cortexel/figure',
   'cortexel/render-svg',
@@ -689,8 +685,11 @@ const figureRuntimeIsPackaged = [
   'cortexel/render-svg',
 ].every((id) => configuredBuildEntries.has(id));
 
-problems.push(...packageExportTargetProblems(packageJson, buildEntryOutputBases(tsupEntry)));
-problems.push(...packageBinTargetProblems(packageJson, tsupEntry));
+problems.push(...packageExportTargetProblems(
+  packageJson,
+  buildEntryOutputBases(packageBuildEntry),
+));
+problems.push(...packageBinTargetProblems(packageJson, packageBuildEntry));
 problems.push(...capabilitySourceProblems(capabilities, {
   packageExportIds: configuredPackageExports,
   buildEntryIds: configuredBuildEntries,
@@ -2152,57 +2151,57 @@ record(path.join(CONTRACT, 'manifest.v1.json'), `${JSON.stringify(manifest, null
 record(path.join(GENERATED_PY, 'catalog.py'), pyCatalog);
 record(path.join(GENERATED_PY, '__init__.py'), `${PY_BANNER('contract/, package.json, and python/pyproject.toml')}
 from .catalog import (
-    PACKAGE_VERSION,
-    PYTHON_DISTRIBUTION_VERSION,
-    REQUEST_CONTRACT,
     ARTIFACT_CONTRACT,
-    CONTRACT_DIGEST,
+    AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
+    BUDGET_PROFILES,
+    CANONICALIZATION_ALGORITHMS,
+    CAPABILITY_AVAILABILITIES,
+    CAPABILITY_AVAILABILITY,
     CATALOG_DIGEST,
     CATALOG_DIGEST_DOMAIN,
-    AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
-    STABLE_SKILL_IDS,
-    SKILL_CATALOG,
-    SKILL_AUTHORING_EXAMPLES,
-    SKILL_REVISIONS,
-    SKILL_ADAPTERS,
-    CAPABILITY_AVAILABILITY,
-    CAPABILITY_AVAILABILITIES,
+    CONTRACT_DIGEST,
     ERROR_CODES,
     ERROR_STAGES,
-    UNITS,
-    UNIT_ALIASES,
-    QUANTITY_KIND_DIMENSIONS,
     NUMERIC_ALGORITHMS,
     NUMERIC_POLICIES,
-    CANONICALIZATION_ALGORITHMS,
-    BUDGET_PROFILES,
+    PACKAGE_VERSION,
+    PYTHON_DISTRIBUTION_VERSION,
+    QUANTITY_KIND_DIMENSIONS,
+    REQUEST_CONTRACT,
+    SKILL_ADAPTERS,
+    SKILL_AUTHORING_EXAMPLES,
+    SKILL_CATALOG,
+    SKILL_REVISIONS,
+    STABLE_SKILL_IDS,
+    UNIT_ALIASES,
+    UNITS,
 )
 
 __all__ = [
-    "PACKAGE_VERSION",
-    "PYTHON_DISTRIBUTION_VERSION",
-    "REQUEST_CONTRACT",
     "ARTIFACT_CONTRACT",
-    "CONTRACT_DIGEST",
+    "AUTHORING_SCHEMA_COMPILATION_PROFILE_V1",
+    "BUDGET_PROFILES",
+    "CANONICALIZATION_ALGORITHMS",
+    "CAPABILITY_AVAILABILITIES",
+    "CAPABILITY_AVAILABILITY",
     "CATALOG_DIGEST",
     "CATALOG_DIGEST_DOMAIN",
-    "AUTHORING_SCHEMA_COMPILATION_PROFILE_V1",
-    "STABLE_SKILL_IDS",
-    "SKILL_CATALOG",
-    "SKILL_AUTHORING_EXAMPLES",
-    "SKILL_REVISIONS",
-    "SKILL_ADAPTERS",
-    "CAPABILITY_AVAILABILITY",
-    "CAPABILITY_AVAILABILITIES",
+    "CONTRACT_DIGEST",
     "ERROR_CODES",
     "ERROR_STAGES",
-    "UNITS",
-    "UNIT_ALIASES",
-    "QUANTITY_KIND_DIMENSIONS",
     "NUMERIC_ALGORITHMS",
     "NUMERIC_POLICIES",
-    "CANONICALIZATION_ALGORITHMS",
-    "BUDGET_PROFILES",
+    "PACKAGE_VERSION",
+    "PYTHON_DISTRIBUTION_VERSION",
+    "QUANTITY_KIND_DIMENSIONS",
+    "REQUEST_CONTRACT",
+    "SKILL_ADAPTERS",
+    "SKILL_AUTHORING_EXAMPLES",
+    "SKILL_CATALOG",
+    "SKILL_REVISIONS",
+    "STABLE_SKILL_IDS",
+    "UNITS",
+    "UNIT_ALIASES",
 ]
 `);
 

@@ -51,7 +51,7 @@ import {
   normalizeDerivativeByExactAxisExtent,
 } from './units.js';
 
-// `import.meta.url` works in native ESM source runners as well as tsup's ESM/CJS
+// `import.meta.url` works in native ESM source runners as well as the ESM/CJS
 // shims. `__dirname` is absent under tools such as tsx and made source execution fail
 // before the CLI could even print its identity.
 const HERE = path.dirname(fileURLToPath(import.meta.url));

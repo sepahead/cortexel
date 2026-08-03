@@ -1,0 +1,271 @@
+import { f as VizSpec } from "./vizSpec-DXKitvuD.js";
+import { z } from "zod";
+//#region core/designLaws.d.ts
+type NeuralSceneMode = 'hero' | 'background' | 'standalone';
+declare const SCENE_NAMES: readonly ["live-activity", "cortical-column", "stdp", "spike-raster", "network-topology", "voltage-trace", "phase-plane", "brunel-network", "fi-curve", "isi-distribution", "psth", "population-rate", "correlogram", "weight-histogram", "connection-matrix", "degree-distribution", "delay-distribution", "spatial-map-2d", "knowledge-graph-3d"];
+type SceneName = (typeof SCENE_NAMES)[number];
+interface NeuralSceneHandle {
+  nextScene: () => void;
+  setScene: (scene: SceneName) => void;
+  play: () => void;
+  pause: () => void;
+  seek: (time: number) => void;
+  setCameraPreset: (preset: CameraPresetName) => void;
+}
+interface NeuralSceneProps {
+  mode: NeuralSceneMode;
+  scene?: SceneName | 'auto';
+  opacity?: number;
+  cycleInterval?: number;
+  themeMode?: 'dark' | 'light';
+  /**
+   * When false, the WebGL frameloop is suspended (`frameloop="never"`) so a
+   * scene hidden behind another tab stops burning GPU/bloom every frame. The
+   * last frame stays painted; flipping back to true resumes rendering. Defaults
+   * to true so existing call sites are unchanged.
+   */
+  active?: boolean;
+}
+interface LayerConfig {
+  layer: string;
+  y: number;
+  count: number;
+  color: string;
+  label: string;
+}
+interface STDPSynapse {
+  preIdx: number;
+  postIdx: number;
+  weight: number;
+  targetWeight: number;
+  lastPreSpike: number;
+  lastPostSpike: number;
+}
+type CameraPresetName = 'default' | 'top' | 'side' | 'close' | 'cinematic';
+interface CameraPreset {
+  name: CameraPresetName;
+  position: [number, number, number];
+  target: [number, number, number];
+  fov?: number;
+}
+interface PlaybackState {
+  isPlaying: boolean;
+  currentTime: number;
+  duration: number;
+  speed: number;
+}
+interface SceneData {
+  spikeTimes?: Float64Array;
+  spikeSenders?: Float32Array;
+  timeUnits?: string;
+  voltageTraces?: Float32Array;
+  voltageUnits?: string;
+  traceTimes?: Float64Array;
+  traceSender?: number;
+  weightSeries?: Float32Array;
+  weightUnits?: string;
+  weightSynapse?: {
+    sender: number;
+    target: number;
+  };
+  analogTraces?: {
+    values: Float32Array;
+    variable: string;
+    units: string;
+  };
+  /** Connectivity dumps do not contain coordinates; absent x/y/z means the
+   *  renderer may derive a disclosed layout but must not present it as data. */
+  networkNodes?: {
+    id: number;
+    x?: number;
+    y?: number;
+    z?: number;
+    label: string;
+  }[];
+  networkEdges?: {
+    source: number;
+    target: number;
+    weight?: number;
+    delay?: number;
+  }[];
+  /** Present whenever networkEdges carry the corresponding measurement. */
+  networkWeightUnits?: string;
+  networkDelayUnits?: string;
+  /** Units for provided network x/y/z coordinates (never inferred). */
+  networkCoordinateUnits?: string;
+  networkLayout?: 'unpositioned' | 'provided-2d' | 'provided-3d';
+  vectorField?: {
+    x: number;
+    y: number;
+    z: number;
+    dx: number;
+    dy: number;
+    dz: number;
+  }[];
+}
+interface SceneFraming {
+  position: [number, number, number];
+  target: [number, number, number];
+  rotatable: boolean;
+}
+declare const SCENE_FRAMING: Record<SceneName, SceneFraming>;
+declare const CAMERA_PRESETS: Record<CameraPresetName, CameraPreset>;
+//#endregion
+//#region core/provenance.d.ts
+/** The runtime-validated provenance shape. Derived from VizSpec so the React
+ *  render boundary and honesty helpers cannot drift from the Zod contract. */
+type ProvenanceMetadata = VizSpec['provenance'];
+declare const CONSERVATIVE_PROVENANCE: Readonly<Pick<ProvenanceMetadata, 'calibrated_posterior' | 'advisory_only' | 'is_paper_local_evidence' | 'synthetic'>>;
+/** Language-neutral caption derivation contract, emitted in the manifest. */
+declare const HONESTY_POLICY: Readonly<{
+  version: "3";
+  calibratedPosteriorAccepted: false;
+  captionRequiredWhenAny: readonly string[];
+  precedence: readonly string[];
+  templates: Readonly<{
+    synthetic: "Schematic — illustrative synthetic data, not measured.";
+    advisory_only: "Advisory — advisory evidence only; not a calibrated posterior.";
+    not_paper_local: "Advisory — not paper-local evidence; candidate ranking only.";
+    not_calibrated: "Illustrative — not a calibrated posterior.";
+  }>;
+  callerCaption: "append_only_unverified";
+  callerCaptionLabel: "Caller note (unverified):";
+  callerCaptionControls: "escape C0/C1, bidi, zero-width, and BOM controls";
+  bidiIsolationRequired: true;
+  contractDisclosureOrder: readonly ["weak_skill", "external_provenance", "flag_derived_mandatory", "caller_note"];
+  weakSkillDisclosure: "contract_owned_first";
+  externalProvenanceDisclosure: "contract_owned_after_weak_before_flag_derived_mandatory";
+  flagDerivedMandatoryDisclosure: "derived_only_from_provenance_flags_and_always_before_caller_note";
+}>;
+/**
+ * Whether the renderer must show a non-dismissible "illustrative / not measured"
+ * honesty caption. Fail-closed: any non-rigorous flag forces the caption on.
+ */
+declare function requiresHonestyCaption(p: ProvenanceMetadata): boolean;
+/**
+ * The mandatory disclosure computed from the provenance FLAGS. This is the
+ * load-bearing honesty text: it is derived only from the machine-checkable flags
+ * (never from caller-supplied free text) so an agent cannot re-label synthetic or
+ * advisory data as measured. Precedence: synthetic → schematic; advisory-only →
+ * advisory; non-paper-local → advisory; then the residual posterior disclosure.
+ */
+declare function mandatoryDisclosure(p: ProvenanceMetadata): string;
+/**
+ * Default caption text when no skill-owned disclosures are involved. The
+ * flag-derived mandatory disclosure leads and a caller-supplied `caption` is
+ * only ever APPENDED as explicitly unverified context, never a replacement.
+ */
+declare function defaultHonestyCaption(p: ProvenanceMetadata): string;
+/** One fixed composition rule for both strict render gates. Contract-owned
+ * disclosures may precede the flag-derived segment; caller text is always last
+ * and explicitly unverified. */
+declare function composeHonestyCaption(p: ProvenanceMetadata, contractDisclosures?: Readonly<{
+  weakSkill?: string | null;
+  externalProvenance?: string | null;
+}>): string | null;
+//#endregion
+//#region core/skills/skillIds.d.ts
+declare const NEST_SKILL_IDS: readonly ["nest.voltage_trace", "nest.spike_raster", "nest.isi_distribution", "nest.psth", "nest.population_rate", "nest.rate_response", "nest.connectivity_matrix", "nest.connection_graph", "nest.adjacency_matrix", "nest.weight_matrix", "nest.delay_matrix", "nest.in_degree_distribution", "nest.out_degree_distribution", "nest.delay_distribution", "nest.weight_histogram", "nest.spatial_2d", "nest.spatial_map_2d", "nest.spatial_3d", "nest.plasticity_dynamics", "nest.phase_plane", "nest.correlogram", "nest.stimulus_response", "nest.astrocyte_dynamics", "nest.compartmental_dynamics", "nest.animation_replay", "corpus.knowledge_graph"];
+type NestSkillId = (typeof NEST_SKILL_IDS)[number];
+/** Neutral aliases — the axis is not NEST-only (see corpus.knowledge_graph).
+ *  Prefer these in new code; the NEST_-prefixed names remain for back-compat. */
+declare const SKILL_IDS: readonly ["nest.voltage_trace", "nest.spike_raster", "nest.isi_distribution", "nest.psth", "nest.population_rate", "nest.rate_response", "nest.connectivity_matrix", "nest.connection_graph", "nest.adjacency_matrix", "nest.weight_matrix", "nest.delay_matrix", "nest.in_degree_distribution", "nest.out_degree_distribution", "nest.delay_distribution", "nest.weight_histogram", "nest.spatial_2d", "nest.spatial_map_2d", "nest.spatial_3d", "nest.plasticity_dynamics", "nest.phase_plane", "nest.correlogram", "nest.stimulus_response", "nest.astrocyte_dynamics", "nest.compartmental_dynamics", "nest.animation_replay", "corpus.knowledge_graph"];
+type SkillId = NestSkillId;
+/** The routing meta-skill. Not a renderer — it selects among the skills above
+ *  (count derives from SKILL_IDS.length, so this can never drift again). */
+declare const VIZ_ROUTER_ID: "nest.viz_router";
+type VizRouterId = typeof VIZ_ROUTER_ID;
+declare const NEST_DEVICE_FAMILIES: readonly ["multimeter", "spike_recorder", "correlation_detector", "get_connections", "get_position", "weight_recorder", "computed", "corpus"];
+type NestDeviceFamily = (typeof NEST_DEVICE_FAMILIES)[number];
+/** Membership guard for the closed skill set. Note the set includes non-NEST
+ *  skills (corpus.knowledge_graph), so `isSkillId` is the accurate name. */
+declare function isSkillId(value: unknown): value is SkillId;
+/** @deprecated Misnomer — the set is not NEST-only. Use `isSkillId`. */
+declare const isNestSkillId: typeof isSkillId;
+declare const VALID_RENDERER_ROUTES: readonly ["media.trace_figure", "media.model_graph", "media.webgl_scene", "media.react_fiber_scene", "media.manim_storyboard", "media.*", "matplotlib", "d3", "three", "fiber", "manim"];
+type RendererRoute = (typeof VALID_RENDERER_ROUTES)[number];
+//#endregion
+//#region core/skills/validateSkillInvocation.d.ts
+interface SkillInvocationError {
+  code: 'unknown_skill' | 'invalid_envelope' | 'no_cortexel_scene' | 'cortexel_scene_available' | 'scene_mismatch' | 'skill_mismatch' | 'unsupported_spec_version' | 'invalid_params' | 'missing_provenance' | 'invalid_provenance' | 'calibrated_posterior_unsupported' | 'unknown_palette' | 'invalid_renderer_route';
+  path: string;
+  message: string;
+  hint?: string;
+  validScenes?: readonly SceneName[];
+  validSkills?: readonly string[];
+  validPalettes?: string[];
+  /** Nearest registered skill id (edit-distance) for a mistyped `unknown_skill`,
+   *  so an agent can self-repair a typo without scanning the full list. */
+  didYouMean?: string;
+  /** A copyable valid payload for this skill, attached to actionable errors so
+   *  an autonomous agent can self-repair without reading source. */
+  example?: VizSpec | HostRendererInvocation;
+}
+type SkillInvocationResult = {
+  ok: true;
+  spec: VizSpec;
+  skill: (typeof NEST_SKILL_IDS)[number];
+  scene: SceneName;
+  caption: string | null;
+} | {
+  ok: false;
+  errors: SkillInvocationError[];
+};
+type SkillParamsResult = {
+  ok: true;
+  params: Record<string, unknown>;
+} | {
+  ok: false;
+  errors: SkillInvocationError[];
+};
+/** Validate params for any registered skill, including scene-less skills that
+ *  route to a host renderer. This is the language-level counterpart to the
+ *  manifest's paramsJsonSchema + paramConstraints pair. */
+declare function validateSkillParams(skillId: unknown, params: unknown): SkillParamsResult;
+/** Strict, skill-aware validation that never throws for malformed runtime input. */
+declare function validateSkillInvocation(skillId: unknown, payload: unknown): SkillInvocationResult;
+//#endregion
+//#region core/skills/hostInvocation.d.ts
+declare const HostRendererInvocationSchema: z.ZodObject<{
+  skill: z.ZodString;
+  specVersion: z.ZodOptional<z.ZodLiteral<"1.5.0">>;
+  params: z.ZodType<Record<string, unknown>, unknown, z.core.$ZodTypeInternals<Record<string, unknown>, unknown>>;
+  provenance: z.ZodObject<{
+    source: z.ZodString;
+    calibrated_posterior: z.ZodDefault<z.ZodLiteral<false>>;
+    advisory_only: z.ZodDefault<z.ZodBoolean>;
+    is_paper_local_evidence: z.ZodDefault<z.ZodBoolean>;
+    caption: z.ZodOptional<z.ZodString>;
+    declared_inputs: z.ZodOptional<z.ZodPipe<z.ZodType<Record<string, unknown>, unknown, z.core.$ZodTypeInternals<Record<string, unknown>, unknown>>, z.ZodRecord<z.ZodString, z.ZodUnion<readonly [z.ZodString, z.ZodNumber, z.ZodLiteral<true>]>>>>;
+    synthetic: z.ZodDefault<z.ZodBoolean>;
+  }, z.core.$strict>;
+  rendererRoute: z.ZodOptional<z.ZodEnum<{
+    "media.trace_figure": "media.trace_figure";
+    "media.model_graph": "media.model_graph";
+    "media.webgl_scene": "media.webgl_scene";
+    "media.react_fiber_scene": "media.react_fiber_scene";
+    "media.manim_storyboard": "media.manim_storyboard";
+    "media.*": "media.*";
+    matplotlib: "matplotlib";
+    d3: "d3";
+    three: "three";
+    fiber: "fiber";
+    manim: "manim";
+  }>>;
+}, z.core.$strict>;
+type HostRendererInvocation = z.infer<typeof HostRendererInvocationSchema>;
+type HostRendererInvocationResult = {
+  ok: true;
+  spec: HostRendererInvocation;
+  rendererRoutes: readonly RendererRoute[];
+  caption: string | null;
+} | {
+  ok: false;
+  errors: SkillInvocationError[];
+};
+/** Validate a scene-less skill envelope without ever inventing a scene. */
+declare function validateHostRendererInvocation(skillId: unknown, payload: unknown): HostRendererInvocationResult;
+/** Re-validate a stored, self-describing host-renderer invocation. */
+declare function validateHostRendererSpec(payload: unknown): HostRendererInvocationResult;
+//#endregion
+export { CAMERA_PRESETS as A, STDPSynapse as B, CONSERVATIVE_PROVENANCE as C, defaultHonestyCaption as D, composeHonestyCaption as E, NeuralSceneMode as F, SceneFraming as H, NeuralSceneProps as I, PlaybackState as L, CameraPresetName as M, LayerConfig as N, mandatoryDisclosure as O, NeuralSceneHandle as P, SCENE_FRAMING as R, isSkillId as S, ProvenanceMetadata as T, SceneName as U, SceneData as V, SkillId as _, validateHostRendererSpec as a, VizRouterId as b, SkillParamsResult as c, NEST_DEVICE_FAMILIES as d, NEST_SKILL_IDS as f, SKILL_IDS as g, RendererRoute as h, validateHostRendererInvocation as i, CameraPreset as j, requiresHonestyCaption as k, validateSkillInvocation as l, NestSkillId as m, HostRendererInvocationResult as n, SkillInvocationError as o, NestDeviceFamily as p, HostRendererInvocationSchema as r, SkillInvocationResult as s, HostRendererInvocation as t, validateSkillParams as u, VALID_RENDERER_ROUTES as v, HONESTY_POLICY as w, isNestSkillId as x, VIZ_ROUTER_ID as y, SCENE_NAMES as z };

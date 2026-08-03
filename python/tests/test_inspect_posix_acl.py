@@ -4,16 +4,15 @@ import ctypes
 import errno
 import importlib.util
 import os
-from pathlib import Path
 import shutil
 import stat
-from types import ModuleType, SimpleNamespace
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
 from unittest import mock
-
 
 ROOT = Path(__file__).resolve().parents[2]
 INSPECTOR_PATH = ROOT / "scripts" / "inspect-posix-acl.py"
@@ -100,7 +99,6 @@ class InspectPosixAclTests(unittest.TestCase):
 
         def failed_text(_acl: int, _length_pointer: object) -> None:
             ctypes.set_errno(errno.EINVAL)
-            return None
 
         failed_library = SimpleNamespace(
             acl_to_text=failed_text,
@@ -160,8 +158,7 @@ class InspectPosixAclTests(unittest.TestCase):
                 ],
                 check=True,
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
             )
             try:
                 INSPECTOR._require_reviewed_non_authorizing_acl(
@@ -181,8 +178,7 @@ class InspectPosixAclTests(unittest.TestCase):
                     ["/bin/chmod", "-N", reviewed],
                     check=True,
                     stdin=subprocess.DEVNULL,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    capture_output=True,
                 )
 
             for name, acl_entries in (
@@ -210,8 +206,7 @@ class InspectPosixAclTests(unittest.TestCase):
                                     ["/bin/chmod", "+a", acl_entry, unsupported],
                                     check=True,
                                     stdin=subprocess.DEVNULL,
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE,
+                                    capture_output=True,
                                 )
                             with self.assertRaisesRegex(
                                 RuntimeError,
@@ -234,8 +229,7 @@ class InspectPosixAclTests(unittest.TestCase):
                                 ["/bin/chmod", "-N", unsupported],
                                 check=True,
                                 stdin=subprocess.DEVNULL,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE,
+                                capture_output=True,
                             )
                     finally:
                         os.close(descriptor)
@@ -252,8 +246,7 @@ class InspectPosixAclTests(unittest.TestCase):
                 [setfacl, "--modify", "user:65534:r-x", "--", acl_directory],
                 check=True,
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
             )
             with self.assertRaisesRegex(RuntimeError, "carries an extended ACL"):
                 INSPECTOR._require_reviewed_non_authorizing_acl(
@@ -290,8 +283,7 @@ class InspectPosixAclTests(unittest.TestCase):
                 ],
                 check=True,
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
             )
             with self.assertRaisesRegex(
                 RuntimeError,
@@ -327,16 +319,21 @@ class InspectPosixAclTests(unittest.TestCase):
                 "fstat",
                 return_value=REGULAR_FILE_STAT,
             ),
+            self.assertRaisesRegex(
+                RuntimeError,
+                "filesystem ACL model is unsupported",
+            ),
         ):
-            with self.assertRaisesRegex(RuntimeError, "filesystem ACL model is unsupported"):
-                INSPECTOR._require_no_extended_linux_acl(0, "overlay fixture")
+            INSPECTOR._require_no_extended_linux_acl(0, "overlay fixture")
 
     def test_linux_enotsup_and_eopnotsupp_fail_closed(self) -> None:
         for error_number in {errno.ENOTSUP, errno.EOPNOTSUPP}:
             with self.subTest(error_number=error_number):
-                def unsupported_acl(_descriptor: int) -> None:
-                    ctypes.set_errno(error_number)
-                    return None
+                def unsupported_acl(
+                    _descriptor: int,
+                    current_error_number: int = error_number,
+                ) -> None:
+                    ctypes.set_errno(current_error_number)
 
                 library = SimpleNamespace(acl_get_fd=unsupported_acl)
                 with (
@@ -360,15 +357,15 @@ class InspectPosixAclTests(unittest.TestCase):
                         "fstat",
                         return_value=REGULAR_FILE_STAT,
                     ),
-                ):
-                    with self.assertRaisesRegex(
+                    self.assertRaisesRegex(
                         RuntimeError,
                         "ACL authority cannot be inspected",
-                    ):
-                        INSPECTOR._require_no_extended_linux_acl(
-                            0,
-                            "unsupported ACL fixture",
-                        )
+                    ),
+                ):
+                    INSPECTOR._require_no_extended_linux_acl(
+                        0,
+                        "unsupported ACL fixture",
+                    )
 
     def test_linux_alternate_acl_attribute_fails_closed(self) -> None:
         with (
@@ -388,15 +385,15 @@ class InspectPosixAclTests(unittest.TestCase):
                 "fstat",
                 return_value=REGULAR_FILE_STAT,
             ),
-        ):
-            with self.assertRaisesRegex(
+            self.assertRaisesRegex(
                 RuntimeError,
                 "unsupported alternate ACL authority",
-            ):
-                INSPECTOR._require_no_extended_linux_acl(
-                    0,
-                    "alternate ACL fixture",
-                )
+            ),
+        ):
+            INSPECTOR._require_no_extended_linux_acl(
+                0,
+                "alternate ACL fixture",
+            )
 
     def test_linux_alternate_acl_list_enotsup_fails_closed(self) -> None:
         with mock.patch.object(
@@ -404,15 +401,14 @@ class InspectPosixAclTests(unittest.TestCase):
             "listxattr",
             side_effect=OSError(errno.EOPNOTSUPP, "unsupported"),
             create=True,
+        ), self.assertRaisesRegex(
+            RuntimeError,
+            "alternate ACL authority cannot be inspected",
         ):
-            with self.assertRaisesRegex(
-                RuntimeError,
-                "alternate ACL authority cannot be inspected",
-            ):
-                INSPECTOR._require_no_alternate_linux_acl(
-                    0,
-                    "alternate ACL list fixture",
-                )
+            INSPECTOR._require_no_alternate_linux_acl(
+                0,
+                "alternate ACL list fixture",
+            )
 
     def test_linux_acl_equivalence_detects_extended_entries(self) -> None:
         def get_acl(_descriptor: int) -> int:
@@ -450,9 +446,9 @@ class InspectPosixAclTests(unittest.TestCase):
                 "fstat",
                 return_value=REGULAR_FILE_STAT,
             ),
+            self.assertRaisesRegex(RuntimeError, "carries an extended ACL"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "carries an extended ACL"):
-                INSPECTOR._require_no_extended_linux_acl(0, "extended ACL fixture")
+            INSPECTOR._require_no_extended_linux_acl(0, "extended ACL fixture")
 
     def test_linux_rejects_special_descriptors_before_acl_queries(self) -> None:
         read_descriptor, write_descriptor = os.pipe()
@@ -487,8 +483,7 @@ class InspectPosixAclTests(unittest.TestCase):
                 ],
                 check=False,
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 timeout=2,
             )
             self.assertNotEqual(result.returncode, 0)
@@ -577,15 +572,15 @@ class InspectPosixAclTests(unittest.TestCase):
                 "stat",
                 side_effect=PermissionError(errno.EACCES, "unreadable procfs"),
             ),
-        ):
-            with self.assertRaisesRegex(
+            self.assertRaisesRegex(
                 RuntimeError,
                 "default ACL authority cannot be inspected",
-            ):
-                INSPECTOR._require_no_extended_linux_acl(
-                    0,
-                    "unreadable procfs fixture",
-                )
+            ),
+        ):
+            INSPECTOR._require_no_extended_linux_acl(
+                0,
+                "unreadable procfs fixture",
+            )
 
 
 if __name__ == "__main__":

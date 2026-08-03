@@ -824,15 +824,54 @@ export function flowParticleCount(
   return Math.min(ceiling, edges * each);
 }
 
+function graphSignatureField(
+  value: string | number | boolean | undefined,
+): string {
+  if (value === undefined) return 'u;';
+  const type = typeof value === 'string'
+    ? 's'
+    : typeof value === 'number'
+      ? 'n'
+      : 'b';
+  const text = typeof value === 'number' && Object.is(value, -0)
+    ? '-0'
+    : String(value);
+  return `${type}${text.length}:${text}`;
+}
+
+/** Order-sensitive force-layout signature. Style, assertion identity, edge
+ * direction, stroke, and animation do not affect D3's node/collision/topology
+ * inputs, so changing them must not discard a settled simulation. Node order,
+ * radius/glyph collision geometry, and the exact undirected endpoint-pair set do. */
+export function graphLayoutSignature(
+  nodes: readonly { id: string; radius?: number; nodeGlyph?: string }[],
+  edges: readonly { source: string; target: string }[],
+): string {
+  let signature = '';
+  const nodeIds = new Set<string>();
+  for (const node of nodes) {
+    nodeIds.add(node.id);
+    signature += `N${graphSignatureField(node.id)}${graphSignatureField(
+      node.radius,
+    )}${graphSignatureField(node.nodeGlyph)}`;
+  }
+  signature += '|';
+  const topology = uniqueGraphTopologyLinks(edges.filter((edge) =>
+    nodeIds.has(edge.source) && nodeIds.has(edge.target)));
+  for (const edge of topology) {
+    signature += `T${graphSignatureField(edge.source)}${graphSignatureField(edge.target)}`;
+  }
+  return signature;
+}
+
 /** Order-sensitive renderer-state signature of a graph. Two renderer-equivalent
  *  nodes/edges
- *  arrays produce the SAME string even when their identities differ, so the
- *  scene keys its simulation memo on this instead of array identity — a host
- *  that rebuilds the arrays every render (the common React pattern) never
- *  restarts a settled layout. Node `id`/`radius` and every edge field consumed by
- *  memoized renderer state are covered, including stable edge ids. Node
- *  color/label and evidence metadata are deliberately excluded because they
- *  restyle or describe live without changing that state. */
+ *  arrays produce the SAME string even when their identities differ. This key
+ *  binds rendered edge routing/style and readiness, while `graphLayoutSignature`
+ *  separately controls force-simulation lifetime. Node `id`/`radius` and every
+ *  edge field consumed by memoized renderer state are covered, including stable
+ *  edge ids. Node color/label and evidence metadata are deliberately excluded
+ *  because they restyle or describe live without changing that state. */
 export function graphSignature(
   nodes: readonly { id: string; radius?: number; nodeGlyph?: string }[],
   edges: readonly {
@@ -846,29 +885,21 @@ export function graphSignature(
     edgeStrokePattern?: string;
   }[],
 ): string {
-  const field = (value: string | number | boolean | undefined): string => {
-    if (value === undefined) return 'u;';
-    const type = typeof value === 'string'
-      ? 's'
-      : typeof value === 'number'
-        ? 'n'
-        : 'b';
-    const text = typeof value === 'number' && Object.is(value, -0)
-      ? '-0'
-      : String(value);
-    return `${type}${text.length}:${text}`;
-  };
   let s = '';
   for (const n of nodes) {
-    s += `N${field(n.id)}${field(n.radius)}${field(n.nodeGlyph)}`;
+    s += `N${graphSignatureField(n.id)}${graphSignatureField(
+      n.radius,
+    )}${graphSignatureField(n.nodeGlyph)}`;
   }
   s += '|';
   for (const e of edges) {
-    s += `E${field(e.id)}${field(e.source)}${field(e.target)}${field(e.color)}${field(
-      e.kind,
-    )}${field((e.directed !== false ? 1 : 0) + (e.particles ? 2 : 0))}${field(
-      e.edgeStrokePattern,
-    )}`;
+    s += `E${graphSignatureField(e.id)}${graphSignatureField(
+      e.source,
+    )}${graphSignatureField(e.target)}${graphSignatureField(
+      e.color,
+    )}${graphSignatureField(e.kind)}${graphSignatureField(
+      (e.directed !== false ? 1 : 0) + (e.particles ? 2 : 0),
+    )}${graphSignatureField(e.edgeStrokePattern)}`;
   }
   return s;
 }

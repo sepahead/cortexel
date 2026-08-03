@@ -1,8 +1,13 @@
 /** Deterministic, indirect-entry-free package mode normalization and verification. */
 
-import { chmodSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
+import { chmodSync, lstatSync, realpathSync, type Stats } from 'node:fs';
 import path from 'node:path';
 
+import {
+  inspectBoundedPackageTree,
+  type BoundedPackageTreeEntry,
+} from './bounded-package-tree.js';
+import { readDirectRepositoryFile } from './direct-repository-file.js';
 import { parseJsonSourceStrict } from './strict-json-source.js';
 
 export interface PackageModeReceipt {
@@ -20,8 +25,10 @@ export const CLOSED_PACKAGE_FILES = Object.freeze([
   'CLAUDE.md',
   'CONTRIBUTING.md',
   'GOVERNANCE.md',
+  'MIGRATION.md',
   'ROADMAP.md',
   'SECURITY.md',
+  'SUPPORT.md',
   'LICENSE',
   'THIRD_PARTY_NOTICES.md',
   'LICENSES',
@@ -47,9 +54,75 @@ const ROOT_REGULAR_FILES = Object.freeze([
 const REGULAR_MODE = 0o644;
 const EXECUTABLE_MODE = 0o755;
 const DIRECTORY_MODE = 0o755;
+const DIST_MODE_TREE_LIMITS = Object.freeze({
+  files: 1_024,
+  directories: 129,
+  nodes: 1_153,
+  directoryEntries: 512,
+  pathSegments: 17,
+  segmentBytes: 255,
+  fileBytes: 32 * 1024 * 1024,
+  aggregateBytes: 128 * 1024 * 1024,
+} as const);
+const SOURCE_MODE_TREE_LIMITS = Object.freeze({
+  files: 1_024,
+  directories: 129,
+  nodes: 1_153,
+  directoryEntries: 512,
+  pathSegments: 17,
+  segmentBytes: 255,
+  fileBytes: 32 * 1024 * 1024,
+  aggregateBytes: 128 * 1024 * 1024,
+} as const);
+export const PACKAGE_MODE_TREE_LIMITS = Object.freeze({
+  dist: DIST_MODE_TREE_LIMITS,
+  source: SOURCE_MODE_TREE_LIMITS,
+  packageManifestBytes: 1024 * 1024,
+} as const);
 
 function isCliEntry(relative: string): boolean {
-  return relative.split(path.sep).join('/') === 'cli/main.js';
+  return relative === 'dist/cli/main.js';
+}
+
+function samePreflightIdentity(left: Stats, right: Stats): boolean {
+  return left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.mode === right.mode &&
+    left.nlink === right.nlink &&
+    left.size === right.size &&
+    left.uid === right.uid &&
+    left.gid === right.gid &&
+    left.mtimeMs === right.mtimeMs &&
+    left.ctimeMs === right.ctimeMs &&
+    left.birthtimeMs === right.birthtimeMs;
+}
+
+function samePostChmodIdentity(left: Stats, right: Stats): boolean {
+  return left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.nlink === right.nlink &&
+    left.size === right.size &&
+    left.uid === right.uid &&
+    left.gid === right.gid &&
+    left.mtimeMs === right.mtimeMs &&
+    left.birthtimeMs === right.birthtimeMs;
+}
+
+function inspectCurrentEntry(
+  entry: BoundedPackageTreeEntry,
+  phase: 'before' | 'after',
+): Stats {
+  const current = lstatSync(entry.absolute);
+  const shapeMatches = !current.isSymbolicLink() && (
+    entry.kind === 'directory' ? current.isDirectory() : current.isFile() && current.nlink === 1
+  );
+  const identityMatches = phase === 'before'
+    ? samePreflightIdentity(entry.stat, current)
+    : samePostChmodIdentity(entry.stat, current);
+  if (!shapeMatches || !identityMatches) {
+    throw new Error(`package mode tree changed ${phase} normalization: ${entry.relative}`);
+  }
+  return current;
 }
 
 /**
@@ -60,52 +133,64 @@ function isCliEntry(relative: string): boolean {
  * skipping one would leave a package whose readability depends on the builder's umask.
  */
 export function normalizePackageModes(distRoot: string): PackageModeReceipt {
-  const root = lstatSync(distRoot);
-  if (!root.isDirectory() || root.isSymbolicLink()) {
-    throw new Error('package dist root must be a direct directory');
-  }
-  requireDirectRegularFile(
-    path.join(distRoot, 'skills.manifest.json'),
-    'dist/skills.manifest.json',
+  const inventory = inspectBoundedPackageTree(
+    path.resolve(distRoot),
+    'dist',
+    DIST_MODE_TREE_LIMITS,
   );
-
-  let directories = 0;
-  let regularFiles = 0;
-  let executableFiles = 0;
-
-  const walk = (absolute: string, relative: string): void => {
-    const stat = lstatSync(absolute);
-    if (stat.isSymbolicLink()) {
-      throw new Error(`package dist contains an indirect entry: ${relative || '.'}`);
-    }
-    if (stat.isDirectory()) {
-      chmodSync(absolute, DIRECTORY_MODE);
-      directories += 1;
-      for (const name of readdirSync(absolute).sort()) {
-        walk(path.join(absolute, name), path.join(relative, name));
-      }
-      return;
-    }
-    if (!stat.isFile()) {
-      throw new Error(`package dist contains a non-regular entry: ${relative || '.'}`);
-    }
-    const executable = isCliEntry(relative);
-    chmodSync(absolute, executable ? EXECUTABLE_MODE : REGULAR_MODE);
-    regularFiles += 1;
-    if (executable) executableFiles += 1;
-  };
-
-  walk(distRoot, '');
+  const skillsManifest = inventory.entries.find(
+    (entry) => entry.relative === 'dist/skills.manifest.json' && entry.kind === 'file',
+  );
+  if (skillsManifest === undefined) {
+    throw new Error('package root entry must be a direct regular file: dist/skills.manifest.json');
+  }
+  const executableFiles = inventory.entries.filter(
+    (entry) => entry.kind === 'file' && isCliEntry(entry.relative),
+  ).length;
   if (executableFiles !== 1) {
     throw new Error(`package dist must contain exactly one executable cli/main.js; found ${executableFiles}`);
   }
-  return { directories, regularFiles, executableFiles };
+  // Revalidate the complete retained inventory immediately before the first
+  // mutation. Same-principal mutation after this point remains outside the
+  // pathname-time authority described in the repository build contract.
+  for (const entry of inventory.entries) inspectCurrentEntry(entry, 'before');
+  for (const entry of inventory.entries) {
+    chmodSync(
+      entry.absolute,
+      entry.kind === 'directory'
+        ? DIRECTORY_MODE
+        : isCliEntry(entry.relative) ? EXECUTABLE_MODE : REGULAR_MODE,
+    );
+  }
+  for (const entry of inventory.entries) {
+    const current = inspectCurrentEntry(entry, 'after');
+    const expected = entry.kind === 'directory'
+      ? DIRECTORY_MODE
+      : isCliEntry(entry.relative) ? EXECUTABLE_MODE : REGULAR_MODE;
+    if ((current.mode & 0o7777) !== expected) {
+      throw new Error(`package mode normalization did not persist: ${entry.relative}`);
+    }
+  }
+  return {
+    directories: inventory.directories,
+    regularFiles: inventory.regularFiles,
+    executableFiles,
+  };
 }
 
 function requireDirectRegularFile(target: string, relative: string): void {
   const stat = lstatSync(target);
   if (stat.isSymbolicLink() || !stat.isFile()) {
     throw new Error(`package root entry must be a direct regular file: ${relative}`);
+  }
+  if (stat.nlink !== 1) {
+    throw new Error(
+      `package root regular file must have exactly one hard link: ${relative}; ` +
+      `found ${stat.nlink}`,
+    );
+  }
+  if (!Number.isSafeInteger(stat.size) || stat.size < 0 || stat.size > 32 * 1024 * 1024) {
+    throw new Error(`package root regular file exceeds the reviewed profile: ${relative}`);
   }
 }
 
@@ -121,40 +206,23 @@ function requireExactMode(target: string, relative: string, expected: number): v
 
 function verifyClosedRegularTree(root: string, relative: string): PackageModeReceipt {
   const absolute = path.join(root, relative);
-  const rootStat = lstatSync(absolute);
-  if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
-    throw new Error(`package root entry must be a direct directory: ${relative}`);
+  const inventory = inspectBoundedPackageTree(
+    path.resolve(absolute),
+    relative,
+    SOURCE_MODE_TREE_LIMITS,
+  );
+  for (const entry of inventory.entries) {
+    requireExactMode(
+      entry.absolute,
+      entry.relative,
+      entry.kind === 'directory' ? DIRECTORY_MODE : REGULAR_MODE,
+    );
   }
-  requireExactMode(absolute, relative, DIRECTORY_MODE);
-  let directories = 0;
-  let regularFiles = 0;
-  const walk = (directory: string, display: string): void => {
-    const stat = lstatSync(directory);
-    if (stat.isSymbolicLink() || !stat.isDirectory()) {
-      throw new Error(`package root contains an indirect or non-directory entry: ${display}`);
-    }
-    requireExactMode(directory, display, DIRECTORY_MODE);
-    directories += 1;
-    for (const name of readdirSync(directory).sort()) {
-      const child = path.join(directory, name);
-      const childDisplay = path.join(display, name);
-      const childStat = lstatSync(child);
-      if (childStat.isSymbolicLink()) {
-        throw new Error(`package root contains an indirect entry: ${childDisplay}`);
-      }
-      if (childStat.isDirectory()) {
-        walk(child, childDisplay);
-        continue;
-      }
-      if (!childStat.isFile()) {
-        throw new Error(`package root contains a non-regular entry: ${childDisplay}`);
-      }
-      requireExactMode(child, childDisplay, REGULAR_MODE);
-      regularFiles += 1;
-    }
+  return {
+    directories: inventory.directories,
+    regularFiles: inventory.regularFiles,
+    executableFiles: 0,
   };
-  walk(absolute, relative);
-  return { directories, regularFiles, executableFiles: 0 };
 }
 
 /**
@@ -162,31 +230,46 @@ function verifyClosedRegularTree(root: string, relative: string): PackageModeRec
  * mutating those read-only inputs or traversing unrelated repository paths.
  */
 export function finalizePackageModes(repositoryRoot: string): PackageModeReceipt {
-  const packagePath = path.join(repositoryRoot, 'package.json');
+  const suppliedRoot = path.resolve(repositoryRoot);
+  const rootStat = lstatSync(suppliedRoot);
+  if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
+    throw new Error('package repository root must be a direct directory');
+  }
+  const canonicalRoot = realpathSync(suppliedRoot);
+  const packagePath = path.join(canonicalRoot, 'package.json');
   requireDirectRegularFile(packagePath, 'package.json');
   const packageJson = parseJsonSourceStrict(
-    readFileSync(packagePath),
+    readDirectRepositoryFile(
+      canonicalRoot,
+      'package.json',
+      PACKAGE_MODE_TREE_LIMITS.packageManifestBytes,
+    ),
     'package.json',
-  ) as { files?: unknown };
+  );
   if (
-    !Array.isArray(packageJson.files) ||
-    packageJson.files.some((entry) => typeof entry !== 'string') ||
-    new Set(packageJson.files).size !== packageJson.files.length ||
-    [...packageJson.files].sort().join('\0') !== [...CLOSED_PACKAGE_FILES].sort().join('\0')
+    packageJson === null ||
+    typeof packageJson !== 'object' ||
+    Array.isArray(packageJson) ||
+    !Array.isArray((packageJson as { files?: unknown }).files) ||
+    (packageJson as { files: unknown[] }).files.some((entry) => typeof entry !== 'string') ||
+    new Set((packageJson as { files: string[] }).files).size !==
+      (packageJson as { files: string[] }).files.length ||
+    [...(packageJson as { files: string[] }).files].sort().join('\0') !==
+      [...CLOSED_PACKAGE_FILES].sort().join('\0')
   ) {
     throw new Error('package.json files must equal the closed package mode inventory');
   }
 
   let sourceRegularFiles = 0;
   for (const relative of ROOT_REGULAR_FILES) {
-    const target = path.join(repositoryRoot, relative);
+    const target = path.join(canonicalRoot, relative);
     requireDirectRegularFile(target, relative);
     requireExactMode(target, relative, REGULAR_MODE);
     sourceRegularFiles += 1;
   }
   const sourceTrees = CLOSED_PACKAGE_SOURCE_TREES.map((relative) =>
-    verifyClosedRegularTree(repositoryRoot, relative));
-  const dist = normalizePackageModes(path.join(repositoryRoot, 'dist'));
+    verifyClosedRegularTree(canonicalRoot, relative));
+  const dist = normalizePackageModes(path.join(canonicalRoot, 'dist'));
   return {
     directories: dist.directories + sourceTrees.reduce(
       (total, receipt) => total + receipt.directories,

@@ -84,13 +84,29 @@ import {
   knowledgeGraphFocusLabelSpriteCenterY,
 } from './focusLabelResource.internal';
 import {
+  KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
+  PREPARED_KNOWLEDGE_GRAPH_PRESENTATION_V1,
+  PREPARED_KNOWLEDGE_GRAPH_VIEW_V1,
+  KnowledgeGraphPresentationJsonError,
   assertPreparedCorpusKnowledgeGraphPresentation,
   assertPreparedGenericKnowledgeGraphPresentation,
   assertPreparedKnowledgeGraphView,
   assertPreparedKnowledgeGraphPresentation,
+  isPreparedKnowledgeGraphPresentation,
+  isPreparedKnowledgeGraphView,
+  knowledgeGraphPresentationContainsNode,
   knowledgeGraphViewContainsNode,
+  parseKnowledgeGraphPresentationJson,
+  prepareKnowledgeGraphPresentation,
+  prepareKnowledgeGraphView,
+  serializePreparedKnowledgeGraphPresentation,
+  type KnowledgeGraphPresentationBudgetReceiptV1,
+  type KnowledgeGraphPresentationInputAssuranceV1,
+  type KnowledgeGraphPresentationInputV1,
+  type KnowledgeGraphViewPolicyV1,
   type PreparedCorpusKnowledgeGraphPresentationV1,
   type PreparedGenericKnowledgeGraphPresentationV1,
+  type PreparedKnowledgeGraphPresentationV1,
   type PreparedKnowledgeGraphViewV1,
 } from './knowledgeGraphPresentation.internal';
 import {
@@ -368,8 +384,16 @@ function FocusLabelSprite({
 
 type SimGraphNode = GraphLayoutNode;
 
+export function knowledgeGraphNodeUsesFocusScale(
+  nodeId: string,
+  focus: string | null,
+  focusSet: ReadonlySet<string> | null | undefined,
+): boolean {
+  return focus !== null && (nodeId === focus || focusSet?.has(nodeId) === true);
+}
+
 interface GraphLayoutRuntime {
-  graphKey: string;
+  layoutKey: string;
   reducedMotion: boolean;
   sim: Simulation<SimGraphNode>;
   nodes: SimGraphNode[];
@@ -401,7 +425,7 @@ function updateKnowledgeGraphGlyphMatrices(
   for (let glyphIndex = 0; glyphIndex < nodeIndexes.length; glyphIndex++) {
     const node = simNodes[nodeIndexes[glyphIndex]];
     const scale = knowledgeGraphRenderedNodeScale(
-      focus !== null && (node.id === focus || focusSet?.has(node.id) === true),
+      knowledgeGraphNodeUsesFocusScale(node.id, focus, focusSet),
     );
     _dummy.position.set(node.x ?? 0, node.y ?? 0, node.z ?? 0);
     _dummy.quaternion.identity();
@@ -596,15 +620,16 @@ function KnowledgeGraph3DSceneInstance({
     [onUserGrab],
   );
 
-  // Content signature of the graph: the simulation memo below is keyed on THIS,
-  // not on array identity, so a host that rebuilds nodes/edges every render (the
-  // common React pattern) never restarts a settled layout. Any renderer-relevant
-  // change — structure, radius, edge styling — still yields a new key (warm restart).
+  // Snapshot caller-owned arrays into two content identities. `layoutKey` covers
+  // only D3 topology and collision geometry; `graphKey` additionally covers edge
+  // routing/style/readiness. Fresh but equivalent arrays retain both identities,
+  // while a palette-only edge change updates rendering without reheating D3.
   const layoutInput = useMemo(
     () => snapshotGraphLayoutInputs(nodes, edges),
     [nodes, edges],
   );
   const graphKey = layoutInput.graphKey;
+  const layoutKey = layoutInput.layoutKey;
   const normalizedQuery = useMemo(() => normalizeGraphQuery(query), [query]);
   const queryMatchIds = useMemo(
     () => graphQueryMatchIds(nodes, normalizedQuery, edges),
@@ -633,23 +658,31 @@ function KnowledgeGraph3DSceneInstance({
   // (both endpoints present, no self-loops) shared by every render path. This
   // render-phase memo never reads or writes the persistent position ref. The
   // committed simulation effect derives a detached warm-start plan from it.
-  const { layoutNodes, simLinks, validEdges, edgeLanes, index } = useMemo(() => {
+  const { layoutNodes, simLinks, index } = useMemo(() => {
     const index = new Map<string, number>();
     const layoutNodes = layoutInput.nodes.map((n, i) => {
       index.set(n.id, i);
-      return { id: n.id, radius: n.radius };
+      return { id: n.id, radius: n.radius, nodeGlyph: n.nodeGlyph };
     });
-    // One valid-edge set for ALL paths (layout, adjacency, buffers, endpoints,
-    // particles, emphasis) so their element counts can never disagree. Direct
-    // inputs already failed closed above; the filter remains defensive/shared.
-    const validEdges = filterGraphEdges(new Set(index.keys()), layoutInput.edges);
-    const edgeLanes = assignGraphEdgeLanes(validEdges);
-    const simLinks = uniqueGraphTopologyLinks(validEdges);
-    return { layoutNodes, simLinks, validEdges, edgeLanes, index };
-    // Keyed on content, not identity: content-equal snapshots are interchangeable
-    // everywhere these outputs flow (graphSignature covers every field they use).
+    const topologyEdges = filterGraphEdges(new Set(index.keys()), layoutInput.edges);
+    return {
+      layoutNodes,
+      simLinks: uniqueGraphTopologyLinks(topologyEdges),
+      index,
+    };
+    // Force state is keyed only by node collision geometry and the canonical
+    // undirected endpoint-pair set. Render-only edge changes retain this snapshot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graphKey]);
+  }, [layoutKey]);
+
+  const { validEdges, edgeLanes } = useMemo(() => {
+    // One valid-edge set for every rendered edge path (adjacency, buffers,
+    // endpoints, particles, and emphasis) so element counts cannot disagree.
+    const validEdges = filterGraphEdges(new Set(index.keys()), layoutInput.edges);
+    return { validEdges, edgeLanes: assignGraphEdgeLanes(validEdges) };
+    // The complete renderer key covers every field consumed here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graphKey, index]);
 
   // Visible-edge adjacency (valid edges only), for hover/selection emphasis.
   const neighbors = useMemo(
@@ -781,10 +814,15 @@ function KnowledgeGraph3DSceneInstance({
       .force('center', forceCenter(0, 0, 0).strength(0.04))
       .force('collide', forceCollide((d) => {
         const node = d as SimGraphNode;
-        const visualNode = visualNodes[index.get(node.id) as number];
+        // Collision geometry belongs to the layout-keyed snapshot. Using
+        // the independently rebuilt visual-style array here would restart the
+        // simulation whenever an equivalent prepared payload received a new
+        // JavaScript identity, and on label/color-only restyles that the graph
+        // signature deliberately excludes from layout identity.
+        const layoutNode = layoutNodes[index.get(node.id) as number];
         return knowledgeGraphRenderedNodeRadialExtent(
           node.r,
-          visualNode.nodeGlyph,
+          layoutNode.nodeGlyph ?? 'sphere_outline',
           true,
         ) + 3;
       }).iterations(2))
@@ -803,7 +841,7 @@ function KnowledgeGraph3DSceneInstance({
       sim.alpha(0);
     }
     const runtime: GraphLayoutRuntime = {
-      graphKey,
+      layoutKey,
       reducedMotion,
       sim,
       nodes: simNodes,
@@ -817,17 +855,16 @@ function KnowledgeGraph3DSceneInstance({
     layoutTickAccumulatorRef.current = 0;
     geometryDirtyRef.current = true;
     invalidate();
-    // The keyed wrapper remounts for a new graph identity. Within this instance,
-    // a filter/toggle never yanks the camera the user has positioned.
+    // The keyed wrapper remounts for a new force-layout identity. Render-only
+    // restyles retain the settled layout and the camera the user has positioned.
     return () => {
       sim.stop();
       if (layoutRuntimeRef.current === runtime) layoutRuntimeRef.current = null;
     };
   }, [
-    graphKey,
+    layoutKey,
     layoutNodes,
     simLinks,
-    visualNodes,
     index,
     reducedMotion,
     invalidate,
@@ -1019,7 +1056,7 @@ function KnowledgeGraph3DSceneInstance({
 
     if (
       !runtime ||
-      runtime.graphKey !== graphKey ||
+      runtime.layoutKey !== layoutKey ||
       runtime.reducedMotion !== reducedMotion ||
       !mesh
     ) return;
@@ -1071,7 +1108,7 @@ function KnowledgeGraph3DSceneInstance({
         remembered[2] = z;
         _dummy.position.set(x, y, z);
         const pop = knowledgeGraphRenderedNodeScale(
-          focus !== null && (n.id === focus || focusSet?.has(n.id) === true),
+          knowledgeGraphNodeUsesFocusScale(n.id, focus, focusSet),
         );
         _dummy.scale.setScalar(n.r * pop);
         _dummy.updateMatrix();
@@ -1157,9 +1194,7 @@ function KnowledgeGraph3DSceneInstance({
           const targetExtent = knowledgeGraphRenderedNodeRadialExtent(
             target.r,
             visualNodes[targetIndex].nodeGlyph,
-            focus !== null && (
-              target.id === focus || focusSet?.has(target.id) === true
-            ),
+            knowledgeGraphNodeUsesFocusScale(target.id, focus, focusSet),
           );
           if (!graphEdgeTargetBoundaryInto(
             _a,
@@ -1392,7 +1427,11 @@ function KnowledgeGraph3DSceneInstance({
           const radius = knowledgeGraphAutoFrameNodeRadialExtent(
             n.r,
             glyph,
-            visualNodes[nodeIndex].id === focus,
+            knowledgeGraphNodeUsesFocusScale(
+              visualNodes[nodeIndex].id,
+              focus,
+              focusSet,
+            ),
           );
           _box.expandByPoint(_a.set(
             (n.x ?? 0) - radius,
@@ -1530,7 +1569,7 @@ function KnowledgeGraph3DSceneInstance({
       if (
         readyGraphKeyRef.current !== graphKey ||
         geometryDirtyRef.current ||
-        runtime?.graphKey !== graphKey ||
+        runtime?.layoutKey !== layoutKey ||
         runtime.reducedMotion !== reducedMotion
       ) return;
       if (!isKnowledgeGraphInstanceId(e.instanceId, visualNodes.length)) return;
@@ -1545,7 +1584,7 @@ function KnowledgeGraph3DSceneInstance({
         onHoverRef.current(id);
       }
     },
-    [graphKey, reducedMotion, visualNodes],
+    [graphKey, layoutKey, reducedMotion, visualNodes],
   );
   const handleOut = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
@@ -1553,7 +1592,7 @@ function KnowledgeGraph3DSceneInstance({
       const ready = !(
         readyGraphKeyRef.current !== graphKey ||
         geometryDirtyRef.current ||
-        runtime?.graphKey !== graphKey ||
+        runtime?.layoutKey !== layoutKey ||
         runtime.reducedMotion !== reducedMotion
       );
       handleKnowledgeGraphPointerOut(
@@ -1566,7 +1605,7 @@ function KnowledgeGraph3DSceneInstance({
         },
       );
     },
-    [graphKey, reducedMotion],
+    [graphKey, layoutKey, reducedMotion],
   );
   const handleClick = useCallback(
     (e: ThreeEvent<MouseEvent>) => {
@@ -1574,7 +1613,7 @@ function KnowledgeGraph3DSceneInstance({
       const ready = !(
         readyGraphKeyRef.current !== graphKey ||
         geometryDirtyRef.current ||
-        runtime?.graphKey !== graphKey ||
+        runtime?.layoutKey !== layoutKey ||
         runtime.reducedMotion !== reducedMotion
       );
       handleKnowledgeGraphNodeClick(
@@ -1589,12 +1628,12 @@ function KnowledgeGraph3DSceneInstance({
         },
       );
     },
-    [graphKey, reducedMotion, visualNodes, onSelect, selectedId],
+    [graphKey, layoutKey, reducedMotion, visualNodes, onSelect, selectedId],
   );
 
   return (
     <>
-      <group key={`graph-${graphKey}`} ref={sceneGroupRef} visible={false}>
+      <group key={`graph-${layoutKey}`} ref={sceneGroupRef} visible={false}>
       {/* Nodes — one instanced, unlit sphere per record.
           frustumCulled off: instance matrices stream every frame, and three's
           once-cached bounding sphere would blink drifted nodes out mid-orbit.
@@ -1768,4 +1807,4 @@ export {
   type KnowledgeGraphViewPolicyV1,
   type PreparedKnowledgeGraphPresentationV1,
   type PreparedKnowledgeGraphViewV1,
-} from './knowledgeGraphPresentation.internal';
+};

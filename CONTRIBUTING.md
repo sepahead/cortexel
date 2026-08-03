@@ -43,14 +43,15 @@ The repository-level `bunfig.toml` disables Bun runtime `.env` loading, includin
 nested scripts. It is not a filesystem sandbox: Bun's package manager, Vite, or another
 dependency may still inspect files in the checkout. Keep credentials outside the
 repository and the build/test environment; `.gitignore` is only an accidental-commit
-control. A narrowly scoped first-party client may read its external credential store
-explicitly.
+control for ordinary tracking. It neither prevents an explicit forced add nor denies
+filesystem reads. A narrowly scoped first-party client may read its external credential
+store explicitly.
 
 ```bash
 bun install
 bun run typecheck  # tsc --noEmit
 bun run test       # vitest
-bun run build      # tsup → dist/ (ESM + CJS + d.ts) + skills.manifest.json
+bun run build      # tsdown → dist/ (ESM + CJS + declarations + self-contained runtime source maps) + manifest
 bun run check      # generated parity + typecheck + test
 bun run check:formal # compile every pinned Lean proof with warnings as errors
 bun run check:ledger
@@ -64,6 +65,49 @@ bun run lint:package
 bun run test:package
 ```
 
+The installed package supports Node `^22.12.0 || ^24.0.0 || ^26.0.0`. Building
+from source requires Node `^22.18.0 || ^24.11.0 || ^26.0.0`: those bounds retain
+the current tsdown tool floors while closing the development environment to the
+same three supported majors. This narrower development floor does not raise the
+runtime floor for consumers of the committed `dist/` package.
+
+The build treats source maps as publishable source disclosure. Their exact source
+identity inventory and aggregate decoded-content digest live in
+`scripts/lib/package-source-map-authority.ts`. If an intentional source change moves
+that digest, review the emitted identity/content closure before replacing the expected
+digest printed by the failing gate; an unexpected new identity must be reviewed and
+added explicitly. The verifier closes annotation syntax, owner/map linkage, strict JSON,
+portable paths, canonical UTF-8 embedded bytes, complete source/name references,
+mapped-name text, and the [ECMA-426](https://tc39.es/ecma426/) mapping grammar plus
+bounded coordinate/table decoding. Its map, code, table, line, segment, and comparison
+ceilings are hard review limits with ample measured headroom; do not make them
+caller-configurable or raise them merely to accept unexpected compiler output.
+Structurally valid unnamed coordinates do not certify that a mapping points to the
+semantically corresponding source token, and the package cannot govern a host-added
+HTTP `SourceMap` header.
+
+The destructive build executor does not accept build options. It creates one fresh
+plain record from the recursively frozen reviewed configuration and the canonical
+repository root, then rechecks the bounded direct `dist/` tree before and after the
+compiler. Keep this construction boundary intact: validating and then passing a
+caller-owned object reintroduces accessor and time-of-check/time-of-use authority.
+The private capability resolver is deliberately the first build plugin and an
+independent module/facade ownership audit is the last. A new plugin must not weaken
+either boundary: add a real Rolldown composition test if it can resolve, load, emit, or
+rewrite modules. tsdown 0.22.14 and Rolldown 1.2.2 are exact direct pins, and config
+loading requires tsdown to resolve the same physical Rolldown entry used by the
+reviewed hook/filter vocabulary. A stale compatible nested lock resolution therefore
+fails closed instead of receiving transferred build authority. Output-option authority is bookended: the first
+pre-ordered hook rejects any separate output-plugin roster before it can run, every
+admitted intermediate hook is immutably sealed at composition time, and the final
+post-ordered hook rejects any roster introduced during transformation. Package paths
+use one portable ASCII/case-fold profile; an emitted
+path below `dist/` may occupy at most 86 bytes so `dist/<path>` remains within the
+91-byte reviewed package-relative USTAR ceiling. Contract replacement and package-mode
+normalization likewise preflight bounded trees before recursive deletion or the first
+mode mutation. These are finite pathname-time build checks, not hostile same-UID
+containment.
+
 `check:nest-audit` verifies the retained differential NEST visualization oracle,
 its reviewed generator-source identity, exact V2 authorities, V3 projection, and
 both strict schemas without adding Python to the ordinary TypeScript build. The
@@ -76,7 +120,7 @@ full stdlib-AST derivation recipe and its evidence boundary, see
 The Python distribution smoke deliberately refuses an ambient interpreter or build
 backend. The package itself supports Python 3.11+, but this reproducible build-evidence
 gate deliberately requires a separate Python 3.14.x interpreter/runtime. Use the exact
-`uv 0.11.16` binary and a fresh copied virtual environment;
+`uv 0.12.1` binary and a fresh copied virtual environment;
 do not add pip, setuptools, another distribution, a `.pth` file, or a site customization:
 
 ```bash
@@ -279,13 +323,52 @@ as an executable at that boundary. The synchronous operation disposes its privat
 runtime on success or failure before returning.
 
 Ordinary Node/npm version, pack, TypeScript, CLI, and import probes each retain an
-exact 300,000 ms command bound. Only the three sequential cold-cache `npm ci`
-materializations use the shared reviewed-POSIX maximum of 900,000 ms, under the
-closed labels `prepare.npm-ci.core`, `prepare.npm-ci.charts`, and
-`prepare.npm-ci.full`. These are per-command availability bounds, not an aggregate
-prepare deadline or a hostile hard deadline; there is no retry or environment/CLI
-override. Timeout and overflow diagnostics disclose only the fixed operation label
-and numeric bound, never argv, cwd, environment, executable pathname, or child output.
+exact 300,000 ms command bound. npm version and pack use a private `control` cache;
+the `core`, `charts`, and `full` `npm ci` profiles each begin with a different empty
+private cache and use the shared reviewed-POSIX maximum of 900,000 ms, under the closed labels
+`prepare.npm-ci.core`, `prepare.npm-ci.charts`, and `prepare.npm-ci.full`. Core and
+charts run once. Full may repeat the identical command exactly once with the same
+`full` cache—never a cache warmed by another profile—only after npm exits zero and a
+strict reduced-closure proof shows a
+nonempty missing subset whose every prepared record is `optional:true`; the actual
+hidden-lock header and every retained record must be exact, and the reduced
+filesystem, scope, package, and `.bin` topology must contain no other difference.
+Command/runtime failure, required or `devOptional`-only absence, changed/extra
+metadata, malformed JSON, or any other ambiguity is not retryable. The second result
+must pass the ordinary complete proof. These are per-command availability bounds, not
+an aggregate prepare deadline or a hostile hard deadline; there is no caller-controlled
+retry or environment/CLI override. Timeout and overflow diagnostics disclose only the
+fixed operation label and numeric bound, never argv, cwd, environment, executable
+pathname, or child output.
+
+"Begins with an empty private cache" is an explicit first-use event. Prepare opens one
+local closed state machine whose `control`, `core`, `charts`, and `full` roles each move
+only from `unused` to `active` to `complete`. A command-adjacent cold activation verifies
+the exact canonical workspace, captured controlling ancestry, role/path, current-UID
+mode-`0700` directory identity, and then reads at most one dirent and requires none. It
+revalidates those identities, sets and revalidates `npm_config_cache`, and only then marks the role
+active; a second cold activation is invalid. `runNpmCommand` admits only the active role
+for its closed command policy. Control remains active from the version probe through
+pack and completes after pack. Core/charts/full complete only after the ordinary exact
+installed-closure proof succeeds. A full optional-only retry remains active through
+attempt one, reduced-closure authorization, and attempt two, so retained first-attempt
+cache state is expected and the emptiness check is not repeated. The session is cleared
+at phase boundaries and on prepare failure. These pre/post identity checks and the final
+workspace seal are change detection, not hostile same-UID filesystem containment: an
+external writer can race after the initial emptiness observation. Exact lock/integrity
+checks and the reduced/complete installed-closure proofs are separate later evidence.
+Use an isolated mount/sandbox when concurrent mutation is in scope.
+
+Prepare exclusively creates its isolated npm user/global configuration files with
+owner-only authority, normalizes both to exact mode `0600` independently of ambient
+umask, installs them before the npm version probe, and validates their canonical
+paths, bytes, modes, and private operational directories before and after every npm
+command. The command working directory's project `.npmrc` must be absent at both
+boundaries. Each active cache must remain its role's exact canonical, current-UID,
+mode-`0700` directory with the prepared device/inode/owner identity before and after
+every npm command. The full-profile retry rechecks that same `full` cache authority
+together with the exact raw manifest and lock bytes, their modes, and both tarball
+copies during authorization and again immediately before its second command.
 
 The outer synchronous caller starts that exact staged launcher with a fresh closed
 environment. The launcher starts a supervisor, which creates a detached guardian as
@@ -441,9 +524,20 @@ container, scope membership, package name/version, `.bin` inventory and target,
 and the complete top-level hidden lock across every nested package path. A bounded
 whole-tree walk
 rejects concealed `node_modules`, `.bin`, or `.package-lock.json` management paths.
+npm can treat an optional fetch/extraction failure as a successful command while
+pruning that branch. Cortexel never accepts that reduced result. The full-profile
+retry above is only a bounded cache-reuse recovery step; its preconditions and both
+attempts remain in the one `full`-owned cache in the sealed operational tree, and
+final equality is mandatory. No consumer profile reads cache state produced by either
+of the other consumer profiles; the final workspace seal binds all four cache trees.
 npm 10 may retain only the exact empty scope directories implied by omitted scoped
-lock siblings; npm 11 must not retain them. The workspace seal independently binds
-all remaining registry-package bytes and topology across the inspection gap.
+lock siblings; npm 11 must not retain them. A failed npm 10 optional branch that leaves
+an empty scope does not qualify for the internal retry because the reduced closure is
+not exact. This is a conservative availability failure; rerun prepare in a fresh
+workspace instead of widening the evidence rule. The workspace seal independently binds
+all remaining registry-package bytes and topology across the inspection gap. npm 12
+is not a supported alias for npm 11: until its exact materialization behavior receives
+an independent reviewed profile and CI lane, prepare rejects that major explicitly.
 
 ## Design laws (non-negotiable)
 

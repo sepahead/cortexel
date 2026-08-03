@@ -907,11 +907,11 @@
     {
       "id": "R098",
       "section": "Packaging and runtime compatibility",
-      "requirement": "Node engine policy is restricted to tested majors (`^22.0.0 || ^24.0.0 || ^26.0.0`) and CI tests Node 22, 24, and 26 according to the release policy.",
+      "requirement": "Node engine policy is restricted to `^22.12.0 || ^24.0.0 || ^26.0.0`; CI tests the exact supported floor and reviewed current-patch runtime for each admitted Node major with its exact bundled npm: Node 22.12.0/npm 10.9.0, Node 22.23.2/npm 10.9.8, Node 24.0.0/npm 11.3.0, Node 24.19.0/npm 11.17.0, Node 26.0.0/npm 11.12.1, and Node 26.6.0/npm 11.18.0.",
       "releaseBlocking": true,
       "status": "NOT_RUN",
       "evidence": null,
-      "notes": "The package engine range and CI matrix definition now match the closed Node 22/24/26 policy. This gate remains NOT_RUN because no executed release receipt yet proves all three matrix jobs."
+      "notes": "The package engine range and six-row CI matrix definition now match the closed Node 22/24/26 floor-and-current-patch policy. This gate remains NOT_RUN because no executed release receipt yet proves all six exact matrix rows."
     },
     {
       "id": "R099",

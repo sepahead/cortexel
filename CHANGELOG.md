@@ -6,6 +6,210 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — closed build-output authority
+
+- The package build now derives its runtime and declaration roots from the exact
+  package manifest, walks literal relative and package-import edges with the
+  TypeScript parser, rejects parser diagnostics, enumerated ESM/CommonJS format and
+  strict-mode early errors, and unknown output kinds, and removes only an exact
+  reviewed set of tool-emitted orphans. It then re-enumerates the output and
+  fails if any runtime or declaration is unreachable. Static imports, dynamic imports,
+  direct `require`, import-equals, and import-type edges retain their actual conditional
+  resolution kind; relative paths, package imports, runtime/declaration externals, and
+  Node builtins each have closed context-specific policies. Reserved capability
+  targets reached through absolute paths, canonical or noncanonical `file:` URLs,
+  query-bearing paths, virtual importers, filesystem aliases, alternate extensions,
+  importer-less entry aliases, reserved-specifier suffixes, or an unreviewed pass
+  tuple fail closed. A first resolver gate is backed by a final graph/output ownership
+  audit: each private capability module must remain one exact importer-free entry and
+  appear in exactly its pass-owned private facade, so an intermediate plugin cannot
+  smuggle it into another chunk by short-circuiting resolution.
+  The exact Rolldown input-plugin roster is sealed without freezing unrelated
+  third-party state: every initially present `outputOptions` hook is descriptor-bound
+  and frozen, and every absent extensible hook receives an immutable `undefined`
+  sentinel. A first pre-ordered authority hook rejects separate output plugins before
+  any one can run and erase its own evidence; the last post-ordered authority hook
+  independently rejects output plugins introduced by an admitted input hook. Late
+  addition/replacement, accessor-backed hook records, unknown hook vocabulary,
+  sparse/accessor-backed rosters, and mutation of either authority plugin fail closed.
+  Recognizable direct, computed, global/globalThis, and lexical-alias loader forms
+  plus enumerated direct `eval`, `Function`, and constructor-recovery forms fail
+  closed. This is a direct emitted-syntax closure, not a data-flow proof against
+  indirect evaluation, arbitrary reflective alias flow, or code already executing
+  with host authority. Generated CommonJS may not
+  retain a shadowable bare Node builtin: the sole tool-generated `url` shim is
+  rewritten to `node:url` only in its exact reviewed contexts, all remaining output
+  is scanned, and a fresh reviewed Node process proves that poisoning the bare
+  `require('url')` cache cannot affect the installed validator. This is package-byte
+  hardening, not a sandbox against code already executing with host authority.
+- Every published runtime source map is now bound to its one exact terminal
+  `<owner>.map`, has a strict duplicate-key-safe v3 JSON profile, and admits only the
+  exact 124 reviewed source identities plus their aggregate identity/content digest.
+  Build verification applies closed map/code/table/line/segment/comparison allocation
+  budgets before decoding, resolves each identity only after bounded admission, then
+  proves direct, canonical, single-link ancestry and stable-descriptor, canonical
+  UTF-8 source bytes equal to decoded
+  `sourcesContent`; the installed-package smoke independently rechecks the complete
+  identity/content digest so build-tree evidence is not transferred to packed bytes.
+  Alternate `@`/block/data/inline annotations, extra or trailing directives,
+  `sourceURL`, `debugId`, hidden/config inputs, inconsistent copies, orphan maps, and
+  a mapped/mapless policy reversal all fail closed. Declarations are deliberately
+  mapless. The shared decoder also enforces the ECMA-426 1/4/5-field grammar,
+  canonical 32-bit Base64-VLQ values, safe cumulative state, ordered generated
+  columns, complete source/name-index coverage, name text at its mapped original
+  UTF-16 coordinate, table bounds, and generated/original line and UTF-16-column
+  bounds without admitting final-line EOF as an in-file position. These checks bind
+  named mappings and establish structural coordinates; they do not prove that every
+  otherwise valid mapping segment points at the semantically corresponding token.
+  An HTTP `SourceMap` response header is host behavior outside package-byte authority.
+- Before tsdown may clean or write, the executor constructs a fresh option record
+  internally from the recursively frozen static authority; no caller-authored live
+  options or accessors reach the destructive tool. The repository and any existing `dist` are
+  required to be canonical direct directories with only direct, singly linked file
+  descendants. Streaming enumeration admits only portable ASCII identities and
+  enforces hard depth, per-directory, path (86 bytes beneath `dist/`, hence 91 bytes
+  including the package-relative `dist/` prefix), file/directory/node, per-file, aggregate,
+  runtime/declaration/map-count, and aggregate-map bounds before materializing code or
+  source maps. The boundary is re-established after the compiler. The last build
+  step revalidates the complete code graph plus the exact deterministic skills
+  manifest, byte-identical contract projection, and directory closure both before and
+  after mode normalization. Contract source enumeration, any pre-existing contract
+  destination, the CLI shebang read, package manifest read, and tracked/generated mode
+  trees now have explicit traversal and byte ceilings with stable descriptor reads
+  where bytes are consumed. Mode changes begin only after a complete bounded structural
+  and single-link preflight, so a hard-linked file cannot transfer `chmod` authority to
+  an outside pathname. These are pathname-time checks under a single-principal build
+  premise, not containment against a concurrently mutating same-UID process.
+
+### Changed — current supported development closure
+
+- As reviewed on 2026-08-03, refreshed every direct JavaScript development/runtime
+  dependency to the latest release compatible with Cortexel's supported Node, React,
+  Three, and package
+  contracts. The repository typecheck now runs the current native TypeScript 7
+  compiler, while declaration generation uses the current API-bearing TypeScript 6
+  release because TypeScript 7 intentionally does not yet expose the compiler API
+  required by compiler-API tests and declaration tooling. The build-only tsconfig's
+  `ignoreDeprecations: "6.0"` is the compiler's general TypeScript 6 deprecation
+  horizon, not a `baseUrl`-specific waiver; it is not applied to the TypeScript 7
+  repository gate.
+- Replaced the upstream-unmaintained tsup build with current tsdown 0.22.14,
+  stable Rolldown 1.2.2, and Magic String 1.1.0. The reviewed static build disables
+  ambient environment prefixes, pins the prior ES2022 lowering contract, preserves `node:` builtin
+  identities and `.js`/`.cjs` plus `.d.ts`/`.d.cts` package paths. Every runtime and
+  declaration pass is wrapped by a first private-capability resolver and a final
+  graph/facade ownership audit. Runtime
+  source maps are closed and self-contained; declarations carry no dangling map
+  metadata. The two explicitly disabled tsdown notices are `legacyCjs`, for the
+  intentional CommonJS package surface, and host-load-dependent `pluginTimings`;
+  every other warning fails the build. Two isolated migration-audit
+  builds from relocated source copies produced byte-identical outputs under
+  different `TSDOWN_*` environments; that is local review evidence, not a retained
+  cross-platform package-reproducibility receipt.
+  tsdown and Rolldown are exact direct development pins. Config loading proves tsdown
+  resolves the same physical Rolldown 1.2.2 entry used to construct the reviewed
+  hook/filter vocabulary, so a stale or future nested resolver cannot silently split
+  the build authority. Vite retains its separately declared compatible Rolldown range;
+  Cortexel does not use a global override to force that unrelated tool past its range.
+  The generated CommonJS compatibility helper is shipped package code, so
+  `THIRD_PARTY_NOTICES.md` and `LICENSES/Rolldown.txt` now carry the exact applicable
+  Rolldown, Rollup, and Evan Wallace/esbuild MIT notices rather than treating it as a
+  separately installed dependency.
+- The direct Bun compatibility run now sends each extended-descriptor supervisor
+  fault fixture through one ordinary three-pipe staged-Node broker. Bun 1.3.14 on
+  macOS otherwise intermittently loses its internal connection while constructing
+  repeated four-extra-pipe `node:child_process` children even after every prior
+  `close` and without descriptor growth. The broker performs the exact Node spawn,
+  drains every inherited pipe through `close`, and returns one schema-tagged,
+  canonical-base64 record. It does not retry, delay, skip, or relax any cleanup or
+  protocol assertion.
+- Advanced the pinned Lean toolchain from 4.32.0 to 4.32.2. The
+  [upstream 4.32.2 release](https://github.com/leanprover/lean4/releases/tag/v4.32.2) fixes
+  a kernel soundness defect in 4.32.0/4.32.1; proofs compiled by the affected kernel
+  are not carried forward as current release evidence, so the full warning-as-error
+  formal build is rerun under 4.32.2.
+- Refreshed the exact npm package-smoke consumer manifest and npm 11-generated lock,
+  including React 19.2.8, React Three Fiber 9.7.0, current declaration packages, and
+  a TypeScript 7 consumer compile. The local Cortexel tarball remains an unbound slot
+  in the committed lock and receives integrity only in prepared smoke state. The
+  reviewed Ajv closure uses the current compatible Fast URI 3.1.5 release because
+  Ajv declares `^3.0.1`; forcing the incompatible Fast URI 4 major would not be a
+  valid update. The obsolete vulnerable esbuild branch left by tsup is gone; tsx 4.23.5
+  resolves the fixed current esbuild 0.28.1 release and the advisory gate is clean.
+- Kept optional peers mandatory in the full package-smoke result while making a
+  transient npm behavior recoverable. npm can exit zero after a failed optional
+  tarball fetch and prune the affected branch. Only the full profile may repeat its
+  identical `npm ci` once, using that profile's same private cache, after an exact classifier
+  proves that the hidden lock and filesystem form one reduced closure with no changed
+  or extra record and only missing `optional:true` records. Required or
+  `devOptional`-only gaps, metadata/header drift, malformed JSON, command/runtime
+  failures, and a second incomplete result fail closed. Final hidden-lock, package,
+  scope, `.bin`, manifest, and byte equality remains unchanged. npm version/pack,
+  core, charts, and full now have four disjoint canonical private cache directories;
+  a prepare-local `unused` -> `active` -> `complete` ledger now establishes each
+  directory's cold first use rather than inferring it from a fresh pathname. The
+  command-adjacent cold activation rebinds the canonical workspace, controlling
+  ancestry, role/path, and captured cache inode, reads at most one dirent and requires
+  none, rebinds the same identities, then sets and rechecks the exact npm environment
+  path. Only that active
+  role can execute its closed npm policy. Control completes after `npm pack`; each
+  consumer completes only after the ordinary full closure succeeds. The optional-only
+  full retry remains active in the same cache across both attempts and never repeats
+  the emptiness check. No later consumer inherits an earlier profile's registry cache
+  state. This evidence is only the bounded initial observation: it does not prevent an
+  external same-UID writer from racing afterward. Lock/integrity checks and the later
+  reduced or complete closure proofs remain separate evidence.
+- npm's isolated user/global configuration files are now exclusively created with
+  owner-only authority, normalized to exact mode `0600` independently of ambient
+  umask, installed before even the npm version probe, and revalidated before and
+  after every npm command. The command cwd's project `.npmrc` must be absent at both
+  boundaries. Every npm command also rechecks its role-bound cache path, device/inode,
+  exact mode `0700`, and current-UID ownership before and after execution. Retry
+  authorization and the immediate pre-command boundary separately recheck that same
+  full-cache authority, config bytes, paths, modes, operational directories, raw consumer
+  manifest/lock bytes, and both tarball copies. Permissive and maximally restrictive
+  umask regressions cover the creation boundary.
+- Raised only the Node 22 consumer floor to 22.12, the first Node 22 release where
+  the CommonJS knowledge-graph entry can load its ESM-only `d3-force-3d` peer without
+  a flag. Source builds separately require Node 22.18+, 24.11+, or 26.x, without
+  admitting unsupported intervening or future majors. CI pins its build runtime,
+  exercises exact floor/current pairs 22.12.0/22.23.2, 24.0.0/24.19.0, and
+  26.0.0/26.6.0, and binds their exact bundled npm versions 10.9.0, 10.9.8,
+  11.3.0, 11.17.0, 11.12.1, and 11.18.0 respectively. Node, npm root, and npm CLI
+  must resolve beneath the same setup-node installation prefix before their private
+  copy is admitted. npm 12 is newer but has no reviewed topology/materialization
+  profile in this milestone and is rejected rather than treated as npm 11.
+- CI now pins checkout 7.0.1, setup-node 7.0.0, setup-python 7.0.0, and setup-uv
+  9.0.0 by immutable upstream commit SHA. setup-uv's changed cache-pruning default is
+  inapplicable because this workflow disables its cache; the exact workflow run remains
+  the authority for these major-version migrations.
+- The zero-state generated-contract check now invokes the canonical installed
+  `tsx/dist/cli.mjs` only after proving that it is the exact descendant of the
+  resolved `tsx` package authority. Generator source and working directory remain
+  inside each independent isolated tree; this path check does not authenticate
+  dependency bytes outside the lock/install gates. It is a resolution-time
+  topology check, not stable-inode or hostile same-UID containment: a process with
+  write authority over `node_modules` can still replace the path before a later
+  spawn, so CI relies on its isolated hosted runner and admits no target process
+  before generation.
+- Replaced one normative capability-registry reference to the retired tsup-specific
+  package surface with build-tool-neutral wording. That byte-only documentation
+  change moves the contract digest from
+  `sha256:a710ef28247ab8c3e49ebf80b30bfcbacc6c64768d8a836828f78eeb4cac597b`
+  to `sha256:61286a89091acaaee0ffb70b377b176cdea460f680d8ea0a7ef3f19da4da6dd0`;
+  the stable catalog digest remains
+  `sha256:e6ef9014ca56f4bd159f8b3545ba8d7cf0241550ff25b9de44b05fde826f0dd5`.
+  It does not change a figure schema, skill meaning, renderer, or scientific claim,
+  but downstreams that bind the complete normative byte identity must update the
+  contract digest explicitly.
+- Removed the tracked `.superstack` report/context artifacts and ignored
+  `.superstack/` to reduce accidental ordinary tracking. Ignore rules neither deny
+  filesystem reads nor prevent an explicit forced add.
+- Packaged `MIGRATION.md` and `SUPPORT.md` alongside the agent guide. The README and
+  agent quick start now invoke the reviewed installation's concrete CLI module instead
+  of `npm exec`, whose missing-local-package behavior can select registry or cache
+  state; the evidence-sensitive graph recipe also exact-saves d3-force-3d 3.0.6.
+
 ### Fixed — pre-READY guardian failure classification
 
 - The reviewed POSIX supervisor now distinguishes an exact canonical guardian
@@ -185,7 +389,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   materialization.
 - Packed browser evidence now builds both public graph entrypoints with the exact locked
   esbuild and peer closure during the reviewed prepare phase, records only a narrowly
-  reviewed class of redundant tsup bare-import warnings whose targets independently
+  reviewed class of redundant esbuild `ignored-bare-import` warnings whose targets
+  independently
   contribute bundle bytes, seals the bundle and canonical receipt, and executes the
   sealed handoff under the unchanged network/write/child-process-denying guard.
 - **Breaking (experimental pre-1.0 subpath):** `KnowledgeGraph3DScene`,
@@ -863,11 +1068,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   search path. Ambient API keys, package tokens, proxy credentials, Node/loader
   injection controls, npm configuration, and OpenSSL configuration cannot cross
   the package-smoke process boundary.
-- Ordinary package-smoke child commands retain an exact 300,000 ms bound. Only the
-  three closed cold-cache npm consumer materializations use the shared reviewed-POSIX
+- Ordinary package-smoke child commands retain an exact 300,000 ms bound. The three
+  closed, independently cold-cache npm consumer materializations use disjoint private
+  cache directories and the shared reviewed-POSIX
   maximum of 900,000 ms each, under fixed `core`, `charts`, and `full` operation
   labels. These are per-command rather than aggregate or hostile-hard-deadline
-  guarantees; no retry or caller-controlled override is admitted. Timeout/overflow
+  guarantees. Core and charts do not retry; full has only the current strict
+  optional-subset same-cache recovery described above. No caller-controlled retry or
+  override is admitted. Timeout/overflow
   diagnostics expose the fixed label and bound without argv, cwd, environment,
   executable path, or child output. The CI package-smoke job now has a 60-minute
   outer bound so it does not routinely preempt the three sequential installations.
@@ -1024,8 +1232,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Generated-contract checks now confine each determinism pass's `tsx` runtime
   state to a separate short temporary namespace, keeping Unix-domain sockets
   inside the caller's sandbox without sharing cache state between passes.
-- Package builds pass the reviewed static options directly to tsup with config
-  rediscovery disabled, avoiding its beside-source temporary config bundle.
+- Package builds use internally constructed reviewed tsdown options with ambient
+  config discovery disabled, avoiding beside-source temporary config authority.
   Finalization normalizes generated `dist` modes while verifying tracked package
   inputs fail-closed instead of attempting to chmod read-only source files.
 - Package linting no longer asks Bun to open tracked metadata for writing; the

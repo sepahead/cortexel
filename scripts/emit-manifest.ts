@@ -6,7 +6,7 @@
 //
 // buildManifest() is pure (no fs) so a Vitest guard can assert the committed
 // dist file is byte-identical to a fresh in-memory emit. emit() writes the file.
-// Run AFTER tsup (tsup's clean:true would otherwise wipe dist/).
+// Run AFTER the clean code build (its clean:true would otherwise wipe dist/).
 
 import { writeFile } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';

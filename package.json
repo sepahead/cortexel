@@ -35,8 +35,10 @@
     "CLAUDE.md",
     "CONTRIBUTING.md",
     "GOVERNANCE.md",
+    "MIGRATION.md",
     "ROADMAP.md",
     "SECURITY.md",
+    "SUPPORT.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "LICENSES",
@@ -182,12 +184,12 @@
     "check:nest-audit": "tsx scripts/generate-nest-example-visualization-coverage-v3.ts --check && tsx scripts/generate-nest-example-visualization-schemas-v3.ts --check",
     "check:nest-oracle-python": "python -I -S -B scripts/generate-nest-example-visualization-oracle.py --check docs/audit/nest-example-visualization-oracle.v1.json",
     "check:formal": "lake build --wfail",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node_modules/@typescript/native/bin/tsc --noEmit",
     "check:ledger": "tsx scripts/check-evidence-ledger.ts",
     "release:verify": "tsx scripts/verify-release.ts",
     "test": "vitest run --no-file-parallelism --testTimeout=30000",
     "test:watch": "vitest",
-    "check": "bun run check:generated && tsc --noEmit && bun run test",
+    "check": "bun run check:generated && node_modules/@typescript/native/bin/tsc --noEmit && bun run test",
     "audit": "bun audit",
     "lint:package": "publint --pack=false",
     "test:package": "bun scripts/smoke-package.ts",
@@ -197,13 +199,12 @@
     "prepublishOnly": "bun run release:verify && bun run check:ledger && bun run build && bun run check && bun run check:formal && bun run test:python && bun run check:python && bun run test:python-package && bun run audit && bun run lint:package && bun run test:package && bun run release:verify"
   },
   "dependencies": {
-    "ajv": "^8.17.1",
-    "zod": "^4"
+    "ajv": "^8.20.0",
+    "zod": "^4.4.3"
   },
   "overrides": {
-    "esbuild": "0.28.1",
-    "fast-uri": "3.1.4",
-    "postcss": "8.5.18"
+    "fast-uri": "3.1.5",
+    "postcss": "8.5.25"
   },
   "peerDependencies": {
     "@types/react": "^19",
@@ -239,25 +240,35 @@
   },
   "_peerNote": "ajv and zod are normal dependencies: `cortexel/figure` compiles the packaged JSON Schemas with Ajv, while the legacy `cortexel/core` VizSpec contract uses zod. `cortexel/figure`, `cortexel/render-svg`, `cortexel/adapters/nest`, and the experimental peer-free `cortexel/knowledge-graph` preparation/inspection entry load no React/Three/R3F/D3 peer. react is the only runtime peer used by `cortexel/react/charts`; react/react-dom/three/@react-three/fiber are optional runtime peers needed by `cortexel/react`; @types/react/@types/three are optional declaration peers for TypeScript consumers; d3-force-3d is needed only by `cortexel/react/knowledge-graph`.",
   "devDependencies": {
-    "@react-three/fiber": "^9.6.1",
-    "@types/node": "^26.1.1",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@types/react-test-renderer": "^19.0.0",
-    "@types/three": "^0.185.1",
-    "d3-force-3d": "^3.0.5",
+    "@react-three/fiber": "^9.7.0",
+    "@types/node": "^26.1.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@types/react-test-renderer": "^19.1.0",
+    "@types/three": "^0.185.3",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "d3-force-3d": "^3.0.6",
     "fast-check": "^4.9.0",
-    "publint": "^0.3.15",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-test-renderer": "^19.0.0",
+    "magic-string": "^1.1.0",
+    "publint": "^0.3.22",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-test-renderer": "^19.2.8",
+    "rolldown": "1.2.2",
     "three": "^0.185.1",
-    "tsup": "^8.3.0",
-    "tsx": "^4.23.0",
-    "typescript": "^5.9.3",
+    "tsdown": "0.22.14",
+    "tsx": "^4.23.5",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   },
   "engines": {
-    "node": "^22.0.0 || ^24.0.0 || ^26.0.0"
+    "node": "^22.12.0 || ^24.0.0 || ^26.0.0"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "^22.18.0 || ^24.11.0 || ^26.0.0",
+      "onFail": "error"
+    }
   }
 }

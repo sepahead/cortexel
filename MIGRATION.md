@@ -77,8 +77,9 @@ fact** the legacy payload did not carry: if a population count, trial count, uni
 node universe, MPI completeness, uncertainty method, or zero-lag policy is required
 and absent, migration returns a skeleton plus a blocking error rather than a guess.
 
-The full mapping is normative in
-[`contract/registries/legacy-skill-map.v1.json`](./contract/registries/legacy-skill-map.v1.json).
+The source authority is `contract/registries/legacy-skill-map.v1.json`; its packaged
+exact copy is
+[`dist/contract/registries/legacy-skill-map.v1.json`](./dist/contract/registries/legacy-skill-map.v1.json).
 Summary:
 
 | Pre-1.0 id | Outcome | FigureRequestV1 target |

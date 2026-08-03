@@ -1,10 +1,9 @@
-import { a as ValidateOptions, V as ValidatedRequest } from '../request-DtG1m43V.cjs';
-import { D as Disclosure } from '../disclosures-tyvTPm84.cjs';
-import { J as JsonValue } from '../catalog-BLAptCng.cjs';
-import { C as CortexelError } from '../errors-DOfZeMp8.cjs';
-import { FigureResultNominalBrand } from '#cortexel-figure-result-brand';
-import '#cortexel-validated-request-brand';
-
+import { t as CortexelError } from "../errors-DLTGhSm-.cjs";
+import { t as Disclosure } from "../disclosures-6uwXW5ys.cjs";
+import { t as JsonValue } from "../parse-json-C_C8fdK2.cjs";
+import { ValidateOptions, ValidatedRequest } from "#cortexel-request-capability";
+import { FigureResultNominalBrand } from "#cortexel-figure-result-brand";
+//#region src/core/source-statements.d.ts
 /**
  * Caller-declared source statements are presentation content, not disclosures.
  *
@@ -16,68 +15,69 @@ import '#cortexel-validated-request-brand';
  */
 type CallerSourceStatementKind = 'declared_limitation' | 'declared_note';
 interface CallerSourceStatement {
-    readonly kind: CallerSourceStatementKind;
-    readonly attribution: 'declared_by_caller_not_verified';
-    readonly bidiIsolation: 'unicode_fsi_pdi';
-    /** Renderer-owned attribution plus the caller body enclosed by FSI/PDI. */
-    readonly text: string;
+  readonly kind: CallerSourceStatementKind;
+  readonly attribution: 'declared_by_caller_not_verified';
+  readonly bidiIsolation: 'unicode_fsi_pdi';
+  /** Renderer-owned attribution plus the caller body enclosed by FSI/PDI. */
+  readonly text: string;
 }
-
+//#endregion
+//#region src/render/model/renderPlan.d.ts
 interface RenderPlanV1 {
-    readonly version: 1;
-    readonly figureId: string;
-    readonly skillId: string;
-    readonly width: number;
-    readonly height: number;
-    readonly title: string;
-    readonly subtitle?: string;
-    readonly themeId: string;
-    readonly panels: readonly Panel[];
-    readonly legend?: LegendItem[];
-    readonly disclosures: readonly DisclosureBlock[];
-    /** Attributed caller declarations, always rendered after every mandatory disclosure. */
-    readonly sourceStatements: readonly CallerSourceStatement[];
-    readonly table: TableModel;
-    readonly accessibility: AccessibilityModel;
-    /** Binds the plan to the validated canonical request it was compiled from. */
-    readonly sourceRequestDigest: string;
+  readonly version: 1;
+  readonly figureId: string;
+  readonly skillId: string;
+  readonly width: number;
+  readonly height: number;
+  readonly title: string;
+  readonly subtitle?: string;
+  readonly themeId: string;
+  readonly panels: readonly Panel[];
+  readonly legend?: LegendItem[];
+  readonly disclosures: readonly DisclosureBlock[];
+  /** Attributed caller declarations, always rendered after every mandatory disclosure. */
+  readonly sourceStatements: readonly CallerSourceStatement[];
+  readonly table: TableModel;
+  readonly accessibility: AccessibilityModel;
+  /** Binds the plan to the validated canonical request it was compiled from. */
+  readonly sourceRequestDigest: string;
 }
 interface DisclosureBlock {
-    readonly id: string;
-    readonly severity: 'critical' | 'important' | 'informational';
-    readonly text: string;
+  readonly id: string;
+  readonly severity: 'critical' | 'important' | 'informational';
+  readonly text: string;
 }
 interface LegendItem {
-    readonly label: string;
-    readonly color: string;
-    readonly outlineColor?: string;
-    readonly glyph?: 'series' | 'band' | 'whisker' | 'rule';
-    readonly dash?: string;
-    readonly marker?: string;
+  readonly label: string;
+  readonly color: string;
+  readonly outlineColor?: string;
+  readonly glyph?: 'series' | 'band' | 'whisker' | 'rule';
+  readonly dash?: string;
+  readonly marker?: string;
 }
 interface Panel {
-    readonly id: string;
-    readonly label?: string;
-    /** Panel bounds in figure coordinates. */
-    readonly x: number;
-    readonly y: number;
-    readonly width: number;
-    readonly height: number;
-    readonly axes: readonly Axis[];
-    readonly marks: readonly Mark[];
-    /** A structured empty state, when there is nothing valid to draw. */
-    readonly noData?: {
-        readonly reason: string;
-    };
+  readonly id: string;
+  readonly label?: string;
+  /** Panel bounds in figure coordinates. */
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly axes: readonly Axis[];
+  readonly marks: readonly Mark[];
+  /** A structured empty state, when there is nothing valid to draw. */
+  readonly noData?: {
+    readonly reason: string;
+  };
 }
 interface Axis {
-    readonly orientation: 'bottom' | 'left' | 'top' | 'right';
+  readonly orientation: 'bottom' | 'left' | 'top' | 'right';
+  readonly label: string;
+  readonly ticks: readonly {
+    readonly position: number;
     readonly label: string;
-    readonly ticks: readonly {
-        readonly position: number;
-        readonly label: string;
-    }[];
-    readonly transform: 'linear' | 'log' | 'symlog' | 'band';
+  }[];
+  readonly transform: 'linear' | 'log' | 'symlog' | 'band';
 }
 /**
  * The closed mark union. Every mark references pre-computed device-independent
@@ -95,31 +95,31 @@ type Mark = LineMark | ArrowMark | PointMark | RectMark | RuleMark | AreaMark | 
  * correctness until a skill opts into an independent canonical-geometry evaluator.
  */
 interface OutputAuthorityCarrierV1 {
-    readonly tag: 'data_carrier';
-    readonly classId: string;
-    readonly provenance: JsonValue;
+  readonly tag: 'data_carrier';
+  readonly classId: string;
+  readonly provenance: JsonValue;
 }
 interface OutputAuthorityConnectorV1 {
-    /** Synthetic vertex needed to connect/close data geometry; never a carrier. */
-    readonly tag: 'connector';
+  /** Synthetic vertex needed to connect/close data geometry; never a carrier. */
+  readonly tag: 'connector';
 }
 interface OutputAuthorityDecorativeMarkV1 {
-    /** Explicitly presentation-only atomic geometry; never a carrier. */
-    readonly tag: 'decorative_mark';
+  /** Explicitly presentation-only atomic geometry; never a carrier. */
+  readonly tag: 'decorative_mark';
 }
 type OutputAuthorityAtomicRoleV1 = OutputAuthorityCarrierV1 | OutputAuthorityConnectorV1 | OutputAuthorityDecorativeMarkV1;
 interface LineMark {
-    readonly type: 'line';
-    /** Each subpath is a run of connected points; a gap in the data starts a NEW subpath. */
-    readonly subpaths: readonly (readonly {
-        readonly x: number;
-        readonly y: number;
-        /** Transitional optionality only; the emission gate refuses every unclassified atom. */
-        readonly authority?: OutputAuthorityAtomicRoleV1;
-    }[])[];
-    readonly stroke: string;
-    readonly strokeWidth: number;
-    readonly dash?: string;
+  readonly type: 'line';
+  /** Each subpath is a run of connected points; a gap in the data starts a NEW subpath. */
+  readonly subpaths: readonly (readonly {
+    readonly x: number;
+    readonly y: number;
+    /** Transitional optionality only; the emission gate refuses every unclassified atom. */
+    readonly authority?: OutputAuthorityAtomicRoleV1;
+  }[])[];
+  readonly stroke: string;
+  readonly strokeWidth: number;
+  readonly dash?: string;
 }
 /**
  * A direction-bearing arrowhead whose orientation is fixed by two plan coordinates.
@@ -127,147 +127,133 @@ interface LineMark {
  * direction from path order, marker defaults, animation, or colour.
  */
 interface ArrowMark {
-    readonly type: 'arrow';
-    readonly arrows: readonly {
-        readonly from: {
-            readonly x: number;
-            readonly y: number;
-        };
-        readonly to: {
-            readonly x: number;
-            readonly y: number;
-        };
-        readonly authority?: OutputAuthorityAtomicRoleV1;
-    }[];
-    readonly fill: string;
-    readonly size: number;
+  readonly type: 'arrow';
+  readonly arrows: readonly {
+    readonly from: {
+      readonly x: number;
+      readonly y: number;
+    };
+    readonly to: {
+      readonly x: number;
+      readonly y: number;
+    };
+    readonly authority?: OutputAuthorityAtomicRoleV1;
+  }[];
+  readonly fill: string;
+  readonly size: number;
 }
 interface PointMark {
-    readonly type: 'point';
-    readonly points: readonly {
-        readonly x: number;
-        readonly y: number;
-        readonly authority?: OutputAuthorityAtomicRoleV1;
-    }[];
-    readonly fill: string;
-    readonly radius: number;
-    readonly shape: 'circle' | 'square' | 'triangle' | 'diamond' | 'cross' | 'star' | 'plus' | 'hexagon';
-}
-interface RectMark {
-    readonly type: 'rect';
-    readonly rects: readonly {
-        readonly x: number;
-        readonly y: number;
-        readonly width: number;
-        readonly height: number;
-        readonly fill: string;
-        readonly authority?: OutputAuthorityAtomicRoleV1;
-    }[];
-    readonly stroke?: string;
-}
-interface RuleMark {
-    readonly type: 'rule';
-    readonly orientation: 'horizontal' | 'vertical';
-    readonly lines: readonly {
-        readonly position: number;
-        readonly from: number;
-        readonly to: number;
-        readonly authority?: OutputAuthorityAtomicRoleV1;
-    }[];
-    readonly stroke: string;
-    readonly strokeWidth: number;
-    readonly dash?: string;
-}
-interface AreaMark {
-    readonly type: 'area';
-    readonly subpaths: readonly (readonly {
-        readonly x: number;
-        readonly y0: number;
-        readonly y1: number;
-        readonly authority?: OutputAuthorityAtomicRoleV1;
-    }[])[];
-    readonly fill: string;
-    readonly opacity: number;
-    /** Full-opacity boundary needed for non-text contrast and zero-area pointwise intervals. */
-    readonly stroke?: string;
-    readonly strokeWidth?: number;
-}
-interface PathMark {
-    readonly type: 'path';
-    /** Step/stem paths built from explicit segments; never a smoothed curve. */
-    readonly subpaths: readonly (readonly {
-        readonly x: number;
-        readonly y: number;
-        readonly authority?: OutputAuthorityAtomicRoleV1;
-    }[])[];
-    readonly stroke: string;
-    readonly strokeWidth: number;
-}
-interface TextMark {
-    readonly type: 'text';
+  readonly type: 'point';
+  readonly points: readonly {
     readonly x: number;
     readonly y: number;
-    readonly text: string;
-    readonly anchor: 'start' | 'middle' | 'end';
-    readonly fontSize: number;
+    readonly authority?: OutputAuthorityAtomicRoleV1;
+  }[];
+  readonly fill: string;
+  readonly radius: number;
+  readonly shape: 'circle' | 'square' | 'triangle' | 'diamond' | 'cross' | 'star' | 'plus' | 'hexagon';
+}
+interface RectMark {
+  readonly type: 'rect';
+  readonly rects: readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
     readonly fill: string;
-    readonly decorative?: boolean;
+    readonly authority?: OutputAuthorityAtomicRoleV1;
+  }[];
+  readonly stroke?: string;
+}
+interface RuleMark {
+  readonly type: 'rule';
+  readonly orientation: 'horizontal' | 'vertical';
+  readonly lines: readonly {
+    readonly position: number;
+    readonly from: number;
+    readonly to: number;
+    readonly authority?: OutputAuthorityAtomicRoleV1;
+  }[];
+  readonly stroke: string;
+  readonly strokeWidth: number;
+  readonly dash?: string;
+}
+interface AreaMark {
+  readonly type: 'area';
+  readonly subpaths: readonly (readonly {
+    readonly x: number;
+    readonly y0: number;
+    readonly y1: number;
+    readonly authority?: OutputAuthorityAtomicRoleV1;
+  }[])[];
+  readonly fill: string;
+  readonly opacity: number;
+  /** Full-opacity boundary needed for non-text contrast and zero-area pointwise intervals. */
+  readonly stroke?: string;
+  readonly strokeWidth?: number;
+}
+interface PathMark {
+  readonly type: 'path';
+  /** Step/stem paths built from explicit segments; never a smoothed curve. */
+  readonly subpaths: readonly (readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly authority?: OutputAuthorityAtomicRoleV1;
+  }[])[];
+  readonly stroke: string;
+  readonly strokeWidth: number;
+}
+interface TextMark {
+  readonly type: 'text';
+  readonly x: number;
+  readonly y: number;
+  readonly text: string;
+  readonly anchor: 'start' | 'middle' | 'end';
+  readonly fontSize: number;
+  readonly fill: string;
+  readonly decorative?: boolean;
 }
 interface GroupMark {
-    readonly type: 'group';
-    readonly id: string;
-    readonly marks: readonly Mark[];
+  readonly type: 'group';
+  readonly id: string;
+  readonly marks: readonly Mark[];
 }
 interface TableModel {
-    /** Every accepted row is returned on FigureResult.table; no sidecar/reference mode exists in V1. */
-    readonly policy: 'complete_returned';
-    readonly columns: readonly {
-        readonly key: string;
-        readonly header: string;
-    }[];
-    readonly rows: readonly (readonly (string | number | null)[])[];
-    /** Kept as an artifact-facing count name; for complete_returned it must equal rows.length and rowsTotal. */
-    readonly rowsInline: number;
-    readonly rowsTotal: number;
-    /**
-     * Figure-level facts that must accompany every representation of the table.
-     * Family compilers may omit this while assembling an internal plan; buildFigure
-     * always materializes it before exposing, freezing, or serializing the table.
-     */
-    readonly metadata?: {
-        readonly disclosures: readonly DisclosureBlock[];
-        readonly sourceStatements: readonly CallerSourceStatement[];
-    };
+  /** Every accepted row is returned on FigureResult.table; no sidecar/reference mode exists in V1. */
+  readonly policy: 'complete_returned';
+  readonly columns: readonly {
+    readonly key: string;
+    readonly header: string;
+  }[];
+  readonly rows: readonly (readonly (string | number | null)[])[];
+  /** Kept as an artifact-facing count name; for complete_returned it must equal rows.length and rowsTotal. */
+  readonly rowsInline: number;
+  readonly rowsTotal: number;
+  /**
+   * Figure-level facts that must accompany every representation of the table.
+   * Family compilers may omit this while assembling an internal plan; buildFigure
+   * always materializes it before exposing, freezing, or serializing the table.
+   */
+  readonly metadata?: {
+    readonly disclosures: readonly DisclosureBlock[];
+    readonly sourceStatements: readonly CallerSourceStatement[];
+  };
 }
 interface AccessibilityModel {
-    readonly summary: string;
-    readonly panelSummaries: readonly string[];
-    /** True when each panel publishes its own value range and pooling them would mix axes. */
-    readonly suppressGlobalValueRange?: boolean;
+  readonly summary: string;
+  readonly panelSummaries: readonly string[];
+  /** True when each panel publishes its own value range and pooling them would mix axes. */
+  readonly suppressGlobalValueRange?: boolean;
 }
-
-/**
- * buildFigure — the end-to-end pipeline.
- *
- *   request -> validate -> derive (src/analysis) -> compile plan -> render SVG
- *           -> assemble FigureArtifactV1 + table + disclosures
- *
- * Rendering accepts ONLY a validated request (the branded token from the validation
- * pipeline). A plain object that merely looks validated cannot be rendered — the type
- * refuses it and, if forced, the runtime does too. That is what makes "no renderer may
- * bypass validation" a fact rather than a convention.
- *
- * The science happens once, in the derivation step, and the compiler consumes it. So the
- * CLI and React, both calling this, cannot disagree about a value.
- */
-
+//#endregion
+//#region src/render/buildFigure.d.ts
 interface FigureResult extends FigureResultNominalBrand {
-    readonly ok: true;
-    readonly artifact: Record<string, unknown>;
-    readonly svg: string;
-    readonly plan: RenderPlanV1;
-    readonly table: RenderPlanV1['table'];
-    readonly disclosures: readonly Disclosure[];
+  readonly ok: true;
+  readonly artifact: Record<string, unknown>;
+  readonly svg: string;
+  readonly plan: RenderPlanV1;
+  readonly table: RenderPlanV1['table'];
+  readonly disclosures: readonly Disclosure[];
 }
 /**
  * O(1) identity check for an exact fully successful result from this loaded authority
@@ -278,8 +264,8 @@ declare function isLiveBuiltFigureResult(value: unknown): value is FigureResult;
 /** Package-private guard for future composition consumers. */
 declare function assertLiveBuiltFigureResult(value: unknown): asserts value is FigureResult;
 interface FigureFailure {
-    readonly ok: false;
-    readonly errors: readonly CortexelError[];
+  readonly ok: false;
+  readonly errors: readonly CortexelError[];
 }
 /** Build a figure from an already-validated request. */
 declare function buildFigureFromValidated(validated: ValidatedRequest): FigureResult | FigureFailure;
@@ -287,5 +273,5 @@ declare function buildFigureFromValidated(validated: ValidatedRequest): FigureRe
 declare function buildFigureFromJson(text: string, options?: ValidateOptions): FigureResult | FigureFailure;
 /** Build a figure from an already-materialized JS request value. */
 declare function buildFigure(value: unknown, options?: ValidateOptions): FigureResult | FigureFailure;
-
+//#endregion
 export { type FigureFailure, type FigureResult, assertLiveBuiltFigureResult, buildFigure, buildFigureFromJson, buildFigureFromValidated, isLiveBuiltFigureResult };

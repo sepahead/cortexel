@@ -17,6 +17,7 @@ import {
   symlinkSync,
   truncateSync,
   writeFileSync,
+  writeSync,
 } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -26,25 +27,39 @@ import { pathToFileURL } from 'node:url';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
+  activatePackageSmokeNpmCache,
+  assertPackageSmokeNpmCacheRoleActive,
   assertFinalizedHostFile,
   assertInstalledRecursivePackageClosure,
+  assertInstalledSourceMapClosure as assertExactInstalledSourceMapClosure,
   assertInstalledTopLevelPackageInventory,
+  assertPackageMaterializationInputAuthority,
+  assertPackageSmokeNpmConfigIdentity,
+  assertPackageSmokeProjectNpmConfigAbsent,
   assertPackedMarkdownLinkClosure,
   assertPreparedNodeRuntimeIdentity,
+  beginPackageSmokeNpmCacheSession,
   closePackageSmokeStateFile,
+  completePackageSmokeNpmCacheRole,
+  createPackageSmokeNpmConfigFiles,
+  declarationReferencesPrivateRequestBoundary,
   executePackageSmokeWorkspace,
   fingerprintNpmPackageTree,
   fingerprintPackageSmokeWorkspace,
+  formatPackageSmokeFailure,
   formatReviewedNodeCommandFailure,
   formatReviewedNodeOperationBoundFailure,
   generatedBrowserBundlePatternDeclarations,
+  generatedCjsUrlCacheProbeSource,
   inspectNodeExecutableAuthority,
   inspectNpmPackageAuthority,
   inspectNpmPackageTarball,
+  inspectPackageSmokeNpmCacheAuthorities,
   inspectPackedMarkdownAngleReferences,
   inspectPreparedStateFileAuthority,
   installedArtifactMode,
   packageSmokeEnvironment,
+  packageSmokeNpmCachePath,
   NPM_AUTHORITY_LIMITS,
   PACKAGE_SMOKE_COMMAND_POLICIES,
   PACKAGE_SMOKE_CONSUMER_PROFILES,
@@ -55,13 +70,19 @@ import {
   parsePackageSmokeInvocation,
   publishPackageSmokeStateFile,
   readDirectoryNamesBounded,
+  resetPackageSmokeNpmCacheSession,
   reservePackageSmokeStateFile,
   runReviewedNodeCommand,
+  runVerifiedPackageMaterialization,
   scrubbedEnvironment,
   withPackageSmokeCommandRuntime,
   type ExpectedPackageFile,
+  type PackageSmokeRegularFileTestEvent,
+  type PackageSmokeRegularFileTestHook,
+  type PackageSmokeNpmCacheAuthority,
   type PackedFile,
   type PackedResult,
+  validateFixtureSources,
   validatePackageSmokeFixture,
   verifyInstalledPackageClosure,
 } from '../scripts/smoke-package';
@@ -74,6 +95,13 @@ import {
   REVIEWED_POSIX_PIPE_DRAIN_TIMEOUT_MS,
   REVIEWED_POSIX_SUPERVISOR_SCHEDULER_MARGIN_MS,
 } from '../scripts/lib/reviewed-posix-supervisor';
+
+const assertInstalledSourceMapClosure = (
+  installedRoot: string,
+  packedPaths: readonly string[],
+): void => assertExactInstalledSourceMapClosure(installedRoot, packedPaths, {
+  requireExactSourceInventory: false,
+});
 
 const root = resolve(import.meta.dirname, '..');
 const fixtureRoot = join(root, 'scripts', 'fixtures', 'package-smoke');
@@ -322,7 +350,97 @@ function fakeRuntimeAuthorityTree(): {
   return { workspace, node, npmRoot, npmCli, npmTarget };
 }
 
+interface PackageMaterializationAuthorityFixture {
+  readonly artifact: Buffer;
+  readonly artifactIntegrity: string;
+  readonly artifactPath: string;
+  readonly consumer: string;
+  readonly exactFixtureLockRaw: Buffer;
+  readonly exactFixtureManifestRaw: Buffer;
+  readonly globalConfig: string;
+  readonly lockPath: string;
+  readonly manifestPath: string;
+  readonly npmConfigs: ReturnType<typeof createPackageSmokeNpmConfigFiles>;
+  readonly npmCacheAuthority: PackageSmokeNpmCacheAuthority;
+  readonly sourceArtifactPath: string;
+  readonly userConfig: string;
+}
+
+function createPackageSmokeOperationalFixture(
+  workspace: string,
+): ReturnType<typeof inspectPackageSmokeNpmCacheAuthorities> {
+  const operational = join(workspace, 'operational');
+  mkdirSync(operational, { mode: 0o700 });
+  chmodSync(operational, 0o700);
+  for (const name of ['home', 'tmp', 'npm-cache']) {
+    const path = join(operational, name);
+    mkdirSync(path, { mode: 0o700 });
+    chmodSync(path, 0o700);
+  }
+  for (const role of ['control', 'core', 'charts', 'full'] as const) {
+    const path = packageSmokeNpmCachePath(workspace, role);
+    mkdirSync(path, { mode: 0o700 });
+    chmodSync(path, 0o700);
+  }
+  writeFileSync(join(operational, 'execute-denied'), 'not-a-directory\n', {
+    flag: 'wx',
+    mode: 0o444,
+  });
+  chmodSync(join(operational, 'execute-denied'), 0o444);
+  return inspectPackageSmokeNpmCacheAuthorities(workspace, 'test fixture');
+}
+
+function packageMaterializationAuthorityFixture(): PackageMaterializationAuthorityFixture {
+  const workspace = realpathSync(mkdtempSync(
+    join(tmpdir(), 'cortexel-package-materialization-authority-'),
+  ));
+  cleanups.push(workspace);
+  const npmCacheAuthorities = createPackageSmokeOperationalFixture(workspace);
+  const npmConfigs = createPackageSmokeNpmConfigFiles(workspace);
+
+  const consumer = join(workspace, 'consumer');
+  mkdirSync(consumer, { mode: 0o755 });
+  const exactFixtureManifestRaw = Buffer.from(
+    '{"name":"authority-consumer","version":"1.0.0"}\n',
+    'utf8',
+  );
+  const exactFixtureLockRaw = Buffer.from(
+    '{"lockfileVersion":3,"name":"authority-consumer","packages":{},"version":"1.0.0"}\n',
+    'utf8',
+  );
+  const artifact = Buffer.from('exact reviewed package artifact\n', 'utf8');
+  const manifestPath = join(consumer, 'package.json');
+  const lockPath = join(consumer, 'package-lock.json');
+  const artifactPath = join(consumer, 'cortexel-smoke.tgz');
+  const sourceArtifactPath = join(workspace, 'source-cortexel-smoke.tgz');
+  for (const [path, bytes] of [
+    [manifestPath, exactFixtureManifestRaw],
+    [lockPath, exactFixtureLockRaw],
+    [artifactPath, artifact],
+    [sourceArtifactPath, artifact],
+  ] as const) {
+    writeFileSync(path, bytes, { flag: 'wx', mode: 0o644 });
+    chmodSync(path, 0o644);
+  }
+  return {
+    artifact,
+    artifactIntegrity: `sha512-${createHash('sha512').update(artifact).digest('base64')}`,
+    artifactPath,
+    consumer,
+    exactFixtureLockRaw,
+    exactFixtureManifestRaw,
+    globalConfig: npmConfigs.globalConfig,
+    lockPath,
+    manifestPath,
+    npmConfigs,
+    npmCacheAuthority: npmCacheAuthorities.full,
+    sourceArtifactPath,
+    userConfig: npmConfigs.userConfig,
+  };
+}
+
 afterEach(() => {
+  resetPackageSmokeNpmCacheSession();
   for (const path of cleanups.splice(0)) {
     try {
       chmodSync(path, 0o755);
@@ -392,6 +510,297 @@ describe('two-phase package smoke contract', () => {
     });
   };
 
+  it('requires self-contained runtime maps and forbids declaration-map metadata', () => {
+    const installedRoot = realpathSync(mkdtempSync(
+      join(tmpdir(), 'cortexel-source-map-closure-'),
+    ));
+    cleanups.push(installedRoot);
+    mkdirSync(join(installedRoot, 'dist'));
+    const runtimePath = join(installedRoot, 'dist', 'chunk.js');
+    const mapPath = `${runtimePath}.map`;
+    const declarationPath = join(installedRoot, 'dist', 'index.d.ts');
+    const packedPaths = ['dist/chunk.js', 'dist/chunk.js.map', 'dist/index.d.ts'];
+    writeFileSync(
+      runtimePath,
+      'export const value = 1;\n//# sourceMappingURL=chunk.js.map',
+    );
+    const reviewedMap = (): Record<string, unknown> => ({
+      version: 3,
+      file: 'chunk.js',
+      sources: ['../src/core/canonicalize.ts'],
+      sourcesContent: ['export const value = 1;\n'],
+      names: [],
+      mappings: 'AAAA',
+    });
+    const writeMap = (value: Record<string, unknown>): void => {
+      writeFileSync(mapPath, JSON.stringify(value));
+    };
+    writeMap(reviewedMap());
+    writeFileSync(declarationPath, 'export declare const value = 1;\n');
+
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).not.toThrow();
+
+    const secondRuntimePath = join(installedRoot, 'dist', 'other.js');
+    const secondMapPath = `${secondRuntimePath}.map`;
+    writeFileSync(
+      secondRuntimePath,
+      'export const value = 2;\n//# sourceMappingURL=other.js.map',
+    );
+    writeFileSync(secondMapPath, JSON.stringify({
+      ...reviewedMap(),
+      file: 'other.js',
+      sourcesContent: ['export const value = 2;\n'],
+    }));
+    expect(() => assertInstalledSourceMapClosure(installedRoot, [
+      ...packedPaths,
+      'dist/other.js',
+      'dist/other.js.map',
+    ])).toThrow(/disagree on embedded input/u);
+
+    for (const spelling of ['sources', '\\u0073ources']) {
+      const duplicateWire = JSON.stringify(reviewedMap()).replace(
+        '"sources":',
+        `"${spelling}":["../.env"],"sources":`,
+      );
+      writeFileSync(mapPath, duplicateWire);
+      expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+        /duplicate JSON object member "sources"/u,
+      );
+    }
+    writeMap(reviewedMap());
+
+    writeFileSync(mapPath, Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from(JSON.stringify(reviewedMap())),
+    ]));
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /UTF-8 BOM/u,
+    );
+    writeFileSync(mapPath, Buffer.from([0xff]));
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /not well-formed UTF-8/u,
+    );
+    writeMap(reviewedMap());
+
+    writeFileSync(
+      declarationPath,
+      'export declare const value = 1;\n//# sourceMappingURL=index.d.ts.map',
+    );
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /declaration retains source-map metadata/u,
+    );
+    writeFileSync(
+      declarationPath,
+      'export declare const value = 1;\n/*# sourceMappingURL=index.d.ts.map */',
+    );
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /declaration retains source-map metadata/u,
+    );
+    writeFileSync(declarationPath, 'export declare const value = 1;\n');
+
+    const missingContent = reviewedMap();
+    delete missingContent.sourcesContent;
+    writeMap(missingContent);
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /source map .* unexpected keys/u,
+    );
+
+    for (const unexpected of ['sourceRoot', 'sections', 'x_cortexel_extension']) {
+      const extended = reviewedMap();
+      extended[unexpected] = unexpected === 'sections' ? [] : '';
+      writeMap(extended);
+      expect(
+        () => assertInstalledSourceMapClosure(installedRoot, packedPaths),
+        unexpected,
+      ).toThrow(/source map .* unexpected keys/u);
+    }
+
+    const malformedNames = reviewedMap();
+    malformedNames.names = [1];
+    writeMap(malformedNames);
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /source map is incomplete/u,
+    );
+
+    const unusedName = reviewedMap();
+    unusedName.names = ['SENTINEL_UNREVIEWED_NAME'];
+    writeMap(unusedName);
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /unreferenced name/u,
+    );
+
+    const duplicateSources = reviewedMap();
+    duplicateSources.sources = [
+      '../src/core/canonicalize.ts',
+      '../src/core/canonicalize.ts',
+    ];
+    duplicateSources.sourcesContent = [
+      'export const value = 1;\n',
+      'export const value = 1;\n',
+    ];
+    writeMap(duplicateSources);
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /duplicate embedded source/u,
+    );
+
+    const missingNameTable = reviewedMap();
+    delete missingNameTable.names;
+    writeMap(missingNameTable);
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /source map .* unexpected keys/u,
+    );
+
+    const incompleteContent = reviewedMap();
+    incompleteContent.sourcesContent = [null];
+    writeMap(incompleteContent);
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /source map is incomplete/u,
+    );
+
+    const missingParallelContent = reviewedMap();
+    missingParallelContent.sourcesContent = [];
+    writeMap(missingParallelContent);
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /source map is incomplete/u,
+    );
+
+    const wrongOwner = reviewedMap();
+    wrongOwner.file = 'other.js';
+    writeMap(wrongOwner);
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /source map is incomplete/u,
+    );
+
+    writeMap(reviewedMap());
+    writeFileSync(
+      runtimePath,
+      'export const value = 1;\n//# sourceMappingURL=missing.js.map',
+    );
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /source-map reference is not terminal/u,
+    );
+    writeFileSync(
+      runtimePath,
+      'export const value = 1;\n//# sourceMappingURL=chunk.js.map',
+    );
+    writeFileSync(join(installedRoot, 'dist', 'orphan.js.map'), '{}');
+    expect(() => assertInstalledSourceMapClosure(
+      installedRoot,
+      [...packedPaths, 'dist/orphan.js.map'],
+    )).toThrow(/source-map inventory contains an unreferenced/u);
+
+    for (const unsafeSource of [
+      'https://example.invalid/chunk.ts',
+      'webpack://cortexel/chunk.ts',
+      'file:///tmp/chunk.ts',
+      'node:fs',
+      '//example.invalid/chunk.ts',
+      '../src/chunk.ts?revision=1',
+      '../src/chunk.ts#fragment',
+      '..\\src\\chunk.ts',
+      '/tmp/chunk.ts',
+      'C:/tmp/chunk.ts',
+      '../src/%2e%2e/chunk.ts',
+    ]) {
+      const unsafe = reviewedMap();
+      unsafe.sources = [unsafeSource];
+      writeMap(unsafe);
+      expect(
+        () => assertInstalledSourceMapClosure(installedRoot, packedPaths),
+        unsafeSource,
+      ).toThrow(/unsafe or noncanonical source/u);
+    }
+
+    const noncanonical = reviewedMap();
+    noncanonical.sources = ['../src/./chunk.ts'];
+    writeMap(noncanonical);
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /unsafe or noncanonical source/u,
+    );
+
+    const escaping = reviewedMap();
+    escaping.sources = ['../../outside.ts'];
+    writeMap(escaping);
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /outside the exact reviewed inventory/u,
+    );
+
+    const hidden = reviewedMap();
+    hidden.sources = ['../.env'];
+    hidden.sourcesContent = ['not-a-real-secret\n'];
+    writeMap(hidden);
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /outside the exact reviewed inventory/u,
+    );
+
+    writeMap(reviewedMap());
+    for (const metadata of [
+      '/*# sourceMappingURL=chunk.js.map */',
+      '/*@ sourceMappingURL=chunk.js.map */',
+      '//@ sourceMappingURL=chunk.js.map',
+      '//#  sourceMappingURL=chunk.js.map',
+      '//# sourceMappingURL =chunk.js.map',
+      '//# sourceMappingURL=data:application/json,{}',
+      '//# sourceMappingURL=chunk.js.map?revision=1',
+      'export const inline = 1;//# sourceMappingURL=chunk.js.map',
+      '//# sourceMappingURL=chunk.js.map\n',
+      '//# sourceMappingURL=chunk.js.map\n//# sourceMappingURL=chunk.js.map',
+      '//# sourceURL=virtual.js\n//# sourceMappingURL=chunk.js.map',
+      '//# debugId=00000000\n//# sourceMappingURL=chunk.js.map',
+      'const marker = "sourceMappingURL";\n//# sourceMappingURL=chunk.js.map',
+      '//# sourceMappingURL=chunk.js.map\u0000',
+    ]) {
+      writeFileSync(runtimePath, `export const value = 1;\n${metadata}`);
+      expect(
+        () => assertInstalledSourceMapClosure(installedRoot, packedPaths),
+        metadata,
+      ).toThrow(/source-map|source-origin/u);
+    }
+
+    writeFileSync(runtimePath, 'export const value = 1;\n');
+    expect(() => assertInstalledSourceMapClosure(installedRoot, packedPaths)).toThrow(
+      /unexpectedly mapless/u,
+    );
+
+    const reviewedMaplessPath = join(installedRoot, 'dist', 'index.js');
+    const reviewedMaplessMapPath = `${reviewedMaplessPath}.map`;
+    writeFileSync(
+      reviewedMaplessPath,
+      'export const value = 1;\n//# sourceMappingURL=index.js.map',
+    );
+    writeFileSync(reviewedMaplessMapPath, JSON.stringify({
+      ...reviewedMap(),
+      file: 'index.js',
+    }));
+    expect(() => assertInstalledSourceMapClosure(installedRoot, [
+      'dist/index.js',
+      'dist/index.js.map',
+    ])).toThrow(/reviewed mapless runtime acquired/u);
+  });
+
+  it('keeps the CJS validator independent of caller-poisoned bare url cache state', () => {
+    if (reviewedRuntime === undefined) {
+      throw new Error('the focused reviewed Node runtime is unavailable');
+    }
+    const result = runReviewedNodeCommandWithStagedRuntime(
+      reviewedRuntime.sourceNodeExecutable,
+      ['--eval', generatedCjsUrlCacheProbeSource()],
+      root,
+      {
+        environment: {},
+        timeoutMs: 10_000,
+        outputLimitBytes: 4_096,
+      },
+    );
+    expect(result.timedOut).toBe(false);
+    expect(result.outputOverflow).toBe(false);
+    expect(result.guardianSweepIntentCount).toBe(1);
+    expect(result.status).toBe(0);
+    expect(result.signal).toBeNull();
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('');
+  }, 30_000);
+
   it('emits parseable exact browser-bundle warning matchers', () => {
     if (reviewedRuntime === undefined) {
       throw new Error('the focused reviewed Node runtime is unavailable');
@@ -424,7 +833,7 @@ describe('two-phase package smoke contract', () => {
     expect(result.signal).toBeNull();
     expect(result.stdout).toBe('');
     expect(result.stderr).toBe('');
-  });
+  }, 30_000);
 
   it('publishes only the fresh v2 state and phase identities', () => {
     expect(PACKAGE_SMOKE_PREPARED_SCHEMA).toBe('cortexel-package-smoke-prepared.v2');
@@ -446,14 +855,20 @@ describe('two-phase package smoke contract', () => {
     expect(PACKAGE_SMOKE_CONSUMER_PROFILES).toEqual({
       core: {
         commandPolicy: PACKAGE_SMOKE_COMMAND_POLICIES.npmCiCore,
+        maximumMaterializationAttempts: 1,
+        npmCacheRole: 'core',
         omittedDependencyClasses: ['dev', 'optional'],
       },
       charts: {
         commandPolicy: PACKAGE_SMOKE_COMMAND_POLICIES.npmCiCharts,
+        maximumMaterializationAttempts: 1,
+        npmCacheRole: 'charts',
         omittedDependencyClasses: ['optional'],
       },
       full: {
         commandPolicy: PACKAGE_SMOKE_COMMAND_POLICIES.npmCiFull,
+        maximumMaterializationAttempts: 2,
+        npmCacheRole: 'full',
         omittedDependencyClasses: [],
       },
     });
@@ -487,6 +902,653 @@ describe('two-phase package smoke contract', () => {
     expect(() => executePackageSmokeWorkspace({ workspace, expectedStateDigest })).toThrow(
       /prepared package-smoke state/u,
     );
+  });
+
+  it('cold-activates every npm role exactly once and seals each distinct cache', () => {
+    if (process.platform === 'win32') return;
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-npm-caches-')));
+    cleanups.push(workspace);
+    const authorities = createPackageSmokeOperationalFixture(workspace);
+    const roles = ['control', 'core', 'charts', 'full'] as const;
+    expect(new Set(roles.map((role) => authorities[role].path)).size).toBe(roles.length);
+    const environment = packageSmokeEnvironment(
+      '/reviewed/bin/node',
+      workspace,
+      {},
+      process.platform,
+    );
+    beginPackageSmokeNpmCacheSession(workspace, authorities);
+    const sealDigests = [fingerprintPackageSmokeWorkspace(workspace).digest];
+    for (const role of roles) {
+      expect(authorities[role]).toMatchObject({
+        role,
+        path: packageSmokeNpmCachePath(workspace, role),
+        mode: 0o700,
+        uid: process.getuid?.(),
+      });
+      activatePackageSmokeNpmCache(environment, authorities, role, `${role} positive control`);
+      expect(environment.npm_config_cache).toBe(authorities[role].path);
+      expect(() => assertPackageSmokeNpmCacheRoleActive(
+        environment,
+        authorities,
+        role,
+        `${role} positive control`,
+      )).not.toThrow();
+      expect(() => activatePackageSmokeNpmCache(
+        environment,
+        authorities,
+        role,
+        `${role} second cold activation`,
+      )).toThrow(/unused role state/u);
+      writeFileSync(
+        join(authorities[role].path, `sentinel-${role}`),
+        `role=${role}\n`,
+        { flag: 'wx', mode: 0o600 },
+      );
+      completePackageSmokeNpmCacheRole(
+        environment,
+        authorities,
+        role,
+        `${role} complete`,
+      );
+      sealDigests.push(fingerprintPackageSmokeWorkspace(workspace).digest);
+    }
+    expect(new Set(sealDigests).size).toBe(sealDigests.length);
+  });
+
+  it('rejects a seeded regular file or FIFO without opening the cache entry', () => {
+    if (process.platform === 'win32') return;
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-npm-seeded-')));
+    cleanups.push(workspace);
+    const authorities = createPackageSmokeOperationalFixture(workspace);
+    const environment = packageSmokeEnvironment(
+      '/reviewed/bin/node',
+      workspace,
+      {},
+      process.platform,
+    );
+    beginPackageSmokeNpmCacheSession(workspace, authorities);
+    const regularSeed = join(authorities.core.path, 'seed');
+    writeFileSync(regularSeed, 'ambient cache state\n', { flag: 'wx', mode: 0o600 });
+    expect(() => activatePackageSmokeNpmCache(
+      environment,
+      authorities,
+      'core',
+      'seeded regular-file negative control',
+    )).toThrow(/not empty at its unique cold activation/u);
+
+    resetPackageSmokeNpmCacheSession();
+    rmSync(regularSeed);
+    const fifo = join(authorities.charts.path, 'seed.fifo');
+    const made = spawnSync('mkfifo', ['-m', '600', fifo], { encoding: 'utf8' });
+    expect(made.status).toBe(0);
+    expect(made.signal).toBeNull();
+    beginPackageSmokeNpmCacheSession(workspace, authorities);
+    const startedAt = Date.now();
+    expect(() => activatePackageSmokeNpmCache(
+      environment,
+      authorities,
+      'charts',
+      'seeded FIFO negative control',
+    )).toThrow(/not empty at its unique cold activation/u);
+    expect(Date.now() - startedAt).toBeLessThan(2_000);
+  });
+
+  it('binds cold activation to one workspace and its captured cache ancestry', () => {
+    if (process.platform === 'win32') return;
+    const container = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-npm-binding-')));
+    cleanups.push(container);
+    const workspace = join(container, 'workspace');
+    const otherWorkspace = join(container, 'other-workspace');
+    mkdirSync(workspace);
+    mkdirSync(otherWorkspace);
+    const authorities = createPackageSmokeOperationalFixture(workspace);
+    const otherAuthorities = createPackageSmokeOperationalFixture(otherWorkspace);
+    const environment = packageSmokeEnvironment(
+      '/reviewed/bin/node',
+      workspace,
+      {},
+      process.platform,
+    );
+    beginPackageSmokeNpmCacheSession(workspace, authorities);
+    expect(() => activatePackageSmokeNpmCache(
+      environment,
+      otherAuthorities,
+      'control',
+      'workspace mismatch negative control',
+    )).toThrow(/authorities differ from the captured session/u);
+
+    const oldWorkspace = join(container, 'old-workspace');
+    renameSync(workspace, oldWorkspace);
+    mkdirSync(workspace);
+    renameSync(join(oldWorkspace, 'operational'), join(workspace, 'operational'));
+    expect(lstatSync(authorities.full.path).ino).toBe(
+      lstatSync(join(workspace, 'operational', 'npm-cache', 'full')).ino,
+    );
+    expect(() => activatePackageSmokeNpmCache(
+      environment,
+      authorities,
+      'full',
+      'replaced workspace negative control',
+    )).toThrow(/workspace authority changed/u);
+
+    resetPackageSmokeNpmCacheSession();
+    const reboundAuthorities = inspectPackageSmokeNpmCacheAuthorities(
+      workspace,
+      'rebound workspace',
+    );
+    beginPackageSmokeNpmCacheSession(workspace, reboundAuthorities);
+    const replacedCache = `${reboundAuthorities.full.path}-old`;
+    renameSync(reboundAuthorities.full.path, replacedCache);
+    mkdirSync(reboundAuthorities.full.path, { mode: 0o700 });
+    chmodSync(reboundAuthorities.full.path, 0o700);
+    expect(() => activatePackageSmokeNpmCache(
+      environment,
+      reboundAuthorities,
+      'full',
+      'replaced cache negative control',
+    )).toThrow(/npm cache authority changed/u);
+  });
+
+  it('keeps the full retry active in one cache without re-running its cold check', () => {
+    if (process.platform === 'win32') return;
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-npm-retry-cache-')));
+    cleanups.push(workspace);
+    const authorities = createPackageSmokeOperationalFixture(workspace);
+    const environment = packageSmokeEnvironment(
+      '/reviewed/bin/node',
+      workspace,
+      {},
+      process.platform,
+    );
+    beginPackageSmokeNpmCacheSession(workspace, authorities);
+    activatePackageSmokeNpmCache(environment, authorities, 'full', 'full retry setup');
+    const sentinel = join(authorities.full.path, 'attempt-one-cache-state');
+    writeFileSync(sentinel, 'retained across retry\n', { flag: 'wx', mode: 0o600 });
+    const fullAttemptCaches: string[] = [];
+    let fullVerificationAttempt = 0;
+    expect(() => runVerifiedPackageMaterialization(
+      () => {
+        assertPackageSmokeNpmCacheRoleActive(
+          environment,
+          authorities,
+          'full',
+          'full retry command',
+        );
+        expect(readFileSync(sentinel, 'utf8')).toBe('retained across retry\n');
+        fullAttemptCaches.push(environment.npm_config_cache!);
+      },
+      () => {
+        fullVerificationAttempt += 1;
+        if (fullVerificationAttempt === 1) throw new Error('retryable first result');
+      },
+      2,
+      () => {
+        assertPackageSmokeNpmCacheRoleActive(
+          environment,
+          authorities,
+          'full',
+          'full retry authorization',
+        );
+        expect(readFileSync(sentinel, 'utf8')).toBe('retained across retry\n');
+        return true;
+      },
+    )).not.toThrow();
+    expect(fullAttemptCaches).toEqual([authorities.full.path, authorities.full.path]);
+    expect(() => activatePackageSmokeNpmCache(
+      environment,
+      authorities,
+      'core',
+      'cross-profile negative control',
+    )).toThrow(/full remains active/u);
+    completePackageSmokeNpmCacheRole(
+      environment,
+      authorities,
+      'full',
+      'full retry complete',
+    );
+    expect(readFileSync(sentinel, 'utf8')).toBe('retained across retry\n');
+  });
+
+  it('retries only an explicitly authorized post-command validation failure once', () => {
+    const retryableFailure = new Error('exact optional-only gap');
+    let successfulAttempt = 0;
+    const materialize = vi.fn(() => {
+      successfulAttempt += 1;
+    });
+    const verify = vi.fn(() => {
+      if (successfulAttempt === 1) throw retryableFailure;
+    });
+    const authorizeRetry = vi.fn((failure: unknown) => failure === retryableFailure);
+    expect(() => runVerifiedPackageMaterialization(
+      materialize,
+      verify,
+      2,
+      authorizeRetry,
+    )).not.toThrow();
+    expect(materialize).toHaveBeenCalledTimes(2);
+    expect(materialize).toHaveBeenNthCalledWith(1, 1);
+    expect(materialize).toHaveBeenNthCalledWith(2, 2);
+    expect(verify).toHaveBeenCalledTimes(2);
+    expect(authorizeRetry).toHaveBeenCalledTimes(1);
+    expect(authorizeRetry).toHaveBeenCalledWith(retryableFailure);
+
+    const commandFailure = new Error('reviewed command failed');
+    const failedCommand = vi.fn(() => {
+      throw commandFailure;
+    });
+    const unreachableVerify = vi.fn();
+    const unreachableAuthorization = vi.fn(() => true);
+    expect(() => runVerifiedPackageMaterialization(
+      failedCommand,
+      unreachableVerify,
+      2,
+      unreachableAuthorization,
+    )).toThrow(commandFailure);
+    expect(failedCommand).toHaveBeenCalledTimes(1);
+    expect(unreachableVerify).not.toHaveBeenCalled();
+    expect(unreachableAuthorization).not.toHaveBeenCalled();
+
+    const nonretryableFailure = new Error('non-optional closure mismatch');
+    const oneMaterialization = vi.fn();
+    const rejectRetry = vi.fn(() => false);
+    expect(() => runVerifiedPackageMaterialization(
+      oneMaterialization,
+      () => {
+        throw nonretryableFailure;
+      },
+      2,
+      rejectRetry,
+    )).toThrow(nonretryableFailure);
+    expect(oneMaterialization).toHaveBeenCalledTimes(1);
+    expect(rejectRetry).toHaveBeenCalledTimes(1);
+    expect(rejectRetry).toHaveBeenCalledWith(nonretryableFailure);
+
+    const singleAttemptAuthorization = vi.fn(() => true);
+    expect(() => runVerifiedPackageMaterialization(
+      vi.fn(),
+      () => {
+        throw retryableFailure;
+      },
+      1,
+      singleAttemptAuthorization,
+    )).toThrow(retryableFailure);
+    expect(singleAttemptAuthorization).not.toHaveBeenCalled();
+
+    const retryAuthorityFailure = new Error('retry inputs changed');
+    let authorityAggregate: AggregateError | undefined;
+    try {
+      runVerifiedPackageMaterialization(
+        vi.fn(),
+        () => {
+          throw retryableFailure;
+        },
+        2,
+        () => {
+          throw retryAuthorityFailure;
+        },
+      );
+    } catch (error) {
+      authorityAggregate = error as AggregateError;
+    }
+    expect(authorityAggregate).toBeInstanceOf(AggregateError);
+    expect(authorityAggregate?.errors).toEqual([
+      retryableFailure,
+      retryAuthorityFailure,
+    ]);
+
+    const secondValidationFailure = new Error('second exact closure mismatch');
+    let validationCount = 0;
+    let validationAggregate: AggregateError | undefined;
+    try {
+      runVerifiedPackageMaterialization(
+        vi.fn(),
+        () => {
+          validationCount += 1;
+          throw validationCount === 1 ? retryableFailure : secondValidationFailure;
+        },
+        2,
+        () => true,
+      );
+    } catch (error) {
+      validationAggregate = error as AggregateError;
+    }
+    expect(validationAggregate).toBeInstanceOf(AggregateError);
+    expect(validationAggregate?.errors).toEqual([
+      retryableFailure,
+      secondValidationFailure,
+    ]);
+
+    const secondCommandFailure = new Error('bounded retry command failed');
+    let commandAttempt = 0;
+    const secondCommandFails = vi.fn(() => {
+      commandAttempt += 1;
+      if (commandAttempt === 2) throw secondCommandFailure;
+    });
+    let secondCommandAggregate: AggregateError | undefined;
+    try {
+      runVerifiedPackageMaterialization(
+        secondCommandFails,
+        () => {
+          throw retryableFailure;
+        },
+        2,
+        () => true,
+      );
+    } catch (error) {
+      secondCommandAggregate = error as AggregateError;
+    }
+    expect(secondCommandAggregate).toBeInstanceOf(AggregateError);
+    expect(secondCommandAggregate?.errors).toEqual([
+      retryableFailure,
+      secondCommandFailure,
+    ]);
+    expect(secondCommandFails).toHaveBeenCalledTimes(2);
+
+    const asynchronousMaterialize = vi.fn(async () => undefined);
+    const afterAsynchronousMaterialize = vi.fn();
+    expect(() => runVerifiedPackageMaterialization(
+      asynchronousMaterialize,
+      afterAsynchronousMaterialize,
+      1,
+      vi.fn(() => false),
+    )).toThrow(/command callback must be synchronous/u);
+    expect(asynchronousMaterialize).toHaveBeenCalledTimes(1);
+    expect(afterAsynchronousMaterialize).not.toHaveBeenCalled();
+
+    const beforeAsynchronousVerify = vi.fn();
+    const asynchronousVerify = vi.fn(async () => undefined);
+    expect(() => runVerifiedPackageMaterialization(
+      beforeAsynchronousVerify,
+      asynchronousVerify,
+      1,
+      vi.fn(() => false),
+    )).toThrow(/verification callback must be synchronous/u);
+    expect(beforeAsynchronousVerify).toHaveBeenCalledTimes(1);
+    expect(asynchronousVerify).toHaveBeenCalledTimes(1);
+
+    const asynchronousAuthorizationMaterialize = vi.fn();
+    let asynchronousAuthorizationFailure: AggregateError | undefined;
+    try {
+      runVerifiedPackageMaterialization(
+        asynchronousAuthorizationMaterialize,
+        () => {
+          throw retryableFailure;
+        },
+        2,
+        async () => true,
+      );
+    } catch (error) {
+      asynchronousAuthorizationFailure = error as AggregateError;
+    }
+    expect(asynchronousAuthorizationFailure).toBeInstanceOf(AggregateError);
+    expect(asynchronousAuthorizationFailure?.message).toMatch(
+      /retry authority could not be established/u,
+    );
+    expect(asynchronousAuthorizationMaterialize).toHaveBeenCalledTimes(1);
+
+    const valueReturningMaterialize = vi.fn(() => 1);
+    const afterValueReturningMaterialize = vi.fn();
+    expect(() => runVerifiedPackageMaterialization(
+      valueReturningMaterialize,
+      afterValueReturningMaterialize,
+      1,
+      vi.fn(() => false),
+    )).toThrow(/command callback must return undefined/u);
+    expect(afterValueReturningMaterialize).not.toHaveBeenCalled();
+
+    expect(() => runVerifiedPackageMaterialization(
+      vi.fn(),
+      () => 1,
+      1,
+      vi.fn(() => false),
+    )).toThrow(/verification callback must return undefined/u);
+  });
+
+  it('reports nested retry failures with bounded terminal-safe cause summaries', () => {
+    const nested = new AggregateError(
+      [new Error('first\nforged line'), new Error('second\u202evalue')],
+      'retry failed',
+    );
+    const report = formatPackageSmokeFailure(new AggregateError(
+      [new Error('optional-only first result'), nested],
+      'both attempts failed',
+    ));
+    expect(report).toContain('error="both attempts failed"');
+    expect(report).toContain('error.cause[0]="optional-only first result"');
+    expect(report).toContain('error.cause[1]="retry failed"');
+    expect(report).toContain('first\\u000aforged line');
+    expect(report).toContain('second\\u202evalue');
+    expect(report).not.toContain('first\nforged line');
+
+    const oversized = formatPackageSmokeFailure(new AggregateError(
+      Array.from({ length: 100 }, (_, index) => new Error(`${index}:${'x'.repeat(2_000)}`)),
+      'bounded',
+    ));
+    expect(Buffer.byteLength(oversized, 'utf8')).toBeLessThanOrEqual(8_192);
+    expect(oversized).toMatch(/causesOmitted=/u);
+
+    const cyclic = new AggregateError([], 'cycle');
+    (cyclic.errors as unknown[]).push(cyclic);
+    expect(formatPackageSmokeFailure(cyclic)).toContain('[cyclic thrown value]');
+
+    const hostile = {
+      toString(): never {
+        throw new Error('must not run');
+      },
+    };
+    expect(formatPackageSmokeFailure(hostile)).toBe(
+      'error="[non-Error object thrown]"',
+    );
+
+    const assertUninspectableCausesStayBounded = (errors: unknown): void => {
+      const aggregate = new AggregateError([], 'hostile causes');
+      Object.defineProperty(aggregate, 'errors', { value: errors });
+      expect(() => formatPackageSmokeFailure(aggregate)).not.toThrow();
+      expect(formatPackageSmokeFailure(aggregate)).toContain(
+        'error.causes="[uninspectable aggregate causes]"',
+      );
+    };
+    assertUninspectableCausesStayBounded(new Proxy([], {
+      get(target, property, receiver) {
+        if (property === 'length') throw new Error('hostile length trap');
+        return Reflect.get(target, property, receiver);
+      },
+    }));
+    assertUninspectableCausesStayBounded(new Proxy([new Error('hidden')], {
+      get(target, property, receiver) {
+        if (property === '0') throw new Error('hostile index trap');
+        return Reflect.get(target, property, receiver);
+      },
+    }));
+    const revoked = Proxy.revocable([], {});
+    revoked.revoke();
+    assertUninspectableCausesStayBounded(revoked.proxy);
+  });
+
+  it('requires exact materialization input bytes and modes before a retry', () => {
+    if (process.platform === 'win32') return;
+    const assertAuthority = (
+      fixture: PackageMaterializationAuthorityFixture,
+      label: string,
+    ): void => {
+      assertPackageMaterializationInputAuthority({
+        artifact: fixture.artifact,
+        artifactPath: fixture.sourceArtifactPath,
+        artifactIntegrity: fixture.artifactIntegrity,
+        consumer: fixture.consumer,
+        exactFixtureLockRaw: fixture.exactFixtureLockRaw,
+        exactFixtureManifestRaw: fixture.exactFixtureManifestRaw,
+        npmConfigs: fixture.npmConfigs,
+        npmCacheAuthority: fixture.npmCacheAuthority,
+        label,
+      });
+    };
+
+    const exact = packageMaterializationAuthorityFixture();
+    expect(() => assertAuthority(exact, 'positive control')).not.toThrow();
+    const equivalentButDistinctConfigs = packageMaterializationAuthorityFixture();
+    expect(() => assertPackageSmokeNpmConfigIdentity(
+      equivalentButDistinctConfigs.npmConfigs,
+      exact.npmConfigs,
+      'config identity negative control',
+    )).toThrow(/npm configuration identity changed/u);
+
+    const mutations: readonly [
+      string,
+      (fixture: PackageMaterializationAuthorityFixture) => void,
+    ][] = [
+      ['manifest bytes', (fixture) => {
+        writeFileSync(
+          fixture.manifestPath,
+          '{ "name": "authority-consumer", "version": "1.0.0" }\n',
+        );
+      }],
+      ['manifest mode', (fixture) => chmodSync(fixture.manifestPath, 0o600)],
+      ['lock bytes', (fixture) => {
+        writeFileSync(
+          fixture.lockPath,
+          '{ "lockfileVersion": 3, "name": "authority-consumer", ' +
+            '"packages": {}, "version": "1.0.0" }\n',
+        );
+      }],
+      ['lock mode', (fixture) => chmodSync(fixture.lockPath, 0o600)],
+      ['artifact bytes', (fixture) => {
+        const changedArtifact = Buffer.from(fixture.artifact);
+        changedArtifact[0] = changedArtifact[0]! ^ 1;
+        writeFileSync(fixture.artifactPath, changedArtifact);
+      }],
+      ['artifact mode', (fixture) => chmodSync(fixture.artifactPath, 0o600)],
+      ['source artifact bytes', (fixture) => {
+        const changedArtifact = Buffer.from(fixture.artifact);
+        changedArtifact[changedArtifact.length - 2] =
+          changedArtifact[changedArtifact.length - 2]! ^ 1;
+        writeFileSync(fixture.sourceArtifactPath, changedArtifact);
+      }],
+      [
+        'source artifact mode',
+        (fixture) => chmodSync(fixture.sourceArtifactPath, 0o600),
+      ],
+      ['user config bytes', (fixture) => {
+        writeFileSync(fixture.userConfig, '# changed package-smoke npm user config\n');
+      }],
+      ['user config mode', (fixture) => chmodSync(fixture.userConfig, 0o644)],
+      ['global config bytes', (fixture) => {
+        writeFileSync(fixture.globalConfig, '# changed package-smoke npm global config\n');
+      }],
+      ['global config mode', (fixture) => chmodSync(fixture.globalConfig, 0o644)],
+      ['npm cache mode', (fixture) => chmodSync(fixture.npmCacheAuthority.path, 0o755)],
+      ['npm cache identity', (fixture) => {
+        renameSync(fixture.npmCacheAuthority.path, `${fixture.npmCacheAuthority.path}-old`);
+        mkdirSync(fixture.npmCacheAuthority.path, { mode: 0o700 });
+        chmodSync(fixture.npmCacheAuthority.path, 0o700);
+      }],
+      ['project config presence', (fixture) => {
+        writeFileSync(join(fixture.consumer, '.npmrc'), 'registry=https://example.invalid/\n', {
+          flag: 'wx',
+          mode: 0o600,
+        });
+      }],
+    ];
+
+    for (const [label, mutate] of mutations) {
+      const fixture = packageMaterializationAuthorityFixture();
+      mutate(fixture);
+      const firstValidationFailure = new Error(`${label} retry candidate`);
+      const materialize = vi.fn();
+      let aggregate: AggregateError | undefined;
+      try {
+        runVerifiedPackageMaterialization(
+          materialize,
+          () => {
+            throw firstValidationFailure;
+          },
+          2,
+          () => {
+            assertAuthority(fixture, label);
+            return true;
+          },
+        );
+      } catch (error) {
+        aggregate = error as AggregateError;
+      }
+      expect(aggregate, label).toBeInstanceOf(AggregateError);
+      expect(aggregate?.errors[0], label).toBe(firstValidationFailure);
+      expect(materialize, label).toHaveBeenCalledTimes(1);
+    }
+
+    const betweenAttempts = packageMaterializationAuthorityFixture();
+    let executedCommands = 0;
+    let verificationAttempt = 0;
+    let betweenAttemptsAggregate: AggregateError | undefined;
+    try {
+      runVerifiedPackageMaterialization(
+        () => {
+          assertAuthority(betweenAttempts, 'immediate pre-command negative control');
+          executedCommands += 1;
+        },
+        () => {
+          verificationAttempt += 1;
+          if (verificationAttempt === 1) {
+            throw new Error('exact optional-only first-attempt gap');
+          }
+        },
+        2,
+        () => {
+          writeFileSync(
+            join(betweenAttempts.consumer, '.npmrc'),
+            'registry=https://example.invalid/\n',
+            { flag: 'wx', mode: 0o600 },
+          );
+          return true;
+        },
+      );
+    } catch (error) {
+      betweenAttemptsAggregate = error as AggregateError;
+    }
+    expect(betweenAttemptsAggregate).toBeInstanceOf(AggregateError);
+    expect(betweenAttemptsAggregate?.message).toMatch(/bounded retry command failed/u);
+    expect(executedCommands).toBe(1);
+
+    const absentProjectConfig = packageMaterializationAuthorityFixture();
+    expect(() => assertPackageSmokeProjectNpmConfigAbsent(
+      absentProjectConfig.consumer,
+      'project config positive control',
+    )).not.toThrow();
+    writeFileSync(join(absentProjectConfig.consumer, '.npmrc'), '', {
+      flag: 'wx',
+      mode: 0o600,
+    });
+    expect(() => assertPackageSmokeProjectNpmConfigAbsent(
+      absentProjectConfig.consumer,
+      'project config negative control',
+    )).toThrow(/project npm configuration must be absent/u);
+  });
+
+  it('creates exact owner-only npm config authority under arbitrary umasks', () => {
+    if (process.platform === 'win32') return;
+    const originalUmask = process.umask();
+    try {
+      for (const mask of [0o000, 0o077, 0o777]) {
+        const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-npm-config-')));
+        cleanups.push(workspace);
+        createPackageSmokeOperationalFixture(workspace);
+
+        process.umask(mask);
+        const configs = createPackageSmokeNpmConfigFiles(workspace);
+        process.umask(originalUmask);
+        expect(readFileSync(configs.userConfig, 'utf8')).toBe(
+          '# isolated package-smoke npm user config\n',
+        );
+        expect(readFileSync(configs.globalConfig, 'utf8')).toBe(
+          '# isolated package-smoke npm global config\n',
+        );
+        expect(lstatSync(configs.userConfig).mode & 0o7777).toBe(0o600);
+        expect(lstatSync(configs.globalConfig).mode & 0o7777).toBe(0o600);
+      }
+    } finally {
+      process.umask(originalUmask);
+    }
   });
 
   it('routes the interactive mixed-capability probe only through the full peer closure', () => {
@@ -565,6 +1627,39 @@ describe('two-phase package smoke contract', () => {
     );
   });
 
+  it('rejects private request-boundary declaration references but not source comments', () => {
+    expect(declarationReferencesPrivateRequestBoundary(
+      '//#region src/core/requestBoundary.internal.d.ts\nexport interface Safe {}\n',
+    )).toBe(false);
+    for (const source of [
+      '//# sourceMappingURL=requestBoundary.internal.d.ts.map\nexport interface Safe {}\n',
+      '// import type { Hidden } from "./requestBoundary.internal.js";\n',
+      '/* export type { Hidden } from "./requestBoundary.internal.js"; */\n',
+    ]) {
+      expect(declarationReferencesPrivateRequestBoundary(source), source).toBe(false);
+    }
+    for (const source of [
+      'import type { Hidden } from "./requestBoundary.internal.js";\n',
+      'export type { Hidden } from "./requestBoundary.internal.js";\n',
+      'type Hidden = import("./requestBoundary.internal.js").Hidden;\n',
+      'import Hidden = require("./requestBoundary.internal.js");\n',
+      '/// <reference path="./requestBoundary.internal.d.ts" />\n',
+      'declare module "./requestBoundary.internal.js" {}\n',
+      String.raw`import type { Hidden } from "./requestBoundary\u002einternal.js";`,
+      String.raw`declare module "./requestBoundary\u002einternal.js" {}`,
+      '/// <amd-dependency path="./requestBoundary.internal.js" />\n',
+      '/// <amd-module name="requestBoundary.internal" />\n',
+    ]) {
+      expect(declarationReferencesPrivateRequestBoundary(source), source).toBe(true);
+    }
+    expect(declarationReferencesPrivateRequestBoundary(
+      'import type { Public } from "./request.js";\n',
+    )).toBe(false);
+    expect(() => declarationReferencesPrivateRequestBoundary(
+      'import type { Broken } from ;\n',
+    )).toThrow(/could not be parsed/u);
+  });
+
   it('binds Node bytes and exact npm manifest, CLI, topology, metadata, and bytes', () => {
     if (process.platform === 'win32') return;
     const fixture = fakeRuntimeAuthorityTree();
@@ -628,11 +1723,7 @@ describe('two-phase package smoke contract', () => {
   it('fails closed without blocking when each reviewed regular-file path becomes a FIFO', () => {
     if (process.platform === 'win32') return;
     const assertBoundedFifoRejection = (
-      operation: (trustedTestHook: (event: {
-        readonly phase: 'regular-file-reviewed-before-open';
-        readonly path: string;
-        readonly label: string;
-      }) => void) => void,
+      operation: (trustedTestHook: PackageSmokeRegularFileTestHook) => void,
       expectedPath: string,
       expectedError: RegExp,
     ): void => {
@@ -640,6 +1731,9 @@ describe('two-phase package smoke contract', () => {
       const startedAt = Date.now();
       try {
         expect(() => operation((event) => {
+          if (event.phase !== 'regular-file-reviewed-before-open') {
+            throw new Error(`unexpected regular-file test phase: ${event.phase}`);
+          }
           expect(event).toMatchObject({
             phase: 'regular-file-reviewed-before-open',
             path: expectedPath,
@@ -701,6 +1795,102 @@ describe('two-phase package smoke contract', () => {
     );
     expect(supervisorSource).not.toMatch(/\bopen(?:Sync)?\s*\(/u);
   }, 15_000);
+
+  it('bounds reads to the reviewed descriptor size across append and truncate races', () => {
+    if (process.platform === 'win32') return;
+
+    type AfterFstatEvent = Extract<
+      PackageSmokeRegularFileTestEvent,
+      { readonly phase: 'regular-file-reviewed-after-fstat-before-read' }
+    >;
+    const runRace = (
+      name: string,
+      mutate: (event: AfterFstatEvent) => void,
+      expectedError: RegExp,
+      expectedAllocationSizes: readonly number[],
+    ): void => {
+      const workspace = realpathSync(mkdtempSync(
+        join(tmpdir(), `cortexel-stable-read-${name}-`),
+      ));
+      cleanups.push(workspace);
+      const input = join(workspace, 'reviewed.txt');
+      const intended = 'reviewed bytes\n';
+      writeFileSync(input, intended, { mode: 0o444 });
+      chmodSync(input, 0o444);
+
+      const phases: PackageSmokeRegularFileTestEvent['phase'][] = [];
+      let reviewedSize: number | undefined;
+      let maximumBytes: number | undefined;
+      let hookEventsWereFrozen = true;
+      const trustedTestHook: PackageSmokeRegularFileTestHook = (event) => {
+        hookEventsWereFrozen &&= Object.isFrozen(event);
+        switch (event.phase) {
+          case 'regular-file-reviewed-before-open':
+            phases.push(event.phase);
+            return;
+          case 'regular-file-reviewed-after-fstat-before-read':
+            phases.push(event.phase);
+            reviewedSize = event.reviewedSize;
+            maximumBytes = event.maximumBytes;
+            mutate(event);
+            return;
+          default: {
+            const exhaustive: never = event;
+            return exhaustive;
+          }
+        }
+      };
+
+      const allocationSpy = vi.spyOn(Buffer, 'allocUnsafe');
+      let failure: unknown;
+      let allocationSizes: number[] = [];
+      try {
+        assertFinalizedHostFile(input, intended, `${name} stable read`, trustedTestHook);
+      } catch (error) {
+        failure = error;
+      } finally {
+        allocationSizes = allocationSpy.mock.calls.map(([size]) => size);
+        allocationSpy.mockRestore();
+      }
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(String(failure)).toMatch(expectedError);
+      expect(phases).toEqual([
+        'regular-file-reviewed-before-open',
+        'regular-file-reviewed-after-fstat-before-read',
+      ]);
+      expect(hookEventsWereFrozen).toBe(true);
+      expect(reviewedSize).toBe(Buffer.byteLength(intended));
+      expect(maximumBytes).toBeGreaterThanOrEqual(reviewedSize ?? Number.MAX_SAFE_INTEGER);
+      expect(allocationSizes).toEqual(expectedAllocationSizes);
+    };
+
+    const intendedSize = Buffer.byteLength('reviewed bytes\n');
+    runRace(
+      'append-beyond-cap',
+      (event) => {
+        chmodSync(event.path, 0o644);
+        const writer = openSync(event.path, fsConstants.O_WRONLY);
+        try {
+          const count = writeSync(writer, 'x', event.maximumBytes, 'utf8');
+          if (count !== 1) throw new Error('append race did not write its sentinel byte');
+        } finally {
+          closeSync(writer);
+        }
+      },
+      /grew beyond its declared size/u,
+      [intendedSize, 1],
+    );
+    runRace(
+      'truncate-short-read',
+      (event) => {
+        chmodSync(event.path, 0o644);
+        truncateSync(event.path, event.reviewedSize - 1);
+      },
+      /ended before its declared size/u,
+      [intendedSize],
+    );
+  });
 
   it('rejects npm hard links, unsafe symlinks, writable authority, and resource overflow', () => {
     if (process.platform === 'win32') return;
@@ -860,7 +2050,9 @@ describe('two-phase package smoke contract', () => {
     expect(environment.PATH).not.toContain('/unreviewed');
     expect(environment.HOME).toBe('/reviewed/workspace/operational/home');
     expect(environment.TMPDIR).toBe('/reviewed/workspace/operational/tmp');
-    expect(environment.npm_config_cache).toBe('/reviewed/workspace/operational/npm-cache');
+    expect(environment.npm_config_cache).toBe(
+      '/reviewed/workspace/operational/npm-cache/control',
+    );
     expect(environment.npm_config_registry).toBe('https://registry.npmjs.org/');
     expect(environment.NODE_USE_SYSTEM_CA).toBeUndefined();
     expect(environment.NODE_EXTRA_CA_CERTS).toBeUndefined();
@@ -2264,6 +3456,10 @@ describe('two-phase package smoke contract', () => {
     ])).toThrow(/valid only during execute/u);
   });
 
+  it('binds fixture source digests to canonical parsed JSON values', () => {
+    expect(() => validateFixtureSources()).not.toThrow();
+  });
+
   it('accepts only the reviewed exact registry lock with an unbound local artifact slot', () => {
     const fixture = fixtureValues();
     expect(() => validatePackageSmokeFixture(
@@ -2316,8 +3512,10 @@ describe('two-phase package smoke contract', () => {
     )).toThrow(/unsafe package path/u);
 
     const danglingEdge = structuredClone(fixture.lock);
-    danglingEdge.packages['node_modules/react-dom'].dependencies.scheduler = '^999.0.0';
-    delete danglingEdge.packages['node_modules/react-dom/node_modules/scheduler'];
+    // Break one exact direct Cortexel dependency edge. Scheduler moved from a
+    // nested to a hoisted path in the refreshed npm closure, so it no longer
+    // provides a stable negative control for this exact reviewed lock.
+    delete danglingEdge.packages['node_modules/ajv'];
     expect(() => validatePackageSmokeFixture(
       fixture.manifest,
       danglingEdge,
@@ -2630,6 +3828,174 @@ describe('two-phase package smoke contract', () => {
       '1.0.0',
     );
     expect(assertClosure).toThrow(/package scope inventory differs/u);
+  });
+
+  it('classifies only an exact filesystem-matched optional package subset as retryable', () => {
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-optional-retry-')));
+    cleanups.push(workspace);
+    const consumer = join(workspace, 'consumer');
+    const nodeModules = join(consumer, 'node_modules');
+    const requiredRecord = { version: '1.0.0' };
+    const optionalRecord = { version: '2.0.0', dev: true, optional: true };
+    const preparedLock = {
+      name: 'optional-retry-fixture',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': { name: 'optional-retry-fixture', version: '1.0.0' },
+        'node_modules/cortexel': requiredRecord,
+        'node_modules/optional-peer': optionalRecord,
+      },
+    };
+    const hiddenLockPath = join(nodeModules, '.package-lock.json');
+    const writeHiddenLock = (packages: Record<string, unknown>): void => {
+      writeFileSync(hiddenLockPath, `${JSON.stringify({
+        name: preparedLock.name,
+        version: preparedLock.version,
+        lockfileVersion: preparedLock.lockfileVersion,
+        requires: preparedLock.requires,
+        packages,
+      })}\n`);
+    };
+    const writeManifest = (name: string, version: string): void => {
+      const packageRoot = join(nodeModules, name);
+      mkdirSync(packageRoot, { recursive: true });
+      writeFileSync(join(packageRoot, 'package.json'), `${JSON.stringify({ name, version })}\n`);
+    };
+    writeManifest('cortexel', '1.0.0');
+    writeHiddenLock({ 'node_modules/cortexel': requiredRecord });
+
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/pruning an exact optional-only package subset/u);
+
+    writeManifest('optional-peer', '2.0.0');
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/exact filtered prepared lock/u);
+    rmSync(join(nodeModules, 'optional-peer'), { recursive: true });
+
+    const requiredGapLock = {
+      ...preparedLock,
+      packages: {
+        ...preparedLock.packages,
+        'node_modules/required-peer': { version: '3.0.0' },
+      },
+    };
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      requiredGapLock,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/exact filtered prepared lock/u);
+
+    const devOptionalOnlyLock = {
+      ...preparedLock,
+      packages: {
+        ...preparedLock.packages,
+        'node_modules/optional-peer': {
+          version: '2.0.0',
+          devOptional: true,
+        },
+      },
+    };
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      devOptionalOnlyLock,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/exact filtered prepared lock/u);
+
+    writeHiddenLock({
+      'node_modules/cortexel': { version: '1.0.1' },
+    });
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/exact filtered prepared lock/u);
+
+    writeHiddenLock({
+      'node_modules/cortexel': requiredRecord,
+      'node_modules/unreviewed': { version: '9.0.0', optional: true },
+    });
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/exact filtered prepared lock/u);
+
+    writeFileSync(hiddenLockPath, `${JSON.stringify({
+      name: preparedLock.name,
+      version: '9.0.0',
+      lockfileVersion: preparedLock.lockfileVersion,
+      requires: preparedLock.requires,
+      packages: { 'node_modules/cortexel': requiredRecord },
+    })}\n`);
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/exact filtered prepared lock/u);
+
+    writeFileSync(
+      hiddenLockPath,
+      '{"name":"optional-retry-fixture","name":"optional-retry-fixture",' +
+      '"version":"1.0.0","lockfileVersion":3,"requires":true,' +
+      '"packages":{"node_modules/cortexel":{"version":"1.0.0"}}}\n',
+    );
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/appears more than once/u);
+
+    const npm10ScopedGapLock = {
+      ...preparedLock,
+      packages: {
+        '': preparedLock.packages[''],
+        'node_modules/cortexel': requiredRecord,
+        'node_modules/@optional/peer': { version: '4.0.0', optional: true },
+      },
+    };
+    writeHiddenLock({ 'node_modules/cortexel': requiredRecord });
+    mkdirSync(join(nodeModules, '@optional'));
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      npm10ScopedGapLock,
+      [],
+      10,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/exact filtered prepared lock/u);
+    rmSync(join(nodeModules, '@optional'), { recursive: true });
+
+    writeHiddenLock({ 'node_modules/cortexel': requiredRecord });
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      ['optional'],
+      11,
+      currentNodeRuntimeIdentity,
+    )).not.toThrow();
   });
 
   it('keeps hidden-lock flags exact and omits devOptional only with both classes', () => {
@@ -3018,7 +4384,7 @@ describe('two-phase package smoke contract', () => {
       11,
       currentNodeRuntimeIdentity,
     )).toThrow(
-      /first difference \$\["packages"\]\["node_modules\/runtime-match"\]/u,
+      /exact optional-only package subset \(1 missing; sample: "node_modules\/runtime-match"\)/u,
     );
 
     writeManifest('runtime-cpu-other', '7.0.0');

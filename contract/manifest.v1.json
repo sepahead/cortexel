@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "requestContract": "cortexel-figure-request/1.0",
   "artifactContract": "cortexel-figure-artifact/1.0",
-  "contractDigest": "sha256:a710ef28247ab8c3e49ebf80b30bfcbacc6c64768d8a836828f78eeb4cac597b",
+  "contractDigest": "sha256:61286a89091acaaee0ffb70b377b176cdea460f680d8ea0a7ef3f19da4da6dd0",
   "catalogDigest": "sha256:e6ef9014ca56f4bd159f8b3545ba8d7cf0241550ff25b9de44b05fde826f0dd5",
   "catalogDigestDomain": "cortexel-public-stable-catalog.v2",
   "stableSkillCount": 19,
@@ -9958,7 +9958,7 @@
     },
     {
       "path": "contract/registries/capabilities.v1.json",
-      "digest": "sha256:8a0730f967b22aefd5325872875fb46b114bfcb5e78dbc2dced5c2d62e04f13a"
+      "digest": "sha256:30320713e92419e02cbd6e72910254aabb40f47b8c395cd036fcac97a704d4ad"
     },
     {
       "path": "contract/registries/disclosures.v1.json",

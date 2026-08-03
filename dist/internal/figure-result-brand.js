@@ -1,1 +1,1 @@
-//# sourceMappingURL=figure-result-brand.js.map
+export {  };

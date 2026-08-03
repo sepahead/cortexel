@@ -27,7 +27,7 @@ export interface CapabilityRegistrySource {
 export interface CapabilitySourceEvidence {
   /** Capability ids derived from package.json `exports` (and no other authority). */
   readonly packageExportIds: ReadonlySet<string>;
-  /** Capability ids derived from actual tsup entry names. */
+  /** Capability ids derived from actual package-build entry names. */
   readonly buildEntryIds: ReadonlySet<string>;
   /** Skill ids declared by the packaged legacy skills.manifest.json data export. */
   readonly packagedSkillIds: ReadonlySet<string>;
@@ -78,7 +78,7 @@ export function packageExportId(key: string): string {
   return key === '.' ? 'cortexel' : `cortexel/${key.replace(/^\.\//u, '')}`;
 }
 
-/** Map a tsup entry name to the public capability id its emitted files implement. */
+/** Map a build entry name to the public capability id its emitted files implement. */
 export function buildEntryId(key: string): string {
   if (key === 'index') return 'cortexel';
   const normalized = key.endsWith('/index') ? key.slice(0, -'/index'.length) : key;
@@ -196,12 +196,12 @@ export function packageExportTargetProblems(
       id !== 'cortexel/contract' &&
       !leaves.every((leaf) => leaf.endsWith('.json'))
     ) {
-      problems.push(`package export ${id}: code target has no tsup entry`);
+      problems.push(`package export ${id}: code target has no build entry`);
     }
   }
 
   for (const id of [...outputBases.keys()].sort()) {
-    if (!exportedIds.has(id)) problems.push(`tsup entry ${id}: missing package export target`);
+    if (!exportedIds.has(id)) problems.push(`build entry ${id}: missing package export target`);
   }
   const exportsRecord = exportsValue as Record<string, unknown>;
   if (exportsRecord['./contract/manifest.json'] !== './dist/contract/manifest.v1.json') {
@@ -227,7 +227,7 @@ export function packageHasCortexelBin(packageJson: unknown): boolean {
     typeof (bin as Record<string, unknown>).cortexel === 'string';
 }
 
-/** Bind the public bin name to the actual private tsup entry, not merely any string. */
+/** Bind the public bin name to the actual private build entry, not merely any string. */
 export function packageBinTargetProblems(packageJson: unknown, entry: unknown): string[] {
   const problems: string[] = [];
   if (packageJson === null || typeof packageJson !== 'object' || Array.isArray(packageJson)) {
@@ -246,7 +246,7 @@ export function packageBinTargetProblems(packageJson: unknown, entry: unknown): 
     entry === null || typeof entry !== 'object' || Array.isArray(entry) ||
     (entry as Record<string, unknown>)['cli/main'] !== 'src/cli/main.ts'
   ) {
-    problems.push('package bin cortexel: private tsup entry cli/main is missing');
+    problems.push('package bin cortexel: private build entry cli/main is missing');
   }
   return problems;
 }
@@ -416,7 +416,7 @@ export function capabilitySourceProblems(
         problems.push(`${where} (${record.id}): a package export must use kind export or data_export`);
       }
       if (record.kind === 'export' && !evidence.buildEntryIds.has(record.id)) {
-        problems.push(`${where} (${record.id}): packaged code export has no tsup entry`);
+        problems.push(`${where} (${record.id}): packaged code export has no build entry`);
       }
       if (record.kind === 'data_export' && evidence.buildEntryIds.has(record.id)) {
         problems.push(`${where} (${record.id}): data_export unexpectedly has a code build entry`);
@@ -496,10 +496,10 @@ export function capabilitySourceProblems(
   }
 
   // Every emitted code entry must be exported, and every packaged code export must be
-  // backed by an emitted entry. JSON data exports are intentionally not tsup entries.
+  // backed by an emitted entry. JSON data exports are intentionally not build entries.
   for (const id of [...evidence.buildEntryIds].sort()) {
     if (!evidence.packageExportIds.has(id)) {
-      problems.push(`tsup entry ${id}: missing package export`);
+      problems.push(`build entry ${id}: missing package export`);
     }
   }
 

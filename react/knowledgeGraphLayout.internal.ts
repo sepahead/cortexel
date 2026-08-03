@@ -1,4 +1,8 @@
-import { graphSignature, normalizeGraphNodeRadius } from './knowledgeGraph';
+import {
+  graphLayoutSignature,
+  graphSignature,
+  normalizeGraphNodeRadius,
+} from './knowledgeGraph';
 import type { SimNode } from 'd3-force-3d';
 import type {
   KnowledgeGraphEdgeStrokePattern,
@@ -24,6 +28,7 @@ export interface GraphLayoutInputEdge {
 
 export interface GraphLayoutInputSnapshot {
   graphKey: string;
+  layoutKey: string;
   nodes: GraphLayoutInputNode[];
   edges: GraphLayoutInputEdge[];
 }
@@ -77,6 +82,7 @@ export function snapshotGraphLayoutInputs(
   }));
   return {
     graphKey: graphSignature(nodeSnapshot, edgeSnapshot),
+    layoutKey: graphLayoutSignature(nodeSnapshot, edgeSnapshot),
     nodes: nodeSnapshot,
     edges: edgeSnapshot,
   };

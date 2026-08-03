@@ -6,9 +6,9 @@ import errno
 import gc
 import gzip
 import hashlib
-import io
 import importlib.util
 import inspect
+import io
 import json
 import os
 import shutil
@@ -24,12 +24,11 @@ import unittest
 import weakref
 import zipfile
 import zlib
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, ClassVar
 from unittest.mock import patch
-
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
@@ -46,8 +45,8 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
     VERSION = "1.2.3"
     HATCHLING_VERSION = "1.31.0"
     LICENSE = b"license\n"
-    RESOURCES = {"schema.json": b"{}\n"}
-    SOURCES = {
+    RESOURCES: ClassVar[dict[str, bytes]] = {"schema.json": b"{}\n"}
+    SOURCES: ClassVar[dict[str, bytes]] = {
         "src/cortexel/__init__.py": b"__all__ = []\n",
         "src/cortexel/contract/schema.json": b"{}\n",
         "src/cortexel/py.typed": b"",
@@ -93,7 +92,7 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 f"Generator: hatchling {self.HATCHLING_VERSION}\n"
                 "Root-Is-Purelib: true\n"
                 "Tag: py3-none-any\n"
-            ).encode("utf-8"),
+            ).encode(),
             f"{dist_info}/licenses/LICENSE": self.LICENSE,
         }
         record_path = f"{dist_info}/RECORD"
@@ -362,25 +361,424 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             self.assertEqual(source.read_bytes(), b"replaced")
 
     @staticmethod
-    def _wait_for_pid_absent(process_id: int, *, label: str) -> None:
-        for _attempt in range(200):
-            try:
-                os.kill(process_id, 0)
-            except ProcessLookupError:
-                return
-            time.sleep(0.01)
-        raise AssertionError(f"{label} process {process_id} remained present")
+    def _add_note_without_replacing(
+        error: BaseException,
+        note: str,
+    ) -> None:
+        try:
+            BaseException.add_note(error, note)
+        except BaseException:  # noqa: BLE001, S110
+            # Diagnostics are subordinate to the already-materialized failure.
+            pass
 
     @staticmethod
-    def _kill_escaped_fixture(process_id: int) -> None:
-        try:
-            os.kill(process_id, signal.SIGKILL)
-        except ProcessLookupError:
+    def _wait_for_fixture_ready(ready: Path, *, label: str) -> None:
+        for _attempt in range(500):
+            try:
+                if ready.read_bytes() == b"ready\n":
+                    return
+            except FileNotFoundError:
+                pass
+            time.sleep(0.01)
+        raise AssertionError(f"{label} did not publish its ready capability")
+
+    @staticmethod
+    def _assert_fifo_writer_live(reader: int, *, label: str) -> None:
+        for _attempt in range(500):
+            try:
+                payload = os.read(reader, 1)
+            except BlockingIOError:
+                return
+            except InterruptedError:
+                continue
+            if payload:
+                raise AssertionError(f"{label} wrote unexpected lifetime bytes")
+            time.sleep(0.01)
+        raise AssertionError(f"{label} never retained its lifetime FIFO")
+
+    @staticmethod
+    def _wait_for_fifo_writer_closed(reader: int, *, label: str) -> None:
+        for _attempt in range(500):
+            try:
+                payload = os.read(reader, 1)
+            except (BlockingIOError, InterruptedError):
+                time.sleep(0.01)
+                continue
+            if payload:
+                raise AssertionError(f"{label} wrote unexpected lifetime bytes")
             return
-        PythonPackageSmokeBoundaryTest._wait_for_pid_absent(
-            process_id,
-            label="detached cleanup fixture",
+        raise AssertionError(f"{label} did not close its lifetime FIFO")
+
+    @staticmethod
+    def _assert_fifo_lifetime_ended(
+        ready: Path,
+        reader: int,
+        *,
+        label: str,
+        ready_required: bool = True,
+    ) -> None:
+        first_error: BaseException | None = None
+
+        def latch(error: BaseException, note: str) -> None:
+            nonlocal first_error
+            if first_error is None:
+                first_error = error
+            else:
+                PythonPackageSmokeBoundaryTest._add_note_without_replacing(
+                    first_error,
+                    note,
+                )
+
+        try:
+            try:
+                if ready_required:
+                    PythonPackageSmokeBoundaryTest._wait_for_fixture_ready(
+                        ready,
+                        label=label,
+                    )
+                else:
+                    try:
+                        ready_payload = ready.read_bytes()
+                    except FileNotFoundError:
+                        ready_payload = None
+                    if ready_payload not in (None, b"ready\n"):
+                        raise AssertionError(
+                            f"{label} published an invalid ready capability"
+                        )
+            except BaseException as error:  # noqa: BLE001
+                # Continue through every observation so the first failure remains primary.
+                latch(error, "ready-capability observation also failed")
+            try:
+                PythonPackageSmokeBoundaryTest._wait_for_fifo_writer_closed(
+                    reader,
+                    label=label,
+                )
+            except BaseException as error:  # noqa: BLE001
+                # EOF failure must not prevent the owned reader from being closed below.
+                latch(error, "lifetime EOF observation also failed")
+        finally:
+            try:
+                os.close(reader)
+            except BaseException as error:  # noqa: BLE001
+                # Closing the reader is part of the same first-error-preserving cleanup.
+                latch(error, "lifetime reader close also failed")
+        if first_error is not None:
+            raise first_error
+
+    @staticmethod
+    def _release_fifo_fixture(
+        release: Path,
+        ready: Path,
+        reader: int,
+        *,
+        label: str,
+    ) -> None:
+        first_error: BaseException | None = None
+
+        def latch(error: BaseException, context: str) -> None:
+            nonlocal first_error
+            if first_error is None:
+                first_error = error
+                return
+            PythonPackageSmokeBoundaryTest._add_note_without_replacing(
+                first_error,
+                f"additional {context} failure was suppressed",
+            )
+
+        try:
+            try:
+                release.write_bytes(b"release\n")
+            except BaseException as error:  # noqa: BLE001
+                # Continue the fixture cleanup while retaining this first failure.
+                latch(error, "release publication")
+            if first_error is None:
+                try:
+                    PythonPackageSmokeBoundaryTest._wait_for_fixture_ready(
+                        ready,
+                        label=label,
+                    )
+                except BaseException as error:  # noqa: BLE001
+                    # Cleanup observations must never replace the earlier failure.
+                    latch(error, "ready-capability observation")
+            if first_error is None:
+                try:
+                    PythonPackageSmokeBoundaryTest._wait_for_fifo_writer_closed(
+                        reader,
+                        label=label,
+                    )
+                except BaseException as error:  # noqa: BLE001
+                    # Cleanup observations must never replace the earlier failure.
+                    latch(error, "lifetime EOF observation")
+        finally:
+            try:
+                os.close(reader)
+            except BaseException as error:  # noqa: BLE001
+                # Always preserve the first cleanup failure across the final close.
+                latch(error, "lifetime reader close")
+        if first_error is not None:
+            raise first_error
+
+    def _run_with_fifo_cleanup(
+        self,
+        operation: Callable[[], None],
+        *,
+        release: Path,
+        ready: Path,
+        reader: int,
+        label: str,
+    ) -> None:
+        try:
+            operation()
+        except BaseException as body_error:
+            try:
+                self._release_fifo_fixture(
+                    release,
+                    ready,
+                    reader,
+                    label=label,
+                )
+            except BaseException:  # noqa: BLE001
+                # The operation failure remains primary even if fixture cleanup aborts.
+                self._add_note_without_replacing(
+                    body_error,
+                    "FIFO cleanup also failed; the primary body failure was preserved",
+                )
+            raise
+        else:
+            self._release_fifo_fixture(
+                release,
+                ready,
+                reader,
+                label=label,
+            )
+
+    def _run_with_fifo_lifetime_check(
+        self,
+        operation: Callable[[], None],
+        *,
+        ready: Path,
+        reader: int,
+        label: str,
+        ready_required: bool = True,
+    ) -> None:
+        try:
+            operation()
+        except BaseException as body_error:
+            try:
+                self._assert_fifo_lifetime_ended(
+                    ready,
+                    reader,
+                    label=label,
+                    ready_required=ready_required,
+                )
+            except BaseException:  # noqa: BLE001
+                # The operation failure remains primary even if verification aborts.
+                self._add_note_without_replacing(
+                    body_error,
+                    "FIFO lifetime verification also failed; "
+                    "the primary body failure was preserved",
+                )
+            raise
+        else:
+            self._assert_fifo_lifetime_ended(
+                ready,
+                reader,
+                label=label,
+                ready_required=ready_required,
+            )
+
+    def test_fifo_cleanup_requires_ready_before_accepting_eof(self) -> None:
+        if os.name != "posix":
+            self.skipTest("FIFO cleanup regression requires POSIX")
+        fixture = inspect.cleandoc(
+            r'''
+            import os
+            import pathlib
+            import sys
+            import time
+
+            time.sleep(0.1)
+            lifetime = pathlib.Path(sys.argv[1])
+            ready = pathlib.Path(sys.argv[2])
+            release = pathlib.Path(sys.argv[3])
+            writer = os.open(lifetime, os.O_WRONLY | os.O_NONBLOCK)
+            ready.write_bytes(b"ready\n")
+            os._exit(0 if release.exists() else 121)
+            '''
         )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            lifetime = root / "lifetime.fifo"
+            ready = root / "ready"
+            release = root / "release"
+            os.mkfifo(lifetime, 0o600)
+            reader = os.open(lifetime, os.O_RDONLY | os.O_NONBLOCK)
+            target = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-I",
+                    "-B",
+                    "-c",
+                    fixture,
+                    str(lifetime),
+                    str(ready),
+                    str(release),
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True,
+                env={},
+            )
+            target_return_code: int | None = None
+            try:
+                self._release_fifo_fixture(
+                    release,
+                    ready,
+                    reader,
+                    label="delayed-writer cleanup fixture",
+                )
+            finally:
+                try:
+                    target_return_code = target.wait(timeout=3)
+                except subprocess.TimeoutExpired as timeout_error:
+                    # A timed-out wait has not reaped this exact child. Signal
+                    # only while that ownership still pins its numeric identity,
+                    # then cross the one final reap boundary with no later signal.
+                    if target.returncode is None:
+                        try:
+                            target.kill()
+                        except BaseException:  # noqa: BLE001
+                            # Emergency cleanup diagnostics cannot replace the timeout.
+                            self._add_note_without_replacing(
+                                timeout_error,
+                                "owned delayed-writer kill also failed",
+                            )
+                    try:
+                        target.wait(timeout=3)
+                    except BaseException:  # noqa: BLE001
+                        # Emergency reap diagnostics cannot replace the timeout.
+                        self._add_note_without_replacing(
+                            timeout_error,
+                            "owned delayed-writer reap also failed",
+                        )
+                    raise
+            self.assertEqual(target_return_code, 0)
+
+    def test_fifo_cleanup_failure_does_not_replace_body_failure(self) -> None:
+        body_error = RuntimeError("primary FIFO body failure")
+        cleanup_error = RuntimeError("secondary FIFO cleanup failure")
+
+        def fail_body() -> None:
+            raise body_error
+
+        with (
+            patch.object(
+                self,
+                "_release_fifo_fixture",
+                side_effect=cleanup_error,
+            ),
+            self.assertRaisesRegex(RuntimeError, "primary FIFO body failure") as raised,
+        ):
+            self._run_with_fifo_cleanup(
+                fail_body,
+                release=Path("unused-release"),
+                ready=Path("unused-ready"),
+                reader=-1,
+                label="exception precedence fixture",
+            )
+        self.assertIs(raised.exception, body_error)
+        self.assertTrue(
+            any(
+                "primary body failure was preserved" in note
+                for note in body_error.__notes__
+            )
+        )
+
+        with (
+            patch.object(
+                self,
+                "_release_fifo_fixture",
+                side_effect=cleanup_error,
+            ),
+            self.assertRaisesRegex(RuntimeError, "secondary FIFO cleanup failure"),
+        ):
+            self._run_with_fifo_cleanup(
+                lambda: None,
+                release=Path("unused-release"),
+                ready=Path("unused-ready"),
+                reader=-1,
+                label="clean-body cleanup fixture",
+            )
+
+        class HostileDiagnosticFailure(BaseException):
+            pass
+
+        class HostileBodyError(RuntimeError):
+            def add_note(self, _note: str) -> None:
+                raise HostileDiagnosticFailure("hostile body add_note")
+
+        class HostileCleanupError(RuntimeError):
+            def __str__(self) -> str:
+                raise HostileDiagnosticFailure("hostile cleanup stringification")
+
+        hostile_body = HostileBodyError("hostile-note primary body failure")
+
+        def fail_hostile_body() -> None:
+            raise hostile_body
+
+        with (
+            patch.object(
+                self,
+                "_release_fifo_fixture",
+                side_effect=HostileCleanupError(),
+            ),
+            self.assertRaises(HostileBodyError) as hostile_raised,
+        ):
+            self._run_with_fifo_cleanup(
+                fail_hostile_body,
+                release=Path("unused-release"),
+                ready=Path("unused-ready"),
+                reader=-1,
+                label="hostile exception precedence fixture",
+            )
+        self.assertIs(hostile_raised.exception, hostile_body)
+
+    def test_fifo_cleanup_retains_first_error_and_closes_once(self) -> None:
+        class HostileDiagnosticFailure(BaseException):
+            pass
+
+        class FirstCleanupError(RuntimeError):
+            def add_note(self, _note: str) -> None:
+                raise HostileDiagnosticFailure("hostile first-error add_note")
+
+        class ReaderCloseError(RuntimeError):
+            def __str__(self) -> str:
+                raise HostileDiagnosticFailure("hostile close-error stringification")
+
+        publication_error = FirstCleanupError("release publication failed")
+        with (
+            patch.object(
+                Path,
+                "write_bytes",
+                side_effect=publication_error,
+            ) as publish,
+            patch.object(
+                os,
+                "close",
+                side_effect=ReaderCloseError(),
+            ) as close,
+            self.assertRaises(FirstCleanupError) as raised,
+        ):
+            self._release_fifo_fixture(
+                Path("release-fixture"),
+                Path("ready-fixture"),
+                73,
+                label="first cleanup error fixture",
+            )
+        self.assertIs(raised.exception, publication_error)
+        publish.assert_called_once_with(b"release\n")
+        close.assert_called_once_with(73)
 
     def _assert_ambiguous_descriptor_close_fails_stop(
         self,
@@ -404,8 +802,10 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             repository = pathlib.Path(sys.argv[2])
             resource = sys.argv[3]
             close_order = sys.argv[4]
-            guardian_pid_path = pathlib.Path(sys.argv[5])
-            target_pid_path = pathlib.Path(sys.argv[6])
+            guardian_lifetime = pathlib.Path(sys.argv[5])
+            guardian_ready = pathlib.Path(sys.argv[6])
+            target_lifetime = pathlib.Path(sys.argv[7])
+            target_ready = pathlib.Path(sys.argv[8])
             spec = importlib.util.spec_from_file_location(
                 "cortexel_smoke_python_package_sacrificial",
                 smoke_path,
@@ -456,8 +856,18 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 real_close(file_descriptor)
 
             def launch(*args, **kwargs):
-                process = real_popen(*args, **kwargs)
-                guardian_pid_path.write_text(str(process.pid), encoding="ascii")
+                guardian_writer = os.open(
+                    guardian_lifetime,
+                    os.O_WRONLY | os.O_NONBLOCK,
+                )
+                kwargs["pass_fds"] = (*kwargs.get("pass_fds", ()), guardian_writer)
+                try:
+                    process = real_popen(*args, **kwargs)
+                except BaseException:
+                    real_close(guardian_writer)
+                    raise
+                real_close(guardian_writer)
+                guardian_ready.write_bytes(b"ready\n")
                 return process
 
             target = [
@@ -467,10 +877,12 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 "-c",
                 (
                     "import os,pathlib,sys,time; "
-                    "pathlib.Path(sys.argv[1]).write_text(str(os.getpid()), "
-                    "encoding='ascii'); time.sleep(60)"
+                    "writer=os.open(sys.argv[1], os.O_WRONLY | os.O_NONBLOCK); "
+                    "pathlib.Path(sys.argv[2]).write_bytes(b'ready\\n'); "
+                    "time.sleep(60)"
                 ),
-                str(target_pid_path),
+                str(target_lifetime),
+                str(target_ready),
             ]
             if resource == "config":
                 with (
@@ -508,62 +920,125 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as temporary:
             temporary_root = Path(temporary)
-            guardian_pid_path = temporary_root / "guardian.pid"
-            target_pid_path = temporary_root / "target.pid"
-            sacrificial = subprocess.Popen(
-                [
-                    sys.executable,
-                    "-I",
-                    "-B",
-                    "-S",
-                    "-c",
-                    fixture,
-                    str(ROOT / "scripts" / "smoke-python-package.py"),
-                    str(ROOT),
-                    resource,
-                    close_order,
-                    str(guardian_pid_path),
-                    str(target_pid_path),
-                ],
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                close_fds=True,
-                env={},
-                start_new_session=True,
+            guardian_lifetime = temporary_root / "guardian-lifetime.fifo"
+            guardian_ready = temporary_root / "guardian-ready"
+            target_lifetime = temporary_root / "target-lifetime.fifo"
+            target_ready = temporary_root / "target-ready"
+            os.mkfifo(guardian_lifetime, 0o600)
+            os.mkfifo(target_lifetime, 0o600)
+            guardian_reader = os.open(
+                guardian_lifetime,
+                os.O_RDONLY | os.O_NONBLOCK,
+            )
+            target_reader = os.open(
+                target_lifetime,
+                os.O_RDONLY | os.O_NONBLOCK,
             )
             try:
-                stdout, stderr = sacrificial.communicate(timeout=12)
-            except subprocess.TimeoutExpired:
-                sacrificial.kill()
-                sacrificial.communicate(timeout=3)
-                self.fail(
-                    f"{resource} {close_order} sacrificial process did not terminate"
+                sacrificial = subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-I",
+                        "-B",
+                        "-S",
+                        "-c",
+                        fixture,
+                        str(ROOT / "scripts" / "smoke-python-package.py"),
+                        str(ROOT),
+                        resource,
+                        close_order,
+                        str(guardian_lifetime),
+                        str(guardian_ready),
+                        str(target_lifetime),
+                        str(target_ready),
+                    ],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    close_fds=True,
+                    env={},
+                    start_new_session=True,
                 )
-            self.assertEqual(stdout, b"")
-            self.assertEqual(sacrificial.returncode, 70, stderr.decode(errors="replace"))
-            self.assertEqual(stderr, b"")
-            self.assertTrue(guardian_pid_path.is_file())
-            guardian_pid = int(guardian_pid_path.read_text(encoding="ascii"))
-            self._wait_for_pid_absent(
-                guardian_pid,
-                label=f"{resource} {close_order} guardian",
-            )
+            except BaseException as launch_error:
+                # Close both pre-launch readers even for control-flow exceptions.
+                for reader in (guardian_reader, target_reader):
+                    try:
+                        os.close(reader)
+                    except BaseException:  # noqa: BLE001
+                        # Preserve the launch failure while attempting both closes.
+                        self._add_note_without_replacing(
+                            launch_error,
+                            "a pre-launch lifetime reader close also failed",
+                        )
+                raise
 
-            if resource == "lease":
-                for _attempt in range(200):
-                    if target_pid_path.is_file():
-                        break
-                    time.sleep(0.01)
-                self.assertTrue(
-                    target_pid_path.is_file(),
-                    "lease-close fixture target did not publish its PID",
+            def assert_process_lifetimes() -> None:
+                lifetime_error: BaseException | None = None
+                for ready, reader, label, ready_required in (
+                    (
+                        guardian_ready,
+                        guardian_reader,
+                        f"{resource} {close_order} guardian",
+                        True,
+                    ),
+                    (
+                        target_ready,
+                        target_reader,
+                        f"{resource} {close_order} target",
+                        resource == "lease",
+                    ),
+                ):
+                    try:
+                        self._assert_fifo_lifetime_ended(
+                            ready,
+                            reader,
+                            label=label,
+                            ready_required=ready_required,
+                        )
+                    except BaseException as error:  # noqa: BLE001
+                        # Check every lifetime and retain the first observed failure.
+                        if lifetime_error is None:
+                            lifetime_error = error
+                        else:
+                            self._add_note_without_replacing(
+                                lifetime_error,
+                                "an additional process lifetime check failed",
+                            )
+                if lifetime_error is not None:
+                    raise lifetime_error
+
+            def exercise_sacrificial_process() -> None:
+                try:
+                    stdout, stderr = sacrificial.communicate(timeout=12)
+                except subprocess.TimeoutExpired:
+                    sacrificial.kill()
+                    sacrificial.communicate(timeout=3)
+                    self.fail(
+                        f"{resource} {close_order} sacrificial process did not terminate"
+                    )
+                self.assertEqual(stdout, b"")
+                self.assertEqual(
+                    sacrificial.returncode,
+                    70,
+                    stderr.decode(errors="replace"),
                 )
-            if target_pid_path.is_file():
-                self._wait_for_pid_absent(
-                    int(target_pid_path.read_text(encoding="ascii")),
-                    label=f"{resource} {close_order} target",
-                )
+                self.assertEqual(stderr, b"")
+
+            try:
+                exercise_sacrificial_process()
+            except BaseException as body_error:
+                try:
+                    assert_process_lifetimes()
+                except BaseException:  # noqa: BLE001
+                    # Lifetime cleanup cannot replace the primary fixture failure.
+                    self._add_note_without_replacing(
+                        body_error,
+                        "process lifetime verification also failed; "
+                        "the primary fixture failure was preserved",
+                    )
+                raise
+            else:
+                assert_process_lifetimes()
 
     def test_tree_and_guardian_resource_bounds_are_finite(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -611,15 +1086,17 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
         self.assertTrue(launch.call_args.kwargs["close_fds"])
         self.assertEqual(len(launch.call_args.kwargs["pass_fds"]), 3)
 
-        with patch.object(smoke, "MAX_SUBPROCESS_GUARDIAN_CONFIG_BYTES", 32):
-            with self.assertRaisesRegex(RuntimeError, "config exceeded"):
-                smoke.run_checked(
-                    [sys.executable, "-c", "pass"],
-                    cwd=ROOT,
-                    environment={},
-                    timeout=1,
-                    label="bounded guardian config fixture",
-                )
+        with (
+            patch.object(smoke, "MAX_SUBPROCESS_GUARDIAN_CONFIG_BYTES", 32),
+            self.assertRaisesRegex(RuntimeError, "config exceeded"),
+        ):
+            smoke.run_checked(
+                [sys.executable, "-c", "pass"],
+                cwd=ROOT,
+                environment={},
+                timeout=1,
+                label="bounded guardian config fixture",
+            )
 
     def test_guardian_preserves_success_nonzero_and_signaled_results(self) -> None:
         completed = smoke.run_checked(
@@ -739,7 +1216,10 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 "kill",
                 side_effect=AssertionError("setup failure caused a parent PID signal"),
             ),
-            self.assertRaises(BaseException),
+            self.assertRaisesRegex(
+                RuntimeError,
+                "guardian published no final status",
+            ) as raised,
         ):
             smoke.run_checked(
                 [sys.executable, "-I", "-B", "-c", "import time; time.sleep(60)"],
@@ -748,6 +1228,12 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 timeout=2,
                 label="post-spawn setup failure fixture",
             )
+        self.assertTrue(
+            any(
+                "MemoryError: synthetic post-spawn setup failure" in note
+                for note in getattr(raised.exception, "__notes__", ())
+            )
+        )
         self.assertEqual(len(launched), 1)
         self.assertEqual(launched[0].returncode, -signal.SIGKILL)
         self.assertFalse(launched[0]._child_created)
@@ -863,15 +1349,18 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             smoke._fail_stop_after_ambiguous_descriptor_close
         )
         run_source = inspect.getsource(smoke.run_checked)
-        supervisor_source = "\n".join(
-            (boundary_source, reap_source, run_source)
-        )
+        supervisor_source = f"{boundary_source}\n{reap_source}\n{run_source}"
         for forbidden in (
             "os.kill(",
             "os.killpg(",
             "os.waitid(",
             "process.poll(",
             "process.wait(",
+            "process.send_signal(",
+            "process.terminate(",
+            "process.kill(",
+            "os.pidfd_open(",
+            "pidfd_send_signal",
             "select.kqueue(",
             "ProcessLookupError",
             "_UnreapedProcessExitObserver",
@@ -992,8 +1481,7 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 str(ROOT),
             ],
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             close_fds=True,
             env={},
             timeout=8,
@@ -1007,7 +1495,11 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
         cases = ("success", "timeout", "overflow-captured", "overflow-discarded")
         for mode in cases:
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
-                child_pid_path = Path(temporary) / "child.pid"
+                root = Path(temporary)
+                lifetime = root / "child-lifetime.fifo"
+                ready = root / "child-ready"
+                os.mkfifo(lifetime, 0o600)
+                reader = os.open(lifetime, os.O_RDONLY | os.O_NONBLOCK)
                 tail = {
                     "success": "raise SystemExit(0)",
                     "timeout": "time.sleep(60)",
@@ -1018,90 +1510,232 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                         f"os.write(1, b'x' * {smoke.MAX_SUBPROCESS_OUTPUT_BYTES + 1})"
                     ),
                 }[mode]
-                program = (
-                    "import os,pathlib,subprocess,sys,time; "
-                    "child=subprocess.Popen([sys.executable,'-I','-B','-c',"
-                    "'import time; time.sleep(60)']); "
-                    f"pathlib.Path({str(child_pid_path)!r}).write_text(str(child.pid)); "
-                    f"{tail}"
+                child_program = inspect.cleandoc(
+                    r'''
+                    import os
+                    import pathlib
+                    import sys
+                    import time
+
+                    lifetime = pathlib.Path(sys.argv[1])
+                    ready = pathlib.Path(sys.argv[2])
+                    writer = os.open(lifetime, os.O_WRONLY | os.O_NONBLOCK)
+                    ready.write_bytes(b"ready\n")
+                    time.sleep(60)
+                    '''
                 )
-                if mode == "success":
-                    smoke.run_checked(
-                        [sys.executable, "-I", "-B", "-c", program],
-                        cwd=ROOT,
-                        environment={},
-                        timeout=3,
-                        label="successful descendant fixture",
-                    )
-                else:
-                    expected = "timeout" if mode == "timeout" else "output budget"
-                    with self.assertRaisesRegex(RuntimeError, expected):
+                program = inspect.cleandoc(
+                    f'''
+                    import os
+                    import pathlib
+                    import subprocess
+                    import sys
+                    import time
+
+                    ready = pathlib.Path(sys.argv[2])
+                    subprocess.Popen([
+                        sys.executable,
+                        "-I",
+                        "-B",
+                        "-c",
+                        sys.argv[1],
+                        sys.argv[3],
+                        sys.argv[2],
+                    ])
+                    deadline = time.monotonic() + 2
+                    while time.monotonic() < deadline:
+                        try:
+                            if ready.read_bytes() == b"ready\\n":
+                                break
+                        except FileNotFoundError:
+                            pass
+                        time.sleep(0.01)
+                    else:
+                        raise SystemExit(120)
+                    {tail}
+                    '''
+                )
+
+                def exercise(
+                    current_program: str = program,
+                    current_child_program: str = child_program,
+                    current_ready: Path = ready,
+                    current_lifetime: Path = lifetime,
+                    current_mode: str = mode,
+                ) -> None:
+                    command = [
+                        sys.executable,
+                        "-I",
+                        "-B",
+                        "-c",
+                        current_program,
+                        current_child_program,
+                        str(current_ready),
+                        str(current_lifetime),
+                    ]
+                    if current_mode == "success":
                         smoke.run_checked(
-                            [sys.executable, "-I", "-B", "-c", program],
+                            command,
                             cwd=ROOT,
                             environment={},
-                            timeout=1 if mode == "timeout" else 3,
-                            label=f"{mode} descendant fixture",
-                            capture_output=mode == "overflow-captured",
+                            timeout=3,
+                            label="successful descendant fixture",
                         )
-                self._wait_for_pid_absent(
-                    int(child_pid_path.read_text()),
+                    else:
+                        expected = (
+                            "timeout" if current_mode == "timeout" else "output budget"
+                        )
+                        with self.assertRaisesRegex(RuntimeError, expected):
+                            smoke.run_checked(
+                                command,
+                                cwd=ROOT,
+                                environment={},
+                                timeout=1 if current_mode == "timeout" else 3,
+                                label=f"{current_mode} descendant fixture",
+                                capture_output=current_mode == "overflow-captured",
+                            )
+
+                self._run_with_fifo_lifetime_check(
+                    exercise,
+                    ready=ready,
+                    reader=reader,
                     label=f"{mode} same-group descendant",
                 )
 
     def test_target_killing_worker_fails_closed_and_group_is_swept(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            target_pid_path = Path(temporary) / "target.pid"
-            program = (
-                "import os,pathlib,signal,time; "
-                f"pathlib.Path({str(target_pid_path)!r}).write_text(str(os.getpid())); "
-                "os.kill(os.getppid(), signal.SIGKILL); time.sleep(60)"
+            root = Path(temporary)
+            lifetime = root / "target-lifetime.fifo"
+            ready = root / "target-ready"
+            os.mkfifo(lifetime, 0o600)
+            reader = os.open(lifetime, os.O_RDONLY | os.O_NONBLOCK)
+            program = inspect.cleandoc(
+                r'''
+                import os
+                import pathlib
+                import signal
+                import sys
+                import time
+
+                lifetime = pathlib.Path(sys.argv[1])
+                ready = pathlib.Path(sys.argv[2])
+                writer = os.open(lifetime, os.O_WRONLY | os.O_NONBLOCK)
+                ready.write_bytes(b"ready\n")
+                os.kill(os.getppid(), signal.SIGKILL)
+                time.sleep(60)
+                '''
             )
-            with self.assertRaisesRegex(RuntimeError, "worker_exit"):
-                smoke.run_checked(
-                    [sys.executable, "-I", "-B", "-c", program],
-                    cwd=ROOT,
-                    environment={},
-                    timeout=3,
-                    label="worker-loss fixture",
-                )
-            self._wait_for_pid_absent(
-                int(target_pid_path.read_text()),
+
+            def exercise() -> None:
+                with self.assertRaisesRegex(RuntimeError, "worker_exit"):
+                    smoke.run_checked(
+                        [
+                            sys.executable,
+                            "-I",
+                            "-B",
+                            "-c",
+                            program,
+                            str(lifetime),
+                            str(ready),
+                        ],
+                        cwd=ROOT,
+                        environment={},
+                        timeout=3,
+                        label="worker-loss fixture",
+                    )
+
+            self._run_with_fifo_lifetime_check(
+                exercise,
+                ready=ready,
+                reader=reader,
                 label="target after immediate-parent loss",
             )
 
     def test_direct_guardian_loss_fails_without_parent_numeric_fallback(self) -> None:
-        with (
-            patch.object(
-                smoke.os,
-                "killpg",
-                side_effect=AssertionError("parent used a group fallback"),
-            ),
-            patch.object(
-                smoke.os,
-                "kill",
-                side_effect=AssertionError("parent used a PID fallback"),
-            ),
-            patch.object(
-                smoke.os,
-                "waitid",
-                create=True,
-                side_effect=AssertionError("guardian loss caused a waitid probe"),
-            ),
-            self.assertRaisesRegex(RuntimeError, "guardian status size is invalid"),
-        ):
-            smoke.run_checked(
-                [
-                    sys.executable,
-                    "-I",
-                    "-B",
-                    "-c",
-                    "import os,signal; os.killpg(os.getpgrp(), signal.SIGKILL)",
-                ],
-                cwd=ROOT,
-                environment={},
-                timeout=3,
-                label="guardian-loss fixture",
+        if os.name != "posix":
+            self.skipTest("guardian lifecycle regression requires POSIX FIFOs")
+        fixture = inspect.cleandoc(
+            r'''
+            import os
+            import pathlib
+            import signal
+            import sys
+            import time
+
+            lifetime = pathlib.Path(sys.argv[1])
+            ready = pathlib.Path(sys.argv[2])
+            release = pathlib.Path(sys.argv[3])
+            writer = os.open(lifetime, os.O_WRONLY | os.O_NONBLOCK)
+            ready.write_bytes(b"ready\n")
+            guardian = os.getsid(0)
+            if guardian <= 1 or guardian == os.getpid() or os.getpgrp() != guardian:
+                os._exit(120)
+            os.kill(guardian, signal.SIGKILL)
+            deadline = time.monotonic() + 15
+            while not release.exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            os._exit(0 if release.exists() else 121)
+            '''
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            lifetime = root / "lifetime.fifo"
+            ready = root / "ready"
+            release = root / "release"
+            os.mkfifo(lifetime, 0o600)
+            reader = os.open(lifetime, os.O_RDONLY | os.O_NONBLOCK)
+
+            def exercise() -> None:
+                with (
+                    patch.object(
+                        smoke.os,
+                        "killpg",
+                        side_effect=AssertionError("parent used a group fallback"),
+                    ) as killpg,
+                    patch.object(
+                        smoke.os,
+                        "kill",
+                        side_effect=AssertionError("parent used a PID fallback"),
+                    ) as kill,
+                    patch.object(
+                        smoke.os,
+                        "waitid",
+                        create=True,
+                        side_effect=AssertionError("guardian loss caused a waitid probe"),
+                    ) as waitid,
+                    self.assertRaisesRegex(
+                        RuntimeError,
+                        "guardian status size is invalid",
+                    ),
+                ):
+                    smoke.run_checked(
+                        [
+                            sys.executable,
+                            "-I",
+                            "-B",
+                            "-c",
+                            fixture,
+                            str(lifetime),
+                            str(ready),
+                            str(release),
+                        ],
+                        cwd=ROOT,
+                        environment={},
+                        timeout=3,
+                        label="guardian-loss fixture",
+                    )
+                killpg.assert_not_called()
+                kill.assert_not_called()
+                waitid.assert_not_called()
+                self._wait_for_fixture_ready(ready, label="guardian-loss target")
+                self._assert_fifo_writer_live(reader, label="guardian-loss target")
+
+            self._run_with_fifo_cleanup(
+                exercise,
+                release=release,
+                ready=ready,
+                reader=reader,
+                label="guardian-loss target",
             )
 
     def test_live_second_thread_is_rejected_before_guardian_launch(self) -> None:
@@ -1337,8 +1971,12 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 previous_handler = signal.getsignal(cancellation_signal)
                 sender: subprocess.Popen[bytes] | None = None
 
-                def receive(signal_number: int, _frame: object) -> None:
-                    deliveries.append(signal_number)
+                def receive(
+                    signal_number: int,
+                    _frame: object,
+                    current_deliveries: list[int] = deliveries,
+                ) -> None:
+                    current_deliveries.append(signal_number)
 
                 try:
                     signal.signal(cancellation_signal, receive)
@@ -1400,53 +2038,110 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                         sender.wait(timeout=3)
 
     def test_detachment_and_pipe_retention_remain_outside_group_containment(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            detached_pid_path = Path(temporary) / "detached.pid"
-            detached_program = (
-                "import os,pathlib,time; os.setsid(); "
-                f"pathlib.Path({str(detached_pid_path)!r}).write_text(str(os.getpid())); "
-                "time.sleep(60)"
-            )
-            parent_program = (
-                "import subprocess,sys,time; "
-                f"subprocess.Popen([sys.executable,'-I','-B','-c',{detached_program!r}],"
-                "stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,"
-                "stderr=subprocess.DEVNULL,close_fds=True); time.sleep(0.3)"
-            )
-            smoke.run_checked(
-                [sys.executable, "-I", "-B", "-c", parent_program],
-                cwd=ROOT,
-                environment={},
-                timeout=3,
-                label="detached descendant fixture",
-            )
-            detached_pid = int(detached_pid_path.read_text())
-            os.kill(detached_pid, 0)
-            self._kill_escaped_fixture(detached_pid)
+        if os.name != "posix":
+            self.skipTest("detached-lifetime regression requires POSIX FIFOs")
+        detached_program = inspect.cleandoc(
+            r'''
+            import os
+            import pathlib
+            import sys
+            import time
 
-        with tempfile.TemporaryDirectory() as temporary:
-            holder_pid_path = Path(temporary) / "holder.pid"
-            holder_program = (
-                "import os,pathlib,time; os.setsid(); "
-                f"pathlib.Path({str(holder_pid_path)!r}).write_text(str(os.getpid())); "
-                "time.sleep(60)"
-            )
-            parent_program = (
-                "import subprocess,sys,time; "
-                f"subprocess.Popen([sys.executable,'-I','-B','-c',{holder_program!r}],"
-                "close_fds=True); time.sleep(0.3)"
-            )
-            with self.assertRaisesRegex(RuntimeError, "pipe drain timed out"):
-                smoke.run_checked(
-                    [sys.executable, "-I", "-B", "-c", parent_program],
-                    cwd=ROOT,
-                    environment={},
-                    timeout=3,
-                    label="detached pipe-holder fixture",
+            os.setsid()
+            lifetime = pathlib.Path(sys.argv[1])
+            ready = pathlib.Path(sys.argv[2])
+            release = pathlib.Path(sys.argv[3])
+            writer = os.open(lifetime, os.O_WRONLY | os.O_NONBLOCK)
+            ready.write_bytes(b"ready\n")
+            deadline = time.monotonic() + 15
+            while not release.exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            os._exit(0 if release.exists() else 121)
+            '''
+        )
+        parent_program = inspect.cleandoc(
+            r'''
+            import subprocess
+            import sys
+            import time
+
+            mode = sys.argv[1]
+            target = [sys.executable, "-I", "-B", "-c", sys.argv[2], *sys.argv[3:]]
+            options = {
+                "stdin": subprocess.DEVNULL,
+                "close_fds": True,
+            }
+            if mode == "silent":
+                options.update({
+                    "stdout": subprocess.DEVNULL,
+                    "stderr": subprocess.DEVNULL,
+                })
+            subprocess.Popen(target, **options)
+            time.sleep(0.3)
+            '''
+        )
+
+        for mode in ("silent", "pipe-holder"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                lifetime = root / "lifetime.fifo"
+                ready = root / "ready"
+                release = root / "release"
+                os.mkfifo(lifetime, 0o600)
+                reader = os.open(lifetime, os.O_RDONLY | os.O_NONBLOCK)
+
+                def exercise(
+                    current_mode: str = mode,
+                    current_lifetime: Path = lifetime,
+                    current_ready: Path = ready,
+                    current_release: Path = release,
+                    current_reader: int = reader,
+                ) -> None:
+                    command = [
+                        sys.executable,
+                        "-I",
+                        "-B",
+                        "-c",
+                        parent_program,
+                        current_mode,
+                        detached_program,
+                        str(current_lifetime),
+                        str(current_ready),
+                        str(current_release),
+                    ]
+                    if current_mode == "silent":
+                        smoke.run_checked(
+                            command,
+                            cwd=ROOT,
+                            environment={},
+                            timeout=3,
+                            label="detached descendant fixture",
+                        )
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, "pipe drain timed out"):
+                            smoke.run_checked(
+                                command,
+                                cwd=ROOT,
+                                environment={},
+                                timeout=3,
+                                label="detached pipe-holder fixture",
+                            )
+                    self._wait_for_fixture_ready(
+                        current_ready,
+                        label=f"detached {current_mode} target",
+                    )
+                    self._assert_fifo_writer_live(
+                        current_reader,
+                        label=f"detached {current_mode} target",
+                    )
+
+                self._run_with_fifo_cleanup(
+                    exercise,
+                    release=release,
+                    ready=ready,
+                    reader=reader,
+                    label=f"detached {mode} target",
                 )
-            holder_pid = int(holder_pid_path.read_text())
-            os.kill(holder_pid, 0)
-            self._kill_escaped_fixture(holder_pid)
 
     def test_guardian_protocol_is_canonical_closed_and_launch_fails_closed(self) -> None:
         nonce = "a" * 64
@@ -2187,16 +2882,16 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
 
     def test_uv_entry_point_script_matches_exact_posix_forms(self) -> None:
         body = (
-            "# -*- coding: utf-8 -*-\n"
-            "import sys\n"
-            "from hatchling.cli import hatchling\n"
-            'if __name__ == "__main__":\n'
-            '    if sys.argv[0].endswith("-script.pyw"):\n'
-            "        sys.argv[0] = sys.argv[0][:-11]\n"
-            '    elif sys.argv[0].endswith(".exe"):\n'
-            "        sys.argv[0] = sys.argv[0][:-4]\n"
-            "    sys.exit(hatchling())\n"
-        ).encode()
+            b"# -*- coding: utf-8 -*-\n"
+            b"import sys\n"
+            b"from hatchling.cli import hatchling\n"
+            b'if __name__ == "__main__":\n'
+            b'    if sys.argv[0].endswith("-script.pyw"):\n'
+            b"        sys.argv[0] = sys.argv[0][:-11]\n"
+            b'    elif sys.argv[0].endswith(".exe"):\n'
+            b"        sys.argv[0] = sys.argv[0][:-4]\n"
+            b"    sys.exit(hatchling())\n"
+        )
         direct = "/opt/reviewed/bin/python"
         self.assertEqual(
             smoke.expected_uv_entry_point_script(
@@ -2362,11 +3057,13 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             "command -v getfacl",
             "Seal exact Python and uv runtime authority",
             'expected_python_location="/opt/hostedtoolcache/Python/3.14.6/x64"',
-            'expected_uv_executable="/opt/hostedtoolcache/uv/0.11.16/x86_64/uv"',
-            'expected_uvx_executable="/opt/hostedtoolcache/uv/0.11.16/x86_64/uvx"',
+            'expected_uv_executable="/opt/hostedtoolcache/uv/0.12.1/x86_64/uv"',
+            'expected_uvx_executable="/opt/hostedtoolcache/uv/0.12.1/x86_64/uvx"',
             "SETUP_UV_PATH: ${{ steps.setup_uv.outputs['uv-path'] }}",
             "SETUP_UVX_PATH: ${{ steps.setup_uv.outputs['uvx-path'] }}",
-            "uv_version_pattern='^uv 0[.]11[.]16( [(][ -~]+[)])?$'",
+            "uv_version_pattern='^uv 0[.]12[.]1( [(][ -~]+[)])?$'",
+            '"$UVX_EXECUTABLE" --no-config --from mypy==2.3.0 mypy',
+            '"$UVX_EXECUTABLE" --no-config --from ruff==0.16.1 ruff',
             'uv_path="$CORTEXEL_CI_UV"',
             'sudo chown -R root:root -- "$python_version_root" "$uv_version_root"',
             'sudo setfacl -R -b -k -- "$python_version_root" "$uv_version_root"',

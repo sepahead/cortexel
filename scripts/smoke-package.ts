@@ -18,7 +18,6 @@ import {
   mkdtempSync,
   openSync,
   opendirSync,
-  readFileSync,
   readSync,
   readlinkSync,
   realpathSync,
@@ -45,6 +44,7 @@ import {
 import { pathToFileURL } from 'node:url';
 import { TextDecoder } from 'node:util';
 import { inflateRawSync } from 'node:zlib';
+import ts from 'typescript';
 import {
   CORTEXEL_SKILL_VERSION,
   PARAM_CONSTRAINT_LANGUAGE,
@@ -69,7 +69,20 @@ import {
   STABLE_SKILL_IDS as SOURCE_STABLE_SKILL_IDS,
 } from '../src/generated';
 import { serializeManifest } from './emit-manifest';
+import {
+  isCanonicalPackageRelativePath,
+  PACKAGE_TAR_NAME_BYTES,
+} from './lib/canonical-package-path';
 import { packagedContractRelativeFiles } from './lib/contract-package';
+import {
+  assertReviewedPackageSourceMapInputClosure,
+  assertReviewedSourceMapResourceBounds,
+  inspectReviewedSourceMapMappings,
+  inspectReviewedSourceMapMetadata,
+  isReviewedMaplessPackageRuntime,
+  REVIEWED_PACKAGE_SOURCE_MAP_LIMITS,
+  resolveReviewedPackageSourceMapInput,
+} from './lib/package-source-map-authority';
 import {
   assertReviewedNodeRuntimeLive,
   createReviewedNodeRuntime,
@@ -80,6 +93,7 @@ import {
   REVIEWED_POSIX_COMMAND_LIMITS,
   runReviewedPosixCommand,
 } from './lib/reviewed-posix-command';
+import { parseJsonSourceStrict } from './lib/strict-json-source';
 
 const root = resolve(import.meta.dirname, '..');
 const fixtureRoot = join(root, 'scripts', 'fixtures', 'package-smoke');
@@ -99,6 +113,7 @@ const BROWSER_BUNDLE_BUILDER_FILENAME = 'browser-bundle-build.mjs';
 const BROWSER_BUNDLE_OUTPUT_FILENAME = 'browser-bundle-output.mjs';
 const BROWSER_BUNDLE_RECEIPT_FILENAME = 'browser-bundle-receipt.v1.json';
 const BROWSER_BUNDLE_RECEIPT_SCHEMA = 'cortexel-package-smoke-browser-bundle.v1';
+const CJS_URL_CACHE_PROBE_FILENAME = 'cjs-url-cache-probe.cjs';
 const REVIEWED_ESBUILD_VERSION = '0.28.1';
 const BROWSER_BARE_CHUNK_IMPORT_PATTERN =
   String.raw`^import "(\.\./chunk-[A-Za-z0-9_-]+\.js)";$`;
@@ -123,6 +138,102 @@ export function generatedBrowserBundlePatternDeclarations(): string {
       BROWSER_INSTALLED_CHUNK_PATH_PATTERN,
     )}, 'u');`,
   ].join('\n');
+}
+
+/**
+ * A fresh CJS consumer must reach the installed structural validator without a
+ * generated bare `url` specifier consulting the caller-mutable module cache.
+ * Preserve and restore the cache descriptor even when loading or validation
+ * fails so the probe itself never widens authority for later consumer code.
+ */
+export function generatedCjsUrlCacheProbeSource(): string {
+  return `
+    function withPoisonedBareUrl(operation) {
+      const priorDescriptor = Object.getOwnPropertyDescriptor(require.cache, 'url');
+      let poisonedPropertyReads = 0;
+      let operationError;
+      let cleanupError;
+      try {
+        const poisonedExports = new Proxy(Object.create(null), {
+          get(_target, property) {
+            poisonedPropertyReads += 1;
+            throw new Error('bare url builtin resolved through require.cache: ' + String(property));
+          },
+        });
+        Object.defineProperty(require.cache, 'url', {
+          configurable: true,
+          enumerable: true,
+          value: {
+            id: 'url',
+            filename: 'url',
+            loaded: true,
+            exports: poisonedExports,
+          },
+          writable: true,
+        });
+        operation();
+      } catch (error) {
+        operationError = error;
+      } finally {
+        try {
+          if (priorDescriptor === undefined) {
+            delete require.cache.url;
+          } else {
+            Object.defineProperty(require.cache, 'url', priorDescriptor);
+          }
+        } catch (error) {
+          cleanupError = error;
+        }
+      }
+      const restoredDescriptor = Object.getOwnPropertyDescriptor(require.cache, 'url');
+      const cacheRestored = priorDescriptor === undefined
+        ? restoredDescriptor === undefined
+        : restoredDescriptor?.configurable === priorDescriptor.configurable &&
+          restoredDescriptor?.enumerable === priorDescriptor.enumerable &&
+          restoredDescriptor?.writable === priorDescriptor.writable &&
+          restoredDescriptor?.value === priorDescriptor.value &&
+          restoredDescriptor?.get === priorDescriptor.get &&
+          restoredDescriptor?.set === priorDescriptor.set;
+      if (!cacheRestored && cleanupError === undefined) {
+        cleanupError = new Error('CJS url cache poison was not restored exactly');
+      }
+      if (cleanupError !== undefined) {
+        if (operationError !== undefined) {
+          throw new AggregateError(
+            [operationError, cleanupError],
+            'CJS url cache probe and cleanup failed',
+          );
+        }
+        throw cleanupError;
+      }
+      return { operationError, poisonedPropertyReads };
+    }
+
+    const shadowabilityControl = withPoisonedBareUrl(() => {
+      require('url').pathToFileURL;
+    });
+    if (shadowabilityControl.operationError === undefined ||
+        shadowabilityControl.poisonedPropertyReads !== 1) {
+      throw new Error('bare url cache-shadow negative control was not exercised');
+    }
+
+    const validatorProbe = withPoisonedBareUrl(() => {
+      const figure = require('cortexel/figure');
+      const contract = require('cortexel/contract/skills/neuro.spike_raster.v1.json');
+      const accepted = figure.parseAndValidateRequest(
+        JSON.stringify(contract.examples.valid[0]),
+      );
+      if (!accepted.ok || typeof accepted.request !== 'object') {
+        throw new Error('CJS validator did not accept the shipped living example');
+      }
+    });
+    if (validatorProbe.operationError !== undefined) {
+      throw validatorProbe.operationError;
+    }
+    if (validatorProbe.poisonedPropertyReads !== 0) {
+      throw new Error('CJS validator consulted the poisoned bare url module');
+    }
+  `;
 }
 
 const MAX_BROWSER_BUNDLE_BYTES = 4 * 1024 * 1024;
@@ -183,20 +294,38 @@ export const PACKAGE_SMOKE_COMMAND_POLICIES = Object.freeze({
 
 type PackageSmokeConsumerProfile = Readonly<{
   commandPolicy: PackageSmokeCommandPolicy;
+  maximumMaterializationAttempts: 1 | 2;
+  npmCacheRole: PackageSmokeConsumerNpmCacheRole;
   omittedDependencyClasses: readonly ('dev' | 'optional')[];
 }>;
+
+export type PackageSmokeNpmCacheRole = 'control' | 'core' | 'charts' | 'full';
+export type PackageSmokeNpmCacheRoleState = 'unused' | 'active' | 'complete';
+type PackageSmokeConsumerNpmCacheRole = Exclude<PackageSmokeNpmCacheRole, 'control'>;
+const PACKAGE_SMOKE_NPM_CACHE_ROLES = Object.freeze([
+  'control',
+  'core',
+  'charts',
+  'full',
+] as const satisfies readonly PackageSmokeNpmCacheRole[]);
 
 export const PACKAGE_SMOKE_CONSUMER_PROFILES = Object.freeze({
   core: Object.freeze({
     commandPolicy: PACKAGE_SMOKE_COMMAND_POLICIES.npmCiCore,
+    maximumMaterializationAttempts: 1,
+    npmCacheRole: 'core',
     omittedDependencyClasses: Object.freeze(['dev', 'optional'] as const),
   }),
   charts: Object.freeze({
     commandPolicy: PACKAGE_SMOKE_COMMAND_POLICIES.npmCiCharts,
+    maximumMaterializationAttempts: 1,
+    npmCacheRole: 'charts',
     omittedDependencyClasses: Object.freeze(['optional'] as const),
   }),
   full: Object.freeze({
     commandPolicy: PACKAGE_SMOKE_COMMAND_POLICIES.npmCiFull,
+    maximumMaterializationAttempts: 2,
+    npmCacheRole: 'full',
     omittedDependencyClasses: Object.freeze([] as const),
   }),
 } satisfies Readonly<Record<string, PackageSmokeConsumerProfile>>);
@@ -232,7 +361,7 @@ export const PACKAGE_TARBALL_LIMITS = Object.freeze({
   uncompressedBytes: 512 * 1024 * 1024,
   fileBytes: 128 * 1024 * 1024,
   entries: 10_000,
-  tarPathBytes: 99,
+  tarPathBytes: PACKAGE_TAR_NAME_BYTES,
   sourceNodes: 20_000,
   sourceDepth: 32,
   directoryEntries: 10_000,
@@ -264,6 +393,28 @@ const NPM_GZIP_HEADER = Buffer.from([0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0
 let commandEnvironment: NodeJS.ProcessEnv | undefined;
 let commandNodeAuthority: NodeExecutableFileAuthority | undefined;
 let commandRuntimeAuthority: PackageRuntimeAuthority | undefined;
+let commandNpmCacheAuthorities: PackageSmokeNpmCacheAuthorities | undefined;
+interface PackageSmokeNpmCacheWorkspaceBinding {
+  readonly path: string;
+  readonly device: string;
+  readonly inode: string;
+  readonly mode: number;
+  readonly uid: number;
+  readonly gid: number;
+  readonly parentAncestry: RuntimePathAncestry;
+}
+interface PackageSmokeNpmCacheRoleBinding {
+  readonly authority: PackageSmokeNpmCacheAuthority;
+  readonly ancestry: RuntimePathAncestry;
+  environment?: NodeJS.ProcessEnv;
+  state: PackageSmokeNpmCacheRoleState;
+}
+interface PackageSmokeNpmCacheSession {
+  readonly workspace: PackageSmokeNpmCacheWorkspaceBinding;
+  readonly authorities: PackageSmokeNpmCacheAuthorities;
+  readonly roles: Record<PackageSmokeNpmCacheRole, PackageSmokeNpmCacheRoleBinding>;
+}
+let packageSmokeNpmCacheSession: PackageSmokeNpmCacheSession | undefined;
 interface PackageSmokeCommandRuntimeScope {
   readonly protectedParent: string;
   runtime?: ReviewedNodeRuntime;
@@ -295,14 +446,26 @@ export interface PackageSmokeRegularFileOpenTestEvent {
   readonly label: string;
 }
 
-export type PackageSmokeRegularFileOpenTestHook = (
-  event: PackageSmokeRegularFileOpenTestEvent,
+export interface PackageSmokeRegularFileReadTestEvent {
+  readonly phase: 'regular-file-reviewed-after-fstat-before-read';
+  readonly path: string;
+  readonly label: string;
+  readonly reviewedSize: number;
+  readonly maximumBytes: number;
+}
+
+export type PackageSmokeRegularFileTestEvent =
+  | PackageSmokeRegularFileOpenTestEvent
+  | PackageSmokeRegularFileReadTestEvent;
+
+export type PackageSmokeRegularFileTestHook = (
+  event: PackageSmokeRegularFileTestEvent,
 ) => void;
 
 function openExpectedRegularFileAfterReview(
   path: string,
   label: string,
-  trustedTestHook?: PackageSmokeRegularFileOpenTestHook,
+  trustedTestHook?: PackageSmokeRegularFileTestHook,
 ): number {
   trustedTestHook?.(Object.freeze({
     phase: 'regular-file-reviewed-before-open',
@@ -404,7 +567,7 @@ function inspectRuntimeRegularFile(
   maximumBytes: number,
   label: string,
   executable = false,
-  trustedTestHook?: PackageSmokeRegularFileOpenTestHook,
+  trustedTestHook?: PackageSmokeRegularFileTestHook,
 ): RuntimeFileAuthority {
   if (!isAbsolute(path) || Buffer.byteLength(path, 'utf8') > NPM_AUTHORITY_LIMITS.pathBytes ||
       realpathSync(path) !== path) {
@@ -495,7 +658,7 @@ function inspectRuntimePathAncestry(path: string, label: string): RuntimePathAnc
 
 export function inspectNodeExecutableAuthority(
   executable: string,
-  trustedTestHook?: PackageSmokeRegularFileOpenTestHook,
+  trustedTestHook?: PackageSmokeRegularFileTestHook,
 ): NodeExecutableFileAuthority {
   return {
     executable,
@@ -908,22 +1071,24 @@ function run(
   return result.stdout.trim();
 }
 
+// Fixture receipts bind SHA-256(JCS(strictly parsed JSON)); pretty-print bytes
+// are intentionally outside this semantic digest domain.
 const EXPECTED_FIXTURE_MANIFEST_SHA256 =
-  '1db62cc21bf88b949399f213a792eb3784912dd67f65b714ae66ca5e60d444ec';
+  'd91462201f6907ce0bea98638c65d2ad84b672d0eed06b96e05b0f25cd79780e';
 const EXPECTED_FIXTURE_LOCK_SHA256 =
-  'c804767e2a73034f5600d3185f8e16c65ade42d2de4d50f334de7513612a6f6c';
+  '01d9c1f54a98559275983c539ee0372b3746a839a5b98edb9f736a68d55b7d16';
 const EXPECTED_DEV_DEPENDENCIES = Object.freeze({
-  '@types/node': '20.19.43',
-  '@types/react': '19.2.17',
-  '@types/react-dom': '19.2.3',
+  '@types/node': '26.1.2',
+  '@types/react': '19.2.18',
+  '@types/react-dom': '19.2.4',
   esbuild: '0.28.1',
-  react: '19.2.7',
-  'react-dom': '19.2.7',
-  typescript: '5.9.3',
+  react: '19.2.8',
+  'react-dom': '19.2.8',
+  typescript: '7.0.2',
 });
 const EXPECTED_OPTIONAL_DEPENDENCIES = Object.freeze({
-  '@react-three/fiber': '9.6.1',
-  '@types/three': '0.185.1',
+  '@react-three/fiber': '9.7.0',
+  '@types/three': '0.185.3',
   'd3-force-3d': '3.0.6',
   three: '0.185.1',
 });
@@ -936,8 +1101,10 @@ const EXPECTED_PACKAGE_FILE_ENTRIES = Object.freeze([
   'CLAUDE.md',
   'CONTRIBUTING.md',
   'GOVERNANCE.md',
+  'MIGRATION.md',
   'ROADMAP.md',
   'SECURITY.md',
+  'SUPPORT.md',
   'LICENSE',
   'THIRD_PARTY_NOTICES.md',
   'LICENSES',
@@ -962,6 +1129,8 @@ const NPM_CI_FLAGS = [
   '--install-strategy=nested',
   '--registry=https://registry.npmjs.org/',
 ] as const;
+const NPM_USER_CONFIG_SOURCE = '# isolated package-smoke npm user config\n';
+const NPM_GLOBAL_CONFIG_SOURCE = '# isolated package-smoke npm global config\n';
 
 type SmokePhase = 'prepare' | 'execute';
 
@@ -1170,6 +1339,169 @@ function strictJson(text: string, label: string, maximumBytes = MAX_JSON_BYTES):
   return parsed.value;
 }
 
+/**
+ * Prove the source-map contract against the installed tarball bytes, not the
+ * source checkout. Runtime maps must be terminally referenced and carry every
+ * mapped source inline; declaration output deliberately carries no map metadata.
+ */
+export function assertInstalledSourceMapClosure(
+  installedRoot: string,
+  packedPaths: readonly string[],
+  options: { readonly requireExactSourceInventory?: boolean } = {},
+): void {
+  const packedPathSet = new Set(packedPaths);
+  const referencedMaps = new Set<string>();
+  const reviewedInputContents = new Map<string, string>();
+
+  for (const declarationPath of packedPaths.filter(
+    (entry) => entry.endsWith('.d.ts') || entry.endsWith('.d.cts'),
+  )) {
+    const declaration = readUtf8RegularFileStable(
+      join(installedRoot, ...declarationPath.split('/')),
+      `packed declaration ${declarationPath}`,
+      PACKAGE_TARBALL_LIMITS.fileBytes,
+    );
+    try {
+      inspectReviewedSourceMapMetadata(declaration, declarationPath, 'declaration');
+    } catch (error) {
+      fail(`packed ${(error as Error).message}`);
+    }
+  }
+
+  for (const ownerPath of packedPaths.filter(
+    (entry) => entry.startsWith('dist/') && /\.(?:js|cjs)$/u.test(entry),
+  )) {
+    const owner = readUtf8RegularFileStable(
+      join(installedRoot, ...ownerPath.split('/')),
+      `packed runtime ${ownerPath}`,
+      REVIEWED_PACKAGE_SOURCE_MAP_LIMITS.generatedCodeBytes,
+    );
+    let reference: string | undefined;
+    try {
+      reference = inspectReviewedSourceMapMetadata(owner, ownerPath, 'runtime');
+    } catch (error) {
+      fail(`packed ${(error as Error).message}`);
+    }
+    const expectedMapless = isReviewedMaplessPackageRuntime(ownerPath, owner);
+    if (reference === undefined) {
+      if (!expectedMapless) fail(`packed runtime is unexpectedly mapless: ${ownerPath}`);
+      continue;
+    }
+    if (expectedMapless) {
+      fail(`packed reviewed mapless runtime acquired source-map metadata: ${ownerPath}`);
+    }
+    const mapPath = posix.join(posix.dirname(ownerPath), reference);
+    if (
+      posix.basename(mapPath) !== reference ||
+      !packedPathSet.has(mapPath) ||
+      referencedMaps.has(mapPath)
+    ) {
+      fail(`packed runtime source-map reference is absent or ambiguous: ${ownerPath}`);
+    }
+    referencedMaps.add(mapPath);
+
+    const mapLabel = `packed runtime source map ${mapPath}`;
+    let mapValue: JsonValue;
+    try {
+      mapValue = parseJsonSourceStrict<JsonValue>(
+        readUtf8RegularFileStable(
+        join(installedRoot, ...mapPath.split('/')),
+        mapLabel,
+        REVIEWED_PACKAGE_SOURCE_MAP_LIMITS.mapBytes,
+        ),
+        mapLabel,
+      );
+    } catch (error) {
+      fail(`${mapLabel} is not strict JSON: ${(error as Error).message}`);
+    }
+    if (!isRecord(mapValue)) fail(`packed runtime source map is not an object: ${mapPath}`);
+    exactKeys(mapValue, [
+      'file',
+      'mappings',
+      'names',
+      'sources',
+      'sourcesContent',
+      'version',
+    ], `packed runtime source map ${mapPath}`);
+    const names = mapValue.names;
+    const sources = mapValue.sources;
+    const sourcesContent = mapValue.sourcesContent;
+    if (
+      mapValue.version !== 3 ||
+      mapValue.file !== posix.basename(ownerPath) ||
+      typeof mapValue.mappings !== 'string' ||
+      mapValue.mappings.length === 0 ||
+      !Array.isArray(names) ||
+      names.some((name) => typeof name !== 'string') ||
+      !Array.isArray(sources) ||
+      sources.length === 0 ||
+      !Array.isArray(sourcesContent) ||
+      sourcesContent.length !== sources.length ||
+      sources.some((source) => typeof source !== 'string') ||
+      sourcesContent.some((content) => typeof content !== 'string')
+    ) {
+      fail(`packed runtime source map is incomplete: ${mapPath}`);
+    }
+    assertReviewedSourceMapResourceBounds(
+      mapValue.mappings as string,
+      names as string[],
+      sourcesContent as string[],
+      owner,
+      mapPath,
+    );
+    const sourceIdentities = new Set<string>();
+    const resolvedSourceIdentities: string[] = [];
+    for (let index = 0; index < sources.length; index++) {
+      const source = sources[index];
+      let sourceIdentity: string;
+      try {
+        sourceIdentity = resolveReviewedPackageSourceMapInput(mapPath, source);
+      } catch (error) {
+        fail(`packed ${(error as Error).message}`);
+      }
+      if (sourceIdentities.has(sourceIdentity)) {
+        fail(`packed runtime source map has a duplicate embedded source: ${mapPath}`);
+      }
+      sourceIdentities.add(sourceIdentity);
+      resolvedSourceIdentities.push(sourceIdentity);
+    }
+    inspectReviewedSourceMapMappings(
+      mapValue.mappings as string,
+      names as string[],
+      sourcesContent as string[],
+      owner,
+      mapPath,
+    );
+    for (let index = 0; index < resolvedSourceIdentities.length; index++) {
+      const sourceIdentity = resolvedSourceIdentities[index];
+      const content = sourcesContent[index];
+      if (sourceIdentity === undefined || typeof content !== 'string') {
+        fail(`packed runtime source map has an unsafe embedded source: ${mapPath}`);
+      }
+      const prior = reviewedInputContents.get(sourceIdentity);
+      if (prior !== undefined && prior !== content) {
+        fail(`packed runtime source maps disagree on embedded input: ${sourceIdentity}`);
+      }
+      reviewedInputContents.set(sourceIdentity, content);
+    }
+  }
+
+  const publishedMaps = packedPaths
+    .filter((entry) => entry.endsWith('.map'))
+    .sort();
+  const expectedMaps = [...referencedMaps].sort();
+  if (canonicalize(publishedMaps) !== canonicalize(expectedMaps)) {
+    fail('packed source-map inventory contains an unreferenced or non-runtime map');
+  }
+  if (options.requireExactSourceInventory !== false) {
+    try {
+      assertReviewedPackageSourceMapInputClosure(reviewedInputContents);
+    } catch (error) {
+      fail(`packed ${(error as Error).message}`);
+    }
+  }
+}
+
 /** Duplicate-key-safe JSON equality over values, deliberately independent of wire formatting. */
 export function parseAndAssertExactJsonValue(
   text: string,
@@ -1273,23 +1605,8 @@ function parseCanonicalTarName(raw: Buffer): string {
   return nameBytes.toString('ascii');
 }
 
-function isCanonicalArtifactSegment(segment: string): boolean {
-  if (!/^[A-Za-z0-9_@.+-]+$/u.test(segment) || segment === '.' || segment === '..' ||
-      segment.endsWith('.')) return false;
-  const basenameBeforeDot = segment.split('.')[0]!.toUpperCase();
-  return !/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/u.test(basenameBeforeDot);
-}
-
 function assertCanonicalArtifactPath(path: string, label: string): void {
-  if (
-    path.length === 0 ||
-    Buffer.byteLength(path, 'ascii') !== path.length ||
-    Buffer.byteLength(`package/${path}`, 'ascii') > PACKAGE_TARBALL_LIMITS.tarPathBytes ||
-    path.startsWith('/') ||
-    path.endsWith('/') ||
-    path.includes('\\') ||
-    path.split('/').some((segment) => !isCanonicalArtifactSegment(segment))
-  ) {
+  if (!isCanonicalPackageRelativePath(path)) {
     fail(`${label} is not a canonical package-relative path: ${path}`);
   }
 }
@@ -2280,18 +2597,6 @@ export function inspectNpmPackageTarball(
   };
 }
 
-function sourceDigest(path: string): string {
-  const stats = lstatSync(path);
-  return digestRegularFileStable(path, stats.size, 'package-smoke JSON source', MAX_JSON_BYTES)
-    .slice('sha256:'.length);
-}
-
-function canonicalJsonSourceDigest(path: string, label: string): string {
-  return createHash('sha256')
-    .update(canonicalize(readStrictJson(path, label)))
-    .digest('hex');
-}
-
 function exactJsonEqual(left: unknown, right: unknown): boolean {
   return canonicalize(left) === canonicalize(right);
 }
@@ -2573,7 +2878,7 @@ export function validatePackageSmokeFixture(
   }
 }
 
-function validateFixtureSources(): {
+export function validateFixtureSources(): {
   readonly manifest: JsonValue;
   readonly manifestRaw: Buffer;
   readonly lock: JsonValue;
@@ -2732,9 +3037,28 @@ interface PackageSmokeOperationalPaths {
   readonly root: string;
   readonly home: string;
   readonly temporary: string;
-  readonly npmCache: string;
+  readonly npmCacheRoot: string;
   readonly executeDenied: string;
 }
+
+export interface PackageSmokeNpmConfigPaths {
+  readonly userConfig: string;
+  readonly globalConfig: string;
+}
+
+export interface PackageSmokeNpmCacheAuthority {
+  readonly role: PackageSmokeNpmCacheRole;
+  readonly path: string;
+  readonly device: string;
+  readonly inode: string;
+  readonly mode: 0o700;
+  readonly uid: number;
+  readonly gid: number;
+}
+
+export type PackageSmokeNpmCacheAuthorities = Readonly<
+  Record<PackageSmokeNpmCacheRole, PackageSmokeNpmCacheAuthority>
+>;
 
 function packageSmokeOperationalPaths(workspace: string): PackageSmokeOperationalPaths {
   const operationalRoot = join(workspace, 'operational');
@@ -2742,23 +3066,343 @@ function packageSmokeOperationalPaths(workspace: string): PackageSmokeOperationa
     root: operationalRoot,
     home: join(operationalRoot, 'home'),
     temporary: join(operationalRoot, 'tmp'),
-    npmCache: join(operationalRoot, 'npm-cache'),
+    npmCacheRoot: join(operationalRoot, 'npm-cache'),
     executeDenied: join(operationalRoot, 'execute-denied'),
   };
 }
 
-function createPackageSmokeOperationalDirectories(workspace: string): void {
+export function packageSmokeNpmCachePath(
+  workspace: string,
+  role: PackageSmokeNpmCacheRole,
+): string {
+  if (!PACKAGE_SMOKE_NPM_CACHE_ROLES.includes(role)) {
+    fail('package-smoke npm cache role is outside the closed profile');
+  }
+  return join(packageSmokeOperationalPaths(workspace).npmCacheRoot, role);
+}
+
+function inspectPackageSmokeNpmCacheAuthority(
+  workspace: string,
+  role: PackageSmokeNpmCacheRole,
+  label: string,
+): PackageSmokeNpmCacheAuthority {
+  const path = packageSmokeNpmCachePath(workspace, role);
+  const stats = lstatSync(path, { bigint: true });
+  const currentUid = process.getuid?.();
+  if (
+    currentUid === undefined ||
+    !stats.isDirectory() ||
+    stats.isSymbolicLink() ||
+    realpathSync(path) !== path ||
+    Number(stats.mode & 0o7777n) !== 0o700 ||
+    stats.uid !== BigInt(currentUid)
+  ) {
+    fail(`${label} npm cache is not one canonical current-UID mode-0700 directory`);
+  }
+  return Object.freeze({
+    role,
+    path,
+    device: stats.dev.toString(10),
+    inode: stats.ino.toString(10),
+    mode: 0o700,
+    uid: portableUnsignedBigInt(stats.uid, `${label} npm cache uid`),
+    gid: portableUnsignedBigInt(stats.gid, `${label} npm cache gid`),
+  });
+}
+
+export function inspectPackageSmokeNpmCacheAuthorities(
+  workspace: string,
+  label: string,
+): PackageSmokeNpmCacheAuthorities {
+  return Object.freeze(Object.fromEntries(PACKAGE_SMOKE_NPM_CACHE_ROLES.map((role) => [
+    role,
+    inspectPackageSmokeNpmCacheAuthority(workspace, role, `${label} ${role}`),
+  ])) as unknown as PackageSmokeNpmCacheAuthorities);
+}
+
+export function assertPackageSmokeNpmCacheIdentity(
+  activePath: string | undefined,
+  expected: PackageSmokeNpmCacheAuthority,
+  label: string,
+): void {
+  if (activePath !== expected.path) {
+    fail(`${label} npm cache identity changed`);
+  }
+  const npmCacheRoot = dirname(expected.path);
+  const operationalRoot = dirname(npmCacheRoot);
+  const workspace = dirname(operationalRoot);
+  if (
+    npmCacheRoot !== join(operationalRoot, 'npm-cache') ||
+    operationalRoot !== join(workspace, 'operational') ||
+    expected.path !== packageSmokeNpmCachePath(workspace, expected.role)
+  ) {
+    fail(`${label} npm cache authority has an invalid workspace ancestry`);
+  }
+  const observed = inspectPackageSmokeNpmCacheAuthority(
+    workspace,
+    expected.role,
+    label,
+  );
+  if (!exactJsonEqual(observed, expected)) {
+    fail(`${label} npm cache authority changed`);
+  }
+}
+
+function inspectPackageSmokeNpmCacheWorkspaceBinding(
+  workspace: string,
+  label: string,
+): PackageSmokeNpmCacheWorkspaceBinding {
+  if (!isAbsolute(workspace) || realpathSync(workspace) !== workspace) {
+    fail(`${label} workspace is not one canonical physical absolute directory`);
+  }
+  const stats = lstatSync(workspace, { bigint: true });
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    fail(`${label} workspace is not one canonical physical absolute directory`);
+  }
+  return Object.freeze({
+    path: workspace,
+    device: stats.dev.toString(10),
+    inode: stats.ino.toString(10),
+    mode: Number(stats.mode & 0o7777n),
+    uid: portableUnsignedBigInt(stats.uid, `${label} workspace uid`),
+    gid: portableUnsignedBigInt(stats.gid, `${label} workspace gid`),
+    parentAncestry: inspectRuntimePathAncestry(workspace, `${label} workspace`),
+  });
+}
+
+function assertClosedPackageSmokeNpmCacheRole(
+  role: PackageSmokeNpmCacheRole,
+): void {
+  if (!PACKAGE_SMOKE_NPM_CACHE_ROLES.includes(role)) {
+    fail('package-smoke npm cache role is outside the closed profile');
+  }
+}
+
+function copyPackageSmokeNpmCacheAuthorities(
+  authorities: PackageSmokeNpmCacheAuthorities,
+): PackageSmokeNpmCacheAuthorities {
+  return Object.freeze(Object.fromEntries(PACKAGE_SMOKE_NPM_CACHE_ROLES.map((role) => {
+    const authority = authorities[role];
+    if (authority === undefined || authority.role !== role) {
+      fail('package-smoke npm cache authorities do not cover the closed role profile');
+    }
+    return [role, Object.freeze({ ...authority })];
+  })) as unknown as PackageSmokeNpmCacheAuthorities);
+}
+
+/**
+ * Opens the one prepare-local first-use ledger. Emptiness is deliberately not
+ * inspected here: each role proves it exactly once at its command-adjacent cold
+ * activation, after every controlling identity has been rebound.
+ */
+export function beginPackageSmokeNpmCacheSession(
+  workspace: string,
+  authorities: PackageSmokeNpmCacheAuthorities,
+): void {
+  if (packageSmokeNpmCacheSession !== undefined) {
+    fail('package-smoke npm cache session is already active');
+  }
+  const workspaceBinding = inspectPackageSmokeNpmCacheWorkspaceBinding(
+    workspace,
+    'new package-smoke npm cache session',
+  );
+  const capturedAuthorities = copyPackageSmokeNpmCacheAuthorities(authorities);
+  const roles = Object.fromEntries(PACKAGE_SMOKE_NPM_CACHE_ROLES.map((role) => {
+    const authority = capturedAuthorities[role];
+    if (authority.path !== packageSmokeNpmCachePath(workspace, role)) {
+      fail(`new package-smoke ${role} npm cache path differs from its workspace role`);
+    }
+    assertPackageSmokeNpmCacheIdentity(
+      authority.path,
+      authority,
+      `new package-smoke ${role}`,
+    );
+    return [role, {
+      authority,
+      ancestry: inspectRuntimePathAncestry(
+        authority.path,
+        `new package-smoke ${role} npm cache`,
+      ),
+      state: 'unused' as const,
+    }];
+  })) as Record<PackageSmokeNpmCacheRole, PackageSmokeNpmCacheRoleBinding>;
+  const reboundWorkspace = inspectPackageSmokeNpmCacheWorkspaceBinding(
+    workspace,
+    'rebound package-smoke npm cache session',
+  );
+  if (!exactJsonEqual(reboundWorkspace, workspaceBinding)) {
+    fail('package-smoke npm cache workspace changed while its session was captured');
+  }
+  packageSmokeNpmCacheSession = {
+    workspace: workspaceBinding,
+    authorities: capturedAuthorities,
+    roles,
+  };
+}
+
+export function resetPackageSmokeNpmCacheSession(): void {
+  packageSmokeNpmCacheSession = undefined;
+}
+
+function activePackageSmokeNpmCacheSession(
+  authorities: PackageSmokeNpmCacheAuthorities,
+  label: string,
+): PackageSmokeNpmCacheSession {
+  const session = packageSmokeNpmCacheSession;
+  if (session === undefined) fail(`${label} has no active package-smoke npm cache session`);
+  if (!exactJsonEqual(authorities, session.authorities)) {
+    fail(`${label} npm cache authorities differ from the captured session`);
+  }
+  const workspace = inspectPackageSmokeNpmCacheWorkspaceBinding(
+    session.workspace.path,
+    label,
+  );
+  if (!exactJsonEqual(workspace, session.workspace)) {
+    fail(`${label} npm cache workspace authority changed`);
+  }
+  return session;
+}
+
+function assertPackageSmokeNpmCacheRoleBinding(
+  session: PackageSmokeNpmCacheSession,
+  role: PackageSmokeNpmCacheRole,
+  label: string,
+): PackageSmokeNpmCacheRoleBinding {
+  assertClosedPackageSmokeNpmCacheRole(role);
+  const binding = session.roles[role];
+  const expected = binding.authority;
+  if (
+    expected.role !== role ||
+    expected.path !== packageSmokeNpmCachePath(session.workspace.path, role)
+  ) {
+    fail(`${label} npm cache role or path differs from the captured session`);
+  }
+  const ancestry = inspectRuntimePathAncestry(expected.path, `${label} npm cache`);
+  if (!exactJsonEqual(ancestry, binding.ancestry)) {
+    fail(`${label} npm cache ancestry changed`);
+  }
+  assertPackageSmokeNpmCacheIdentity(expected.path, expected, label);
+  return binding;
+}
+
+function assertPackageSmokeNpmCacheExactlyEmpty(
+  path: string,
+  label: string,
+): void {
+  // bufferSize=1 plus one read prevents a seeded directory from inducing an
+  // unbounded inventory. Dirent type is irrelevant; a FIFO is named, never opened.
+  const directory = opendirSync(path, { bufferSize: 1 });
+  try {
+    if (directory.readSync() !== null) {
+      fail(`${label} npm cache is not empty at its unique cold activation`);
+    }
+  } finally {
+    directory.closeSync();
+  }
+}
+
+export function activatePackageSmokeNpmCache(
+  environment: NodeJS.ProcessEnv,
+  authorities: PackageSmokeNpmCacheAuthorities,
+  role: PackageSmokeNpmCacheRole,
+  label: string,
+): void {
+  const session = activePackageSmokeNpmCacheSession(authorities, label);
+  const binding = assertPackageSmokeNpmCacheRoleBinding(session, role, label);
+  if (binding.state !== 'unused') {
+    fail(`${label} npm cache cold activation requires the unused role state`);
+  }
+  for (const otherRole of PACKAGE_SMOKE_NPM_CACHE_ROLES) {
+    if (otherRole !== role && session.roles[otherRole].state === 'active') {
+      fail(`${label} cannot activate while npm cache role ${otherRole} remains active`);
+    }
+  }
+  assertPackageSmokeNpmCacheExactlyEmpty(binding.authority.path, label);
+  assertPackageSmokeNpmCacheRoleBinding(session, role, `${label} post-empty`);
+  environment.npm_config_cache = binding.authority.path;
+  assertPackageSmokeNpmCacheIdentity(
+    environment.npm_config_cache,
+    binding.authority,
+    `${label} active environment`,
+  );
+  assertPackageSmokeNpmCacheRoleBinding(session, role, `${label} pre-activation`);
+  binding.environment = environment;
+  binding.state = 'active';
+}
+
+export function assertPackageSmokeNpmCacheRoleActive(
+  environment: NodeJS.ProcessEnv,
+  authorities: PackageSmokeNpmCacheAuthorities,
+  role: PackageSmokeNpmCacheRole,
+  label: string,
+): void {
+  const session = activePackageSmokeNpmCacheSession(authorities, label);
+  const binding = assertPackageSmokeNpmCacheRoleBinding(session, role, label);
+  if (binding.state !== 'active' || binding.environment !== environment) {
+    fail(`${label} npm cache role is not active in the captured environment`);
+  }
+  assertPackageSmokeNpmCacheIdentity(
+    environment.npm_config_cache,
+    binding.authority,
+    label,
+  );
+}
+
+export function completePackageSmokeNpmCacheRole(
+  environment: NodeJS.ProcessEnv,
+  authorities: PackageSmokeNpmCacheAuthorities,
+  role: PackageSmokeNpmCacheRole,
+  label: string,
+): void {
+  assertPackageSmokeNpmCacheRoleActive(environment, authorities, role, label);
+  packageSmokeNpmCacheSession!.roles[role].state = 'complete';
+}
+
+function assertPackageSmokeNpmCacheSessionComplete(
+  authorities: PackageSmokeNpmCacheAuthorities,
+): void {
+  const session = activePackageSmokeNpmCacheSession(
+    authorities,
+    'completed package-smoke npm cache session',
+  );
+  for (const role of PACKAGE_SMOKE_NPM_CACHE_ROLES) {
+    if (session.roles[role].state !== 'complete') {
+      fail(`package-smoke npm cache role ${role} did not reach complete`);
+    }
+  }
+}
+
+function createPackageSmokeOperationalDirectories(
+  workspace: string,
+): PackageSmokeNpmCacheAuthorities {
   const paths = packageSmokeOperationalPaths(workspace);
   mkdirSync(paths.root, { mode: 0o700 });
-  for (const path of [paths.home, paths.temporary, paths.npmCache]) {
+  chmodSync(paths.root, 0o700);
+  for (const path of [paths.home, paths.temporary, paths.npmCacheRoot]) {
     mkdirSync(path, { mode: 0o700 });
+    chmodSync(path, 0o700);
+  }
+  for (const role of PACKAGE_SMOKE_NPM_CACHE_ROLES) {
+    const path = packageSmokeNpmCachePath(workspace, role);
+    mkdirSync(path, { mode: 0o700 });
+    chmodSync(path, 0o700);
   }
   writeFileSync(paths.executeDenied, 'not-a-directory\n', { flag: 'wx', mode: 0o444 });
+  chmodSync(paths.executeDenied, 0o444);
+  return inspectPackageSmokeNpmCacheAuthorities(workspace, 'new package-smoke');
 }
 
 function assertPackageSmokeOperationalDirectories(workspace: string): void {
   const paths = packageSmokeOperationalPaths(workspace);
-  for (const path of [paths.root, paths.home, paths.temporary, paths.npmCache]) {
+  const npmCaches = PACKAGE_SMOKE_NPM_CACHE_ROLES.map((role) =>
+    packageSmokeNpmCachePath(workspace, role));
+  for (const path of [
+    paths.root,
+    paths.home,
+    paths.temporary,
+    paths.npmCacheRoot,
+    ...npmCaches,
+  ]) {
     const stats = lstatSync(path);
     if (!stats.isDirectory() || stats.isSymbolicLink() || realpathSync(path) !== path) {
       fail(`package-smoke operational path is not a canonical real directory: ${path}`);
@@ -2780,6 +3424,148 @@ function assertPackageSmokeOperationalDirectories(workspace: string): void {
   }
 }
 
+function assertPackageSmokeNpmConfigAuthority(
+  paths: PackageSmokeNpmConfigPaths,
+  label: string,
+): void {
+  const workspace = dirname(paths.userConfig);
+  if (
+    paths.userConfig !== join(workspace, 'npm-userconfig') ||
+    paths.globalConfig !== join(workspace, 'npm-globalconfig')
+  ) {
+    fail(`${label} paths differ from their closed workspace locations`);
+  }
+  assertPackageSmokeOperationalDirectories(workspace);
+  readExactIntentFile(
+    paths.userConfig,
+    NPM_USER_CONFIG_SOURCE,
+    0o600,
+    `${label} user config`,
+  );
+  readExactIntentFile(
+    paths.globalConfig,
+    NPM_GLOBAL_CONFIG_SOURCE,
+    0o600,
+    `${label} global config`,
+  );
+}
+
+export function createPackageSmokeNpmConfigFiles(
+  workspace: string,
+): PackageSmokeNpmConfigPaths {
+  if (
+    !isAbsolute(workspace) ||
+    realpathSync(workspace) !== workspace ||
+    !lstatSync(workspace).isDirectory()
+  ) {
+    fail('package-smoke npm config workspace must be one canonical real directory');
+  }
+  const paths = {
+    userConfig: join(workspace, 'npm-userconfig'),
+    globalConfig: join(workspace, 'npm-globalconfig'),
+  };
+  writeFileSync(paths.userConfig, NPM_USER_CONFIG_SOURCE, {
+    flag: 'wx',
+    mode: 0o600,
+  });
+  writeFileSync(paths.globalConfig, NPM_GLOBAL_CONFIG_SOURCE, {
+    flag: 'wx',
+    mode: 0o600,
+  });
+  // An arbitrary caller umask may remove requested bits. Normalize only after
+  // exclusive owner-only creation, so no permissive-umask write window exists.
+  chmodSync(paths.userConfig, 0o600);
+  chmodSync(paths.globalConfig, 0o600);
+  assertPackageSmokeNpmConfigAuthority(paths, 'new package-smoke npm config');
+  return Object.freeze(paths);
+}
+
+export function assertPackageSmokeNpmConfigIdentity(
+  active: PackageSmokeNpmConfigPaths,
+  expected: PackageSmokeNpmConfigPaths,
+  label: string,
+): void {
+  if (
+    active.userConfig !== expected.userConfig ||
+    active.globalConfig !== expected.globalConfig
+  ) {
+    fail(`${label} npm configuration identity changed`);
+  }
+  assertPackageSmokeNpmConfigAuthority(active, label);
+}
+
+export function assertPackageSmokeProjectNpmConfigAbsent(
+  cwd: string,
+  label: string,
+): void {
+  const projectConfig = join(cwd, '.npmrc');
+  try {
+    lstatSync(projectConfig);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    fail(`${label} project npm configuration absence could not be established`);
+  }
+  fail(`${label} project npm configuration must be absent`);
+}
+
+function assertActivePackageSmokeNpmConfigAuthority(label: string): void {
+  const environment = activeCommandEnvironment();
+  const userConfig = environment.npm_config_userconfig;
+  const globalConfig = environment.npm_config_globalconfig;
+  if (userConfig === undefined || globalConfig === undefined) {
+    fail(`${label} has incomplete npm configuration authority`);
+  }
+  assertPackageSmokeNpmConfigAuthority({ userConfig, globalConfig }, label);
+}
+
+export function assertPackageMaterializationInputAuthority(options: {
+  readonly artifact: Buffer;
+  readonly artifactPath: string;
+  readonly artifactIntegrity: string;
+  readonly consumer: string;
+  readonly exactFixtureLockRaw: Buffer;
+  readonly exactFixtureManifestRaw: Buffer;
+  readonly npmConfigs: PackageSmokeNpmConfigPaths;
+  readonly npmCacheAuthority: PackageSmokeNpmCacheAuthority;
+  readonly label: string;
+}): void {
+  assertSri512(options.artifactIntegrity, `${options.label} artifact integrity`);
+  if (sha512Integrity(options.artifact) !== options.artifactIntegrity) {
+    fail(`${options.label} artifact bytes differ from their integrity`);
+  }
+  readExactIntentFile(
+    options.artifactPath,
+    options.artifact,
+    0o644,
+    `${options.label} source tarball`,
+  );
+  assertPackageSmokeProjectNpmConfigAbsent(options.consumer, options.label);
+  assertPackageSmokeNpmConfigAuthority(options.npmConfigs, `${options.label} npm config`);
+  assertPackageSmokeNpmCacheIdentity(
+    options.npmCacheAuthority.path,
+    options.npmCacheAuthority,
+    `${options.label} npm cache`,
+  );
+  readExactIntentFile(
+    join(options.consumer, 'package.json'),
+    options.exactFixtureManifestRaw,
+    0o644,
+    `${options.label} fixture manifest`,
+  );
+  readExactIntentFile(
+    join(options.consumer, 'package-lock.json'),
+    options.exactFixtureLockRaw,
+    0o644,
+    `${options.label} fixture lock`,
+  );
+  readExactIntentFile(
+    join(options.consumer, LOCAL_TARBALL_FILENAME),
+    options.artifact,
+    0o644,
+    `${options.label} local tarball`,
+  );
+}
+
 export function packageSmokeEnvironment(
   nodeExecutable: string,
   workspace: string,
@@ -2792,7 +3578,9 @@ export function packageSmokeEnvironment(
   const paths = packageSmokeOperationalPaths(workspace);
   const home = phase === 'prepare' ? paths.home : join(paths.executeDenied, 'home');
   const temporary = phase === 'prepare' ? paths.temporary : join(paths.executeDenied, 'tmp');
-  const npmCache = phase === 'prepare' ? paths.npmCache : join(paths.executeDenied, 'npm-cache');
+  const npmCache = phase === 'prepare'
+    ? packageSmokeNpmCachePath(workspace, 'control')
+    : join(paths.executeDenied, 'npm-cache');
   environment.HOME = home;
   environment.TMPDIR = temporary;
   environment.TMP = temporary;
@@ -2867,6 +3655,21 @@ function nodeCliVersion(nodeExecutable: string, cli: string, label: string): str
   return value;
 }
 
+function npmCacheRoleForCommandPolicy(
+  policy: PackageSmokeCommandPolicy,
+): PackageSmokeNpmCacheRole {
+  if (
+    policy === PACKAGE_SMOKE_COMMAND_POLICIES.npmVersion ||
+    policy === PACKAGE_SMOKE_COMMAND_POLICIES.npmPack
+  ) {
+    return 'control';
+  }
+  if (policy === PACKAGE_SMOKE_COMMAND_POLICIES.npmCiCore) return 'core';
+  if (policy === PACKAGE_SMOKE_COMMAND_POLICIES.npmCiCharts) return 'charts';
+  if (policy === PACKAGE_SMOKE_COMMAND_POLICIES.npmCiFull) return 'full';
+  fail('npm command policy has no closed cache identity');
+}
+
 function runNpmCommand(
   nodeExecutable: string,
   npmExecutable: string,
@@ -2880,11 +3683,30 @@ function runNpmCommand(
   if (expected.node.executable !== nodeExecutable || expected.npm.cli !== npmExecutable) {
     fail('npm command differs from its reviewed runtime authority');
   }
+  const npmCacheAuthorities = commandNpmCacheAuthorities;
+  if (npmCacheAuthorities === undefined) {
+    fail('npm command cache authority is not initialized');
+  }
+  const npmCacheRole = npmCacheRoleForCommandPolicy(policy);
+  const npmCacheAuthority = npmCacheAuthorities[npmCacheRole];
   const assertNpm = (phase: string): void => {
+    assertPackageSmokeNpmCacheRoleActive(
+      activeCommandEnvironment(),
+      npmCacheAuthorities,
+      npmCacheRole,
+      `${phase} ${npmCacheRole}`,
+    );
     const observed = inspectNpmPackageAuthority(npmExecutable);
     if (!exactJsonEqual(observed, expected.npm)) {
       fail(`${phase} npm package authority changed`);
     }
+    assertPackageSmokeProjectNpmConfigAbsent(cwd, `${phase} npm command`);
+    assertActivePackageSmokeNpmConfigAuthority(`${phase} npm configuration`);
+    assertPackageSmokeNpmCacheIdentity(
+      activeCommandEnvironment().npm_config_cache,
+      npmCacheAuthority,
+      `${phase} ${npmCacheRole}`,
+    );
   };
   assertNpm('pre-command');
   try {
@@ -3210,7 +4032,7 @@ function readRegularFileStable(
   expectedSize: number | undefined,
   label = 'workspace file',
   maxBytes = MAX_WORKSPACE_FILE_BYTES,
-  trustedTestHook?: PackageSmokeRegularFileOpenTestHook,
+  trustedTestHook?: PackageSmokeRegularFileTestHook,
 ): Buffer {
   const pathBefore = lstatSync(path);
   if (!pathBefore.isFile()) fail(`${label} must be a regular file`);
@@ -3236,7 +4058,36 @@ function readRegularFileStable(
     ) {
       fail(`${label} changed before it could be read`);
     }
-    const raw = readFileSync(descriptor);
+    trustedTestHook?.(Object.freeze({
+      phase: 'regular-file-reviewed-after-fstat-before-read',
+      path,
+      label,
+      reviewedSize: before.size,
+      maximumBytes: maxBytes,
+    }));
+
+    // Allocate only the descriptor size reviewed above. A descriptor-wide
+    // read can follow concurrent growth and allocate attacker-controlled bytes
+    // beyond the preflight cap before the final identity check gets a chance to
+    // reject them.
+    const raw = Buffer.allocUnsafe(before.size);
+    let offset = 0;
+    while (offset < before.size) {
+      const count = readSync(
+        descriptor,
+        raw,
+        offset,
+        before.size - offset,
+        offset,
+      );
+      if (count <= 0) fail(`${label} ended before its declared size`);
+      offset += count;
+    }
+    const overflowProbe = Buffer.allocUnsafe(1);
+    const overflowCount = readSync(descriptor, overflowProbe, 0, 1, before.size);
+    if (overflowCount !== 0) {
+      fail(`${label} grew beyond its declared size while it was being read`);
+    }
     const after = fstatSync(descriptor);
     const pathAfter = lstatSync(path);
     if (
@@ -3274,9 +4125,9 @@ function readRegularFileStable(
 function readExactIntentFile(
   path: string,
   expectedValue: string | Buffer,
-  expectedMode: 0o444 | 0o644,
+  expectedMode: 0o444 | 0o600 | 0o644,
   label: string,
-  trustedTestHook?: PackageSmokeRegularFileOpenTestHook,
+  trustedTestHook?: PackageSmokeRegularFileTestHook,
 ): Buffer {
   if (!isAbsolute(path) || realpathSync(path) !== path) {
     fail(`${label} must be a canonical absolute regular path`);
@@ -3317,7 +4168,7 @@ export function assertFinalizedHostFile(
   path: string,
   expectedValue: string | Buffer,
   label: string,
-  trustedTestHook?: PackageSmokeRegularFileOpenTestHook,
+  trustedTestHook?: PackageSmokeRegularFileTestHook,
 ): void {
   readExactIntentFile(path, expectedValue, 0o444, label, trustedTestHook);
 }
@@ -3327,7 +4178,7 @@ function digestRegularFileStable(
   expectedSize: number,
   label: string,
   maxBytes: number,
-  trustedTestHook?: PackageSmokeRegularFileOpenTestHook,
+  trustedTestHook?: PackageSmokeRegularFileTestHook,
 ): string {
   const pathBefore = lstatSync(path);
   if (!pathBefore.isFile()) fail(`${label} must be a regular file`);
@@ -3974,6 +4825,21 @@ export function assertInstalledTopLevelPackageInventory(
 
 type OmittedDependencyClass = 'dev' | 'optional';
 
+class RetryableOptionalMaterializationGapError extends Error {
+  constructor(readonly missingPaths: readonly string[]) {
+    const sample = missingPaths.slice(0, 8).map((path) => {
+      const diagnostic = jsonDiagnosticString(path, 512);
+      return `${diagnostic.encoded}${diagnostic.truncated ? ' (truncated)' : ''}`;
+    }).join(', ');
+    super(
+      'npm reported success after pruning an exact optional-only package subset ' +
+      `(${missingPaths.length} missing; sample: ${sample}` +
+      `${missingPaths.length > 8 ? ', ...' : ''})`,
+    );
+    this.name = 'RetryableOptionalMaterializationGapError';
+  }
+}
+
 interface InstalledBinExpectation {
   readonly providerRoot: string;
   readonly target: string;
@@ -3989,6 +4855,54 @@ function lockPackageName(path: string): string {
   const name = path.slice(container.length + 1);
   if (!isCanonicalPackageName(name)) fail(`fixture lock has an invalid package name at ${path}`);
   return name;
+}
+
+function retryableOptionalMaterializationGap(options: {
+  readonly actualHiddenLock: JsonValue;
+  readonly expectedPackages: ReadonlyMap<string, Record<string, JsonValue>>;
+  readonly lock: Record<string, JsonValue>;
+  readonly lockedPackages: Record<string, JsonValue>;
+}): { readonly missingPaths: readonly string[]; readonly reducedLock: JsonValue } | undefined {
+  const actual = options.actualHiddenLock;
+  if (!isRecord(actual)) return undefined;
+  const actualKeys = Object.keys(actual).sort();
+  if (!exactJsonEqual(
+    actualKeys,
+    ['lockfileVersion', 'name', 'packages', 'requires', 'version'],
+  )) return undefined;
+  if (
+    actual.name !== options.lock.name ||
+    actual.version !== options.lock.version ||
+    actual.lockfileVersion !== options.lock.lockfileVersion ||
+    actual.requires !== options.lock.requires ||
+    !isRecord(actual.packages)
+  ) return undefined;
+
+  const actualPackages = actual.packages;
+  for (const [path, record] of Object.entries(actualPackages)) {
+    const expected = options.expectedPackages.get(path);
+    if (expected === undefined || !exactJsonEqual(record, expected)) return undefined;
+  }
+  const missingPaths: string[] = [];
+  for (const [path, record] of options.expectedPackages) {
+    if (Object.hasOwn(actualPackages, path)) continue;
+    if (record.optional !== true) return undefined;
+    missingPaths.push(path);
+  }
+  if (missingPaths.length === 0) return undefined;
+  return {
+    missingPaths: Object.freeze(missingPaths.sort()),
+    reducedLock: {
+      name: options.lock.name,
+      version: options.lock.version,
+      lockfileVersion: options.lock.lockfileVersion,
+      requires: options.lock.requires,
+      packages: {
+        '': options.lockedPackages['']!,
+        ...actualPackages,
+      },
+    },
+  };
 }
 
 function lockRuntimeSelectorMatches(
@@ -4050,6 +4964,24 @@ export function assertInstalledRecursivePackageClosure(
   omittedDependencyClasses: readonly OmittedDependencyClass[],
   npmMajor: number,
   runtime: NodeRuntimeIdentity,
+): void {
+  assertInstalledRecursivePackageClosureWithRetryPolicy(
+    consumer,
+    preparedLockValue,
+    omittedDependencyClasses,
+    npmMajor,
+    runtime,
+    true,
+  );
+}
+
+function assertInstalledRecursivePackageClosureWithRetryPolicy(
+  consumer: string,
+  preparedLockValue: JsonValue,
+  omittedDependencyClasses: readonly OmittedDependencyClass[],
+  npmMajor: number,
+  runtime: NodeRuntimeIdentity,
+  retryClassificationEnabled: boolean,
 ): void {
   if (npmMajor !== 10 && npmMajor !== 11) {
     fail('recursive package closure requires reviewed npm major 10 or 11');
@@ -4183,6 +5115,34 @@ export function assertInstalledRecursivePackageClosure(
   const hiddenLockPath = join(nodeModules, '.package-lock.json');
   const actualHiddenLock = readStrictJson(hiddenLockPath, 'installed hidden package lock');
   if (!exactJsonEqual(actualHiddenLock, expectedHiddenLock)) {
+    if (omitPolicy === '' && retryClassificationEnabled) {
+      const retryableGap = retryableOptionalMaterializationGap({
+        actualHiddenLock,
+        expectedPackages,
+        lock,
+        lockedPackages,
+      });
+      if (retryableGap !== undefined) {
+        let reducedClosureIsExact = false;
+        try {
+          assertInstalledRecursivePackageClosureWithRetryPolicy(
+            consumer,
+            retryableGap.reducedLock,
+            [],
+            npmMajor,
+            runtime,
+            false,
+          );
+          reducedClosureIsExact = true;
+        } catch {
+          // The ordinary exact-mismatch diagnostic below remains authoritative
+          // unless the reduced optional-only filesystem closure is also exact.
+        }
+        if (reducedClosureIsExact) {
+          throw new RetryableOptionalMaterializationGapError(retryableGap.missingPaths);
+        }
+      }
+    }
     const consumerName = jsonDiagnosticString(basename(consumer), 256);
     const difference = firstJsonDifferencePath(expectedHiddenLock, actualHiddenLock) ?? '$';
     fail(
@@ -4355,7 +5315,7 @@ export function assertInstalledRecursivePackageClosure(
 export function fingerprintPackageSmokeWorkspace(
   workspace: string,
   requireFinalizedRoot = false,
-  trustedTestHook?: PackageSmokeRegularFileOpenTestHook,
+  trustedTestHook?: PackageSmokeRegularFileTestHook,
 ): WorkspaceSeal {
   const canonicalRoot = realpathSync(workspace);
   if (canonicalRoot !== workspace) fail('workspace root is not canonical while sealing');
@@ -4642,61 +5602,216 @@ function artifactBoundFixtureLock(
   return derivedLock;
 }
 
+/**
+ * Accepts only a completely verified final materialization. npm deliberately
+ * exits zero when an optional dependency download fails, so the full peer
+ * profile may reuse its private cache for one bounded second attempt. A command
+ * or runtime-authority failure is never retryable, and two validation failures
+ * retain both causes.
+ */
+export function runVerifiedPackageMaterialization(
+  materialize: (attempt: 1 | 2) => unknown,
+  verify: () => unknown,
+  maximumAttempts: 1 | 2,
+  authorizeRetry: (failure: unknown) => unknown,
+): void {
+  if (maximumAttempts !== 1 && maximumAttempts !== 2) {
+    fail('package materialization attempt bound is outside its closed profile');
+  }
+  const materializeSynchronously = (attempt: 1 | 2): void => {
+    const result = materialize(attempt);
+    if (isPotentiallyAsynchronousResult(result)) {
+      fail('package materialization command callback must be synchronous');
+    }
+    if (result !== undefined) {
+      fail('package materialization command callback must return undefined');
+    }
+  };
+  const verifySynchronously = (): void => {
+    const result = verify();
+    if (isPotentiallyAsynchronousResult(result)) {
+      fail('package materialization verification callback must be synchronous');
+    }
+    if (result !== undefined) {
+      fail('package materialization verification callback must return undefined');
+    }
+  };
+  materializeSynchronously(1);
+  try {
+    verifySynchronously();
+    return;
+  } catch (firstValidationFailure) {
+    if (maximumAttempts === 1) throw firstValidationFailure;
+    let retryAuthorized: boolean;
+    try {
+      const retryDecision = authorizeRetry(firstValidationFailure);
+      if (isPotentiallyAsynchronousResult(retryDecision)) {
+        fail('package materialization retry authority callback must be synchronous');
+      }
+      if (typeof retryDecision !== 'boolean') {
+        fail('package materialization retry authority returned a non-boolean decision');
+      }
+      retryAuthorized = retryDecision;
+    } catch (retryAuthorityFailure) {
+      throw new AggregateError(
+        [firstValidationFailure, retryAuthorityFailure],
+        'package materialization validation failed and retry authority could not be established',
+      );
+    }
+    if (!retryAuthorized) throw firstValidationFailure;
+    try {
+      materializeSynchronously(2);
+    } catch (secondMaterializationFailure) {
+      throw new AggregateError(
+        [firstValidationFailure, secondMaterializationFailure],
+        'package materialization validation failed before the bounded retry command failed',
+      );
+    }
+    try {
+      verifySynchronously();
+    } catch (secondValidationFailure) {
+      throw new AggregateError(
+        [firstValidationFailure, secondValidationFailure],
+        'package materialization validation failed across both bounded attempts',
+      );
+    }
+  }
+}
+
 function prepareConsumer(
   consumer: string,
   tarballPath: string,
+  artifact: Buffer,
   artifactIntegrity: string,
   exactFixtureLockValue: JsonValue,
   exactFixtureManifestRaw: Buffer,
   expectedFiles: readonly ExpectedPackageFile[],
+  npmConfigs: PackageSmokeNpmConfigPaths,
   nodeExecutable: string,
   npmExecutable: string,
   profile: PackageSmokeConsumerProfile,
   npmMajor: number,
   runtime: NodeRuntimeIdentity,
 ): void {
-  const { commandPolicy, omittedDependencyClasses } = profile;
+  const {
+    commandPolicy,
+    maximumMaterializationAttempts,
+    npmCacheRole,
+    omittedDependencyClasses,
+  } = profile;
   assertClosedPackageSmokeCommandPolicy(commandPolicy);
+  const environment = commandEnvironment;
+  const npmCacheAuthorities = commandNpmCacheAuthorities;
+  if (environment === undefined || npmCacheAuthorities === undefined) {
+    fail('package materialization cache authority is not initialized');
+  }
+  const npmCacheAuthority = npmCacheAuthorities[npmCacheRole];
   mkdirSync(consumer, { mode: 0o755 });
   writeFileSync(join(consumer, 'package.json'), exactFixtureManifestRaw, {
     flag: 'wx',
     mode: 0o644,
   });
   const derivedLock = artifactBoundFixtureLock(exactFixtureLockValue, artifactIntegrity);
+  const derivedLockRaw = Buffer.from(`${canonicalize(derivedLock)}\n`, 'utf8');
   const consumerLockPath = join(consumer, 'package-lock.json');
-  writeFileSync(consumerLockPath, `${canonicalize(derivedLock)}\n`, {
-    encoding: 'utf8',
+  writeFileSync(consumerLockPath, derivedLockRaw, {
     flag: 'wx',
     mode: 0o644,
   });
-  const derivedLockDigest = sourceDigest(consumerLockPath);
-  copyFileSync(tarballPath, join(consumer, LOCAL_TARBALL_FILENAME), fsConstants.COPYFILE_EXCL);
-  runNpmCommand(
-    nodeExecutable,
-    npmExecutable,
-    [
-      ...NPM_CI_FLAGS,
-      ...omittedDependencyClasses.map((dependencyClass) => `--omit=${dependencyClass}`),
-    ],
-    consumer,
-    commandPolicy,
+  const localTarballPath = join(consumer, LOCAL_TARBALL_FILENAME);
+  copyFileSync(tarballPath, localTarballPath, fsConstants.COPYFILE_EXCL);
+  // Normalize after owner-only/exclusive creation semantics so ambient umask
+  // cannot alter the exact npm input profile.
+  chmodSync(join(consumer, 'package.json'), 0o644);
+  chmodSync(consumerLockPath, 0o644);
+  chmodSync(localTarballPath, 0o644);
+  const assertInputAuthority = (label: string): void => {
+    assertPackageMaterializationInputAuthority({
+      artifact,
+      artifactPath: tarballPath,
+      artifactIntegrity,
+      consumer,
+      exactFixtureLockRaw: derivedLockRaw,
+      exactFixtureManifestRaw,
+      npmConfigs,
+      npmCacheAuthority,
+      label,
+    });
+  };
+  const assertActiveInputAuthority = (label: string): void => {
+    const environment = commandEnvironment;
+    if (environment === undefined) {
+      fail(`${label} has no active command environment`);
+    }
+    const userConfig = environment.npm_config_userconfig;
+    const globalConfig = environment.npm_config_globalconfig;
+    if (userConfig === undefined || globalConfig === undefined) {
+      fail(`${label} has no exact npm configuration authority`);
+    }
+    assertPackageSmokeNpmConfigIdentity(
+      { userConfig, globalConfig },
+      npmConfigs,
+      label,
+    );
+    assertPackageSmokeNpmCacheIdentity(
+      environment.npm_config_cache,
+      npmCacheAuthority,
+      `${label} ${npmCacheRole}`,
+    );
+    assertPackageSmokeNpmCacheRoleActive(
+      environment,
+      npmCacheAuthorities,
+      npmCacheRole,
+      `${label} ${npmCacheRole}`,
+    );
+    assertInputAuthority(label);
+  };
+  const npmCiArguments = [
+    ...NPM_CI_FLAGS,
+    ...omittedDependencyClasses.map((dependencyClass) => `--omit=${dependencyClass}`),
+  ];
+  activatePackageSmokeNpmCache(
+    environment,
+    npmCacheAuthorities,
+    npmCacheRole,
+    `initial ${npmCacheRole} materialization`,
   );
-  if (
-    canonicalJsonSourceDigest(join(consumer, 'package.json'), 'installed fixture manifest') !==
-    EXPECTED_FIXTURE_MANIFEST_SHA256
-  ) {
-    fail('npm ci changed the committed fixture manifest');
-  }
-  if (sourceDigest(consumerLockPath) !== derivedLockDigest) {
-    fail('npm ci changed the artifact-bound fixture lock');
-  }
-  verifyInstalledPackageClosure(join(consumer, 'node_modules', 'cortexel'), expectedFiles);
-  assertInstalledRecursivePackageClosure(
-    consumer,
-    derivedLock,
-    omittedDependencyClasses,
-    npmMajor,
-    runtime,
+  runVerifiedPackageMaterialization(
+    (attempt) => {
+      assertActiveInputAuthority(
+        `materialization attempt ${attempt} immediate pre-command authority`,
+      );
+      runNpmCommand(
+        nodeExecutable,
+        npmExecutable,
+        npmCiArguments,
+        consumer,
+        commandPolicy,
+      );
+    },
+    () => {
+      assertInputAuthority('post-materialization');
+      verifyInstalledPackageClosure(join(consumer, 'node_modules', 'cortexel'), expectedFiles);
+      assertInstalledRecursivePackageClosure(
+        consumer,
+        derivedLock,
+        omittedDependencyClasses,
+        npmMajor,
+        runtime,
+      );
+    },
+    maximumMaterializationAttempts,
+    (failure) => {
+      if (!(failure instanceof RetryableOptionalMaterializationGapError)) return false;
+      assertActiveInputAuthority('package materialization retry authorization');
+      return true;
+    },
+  );
+  completePackageSmokeNpmCacheRole(
+    environment,
+    npmCacheAuthorities,
+    npmCacheRole,
+    `completed ${npmCacheRole} materialization`,
   );
 }
 
@@ -5153,8 +6268,10 @@ function readAndVerifyPreparedState(
   readonly packed: PackedResult;
   readonly stateFileAuthority: RuntimeFileAuthority;
 } {
+  resetPackageSmokeNpmCacheSession();
   commandNodeAuthority = undefined;
   commandRuntimeAuthority = undefined;
+  commandNpmCacheAuthorities = undefined;
   if (!isAbsolute(workspace) || realpathSync(workspace) !== workspace) {
     fail('execute workspace must be an existing canonical absolute directory');
   }
@@ -6052,6 +7169,46 @@ function assertPreparedBrowserBundle(options: {
   }
 }
 
+export function declarationReferencesPrivateRequestBoundary(source: string): boolean {
+  if (typeof source !== 'string') {
+    fail('packed declaration source must be one string');
+  }
+  const preprocessed = ts.preProcessFile(source, true, true);
+  const sourceFile = ts.createSourceFile(
+    'packed-declaration.d.ts',
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const diagnostics = (
+    sourceFile as ts.SourceFile & {
+      readonly parseDiagnostics?: readonly ts.Diagnostic[];
+    }
+  ).parseDiagnostics ?? [];
+  if (diagnostics.length > 0) {
+    fail(
+      'packed declaration could not be parsed while inspecting private references: ' +
+      ts.flattenDiagnosticMessageText(
+        diagnostics[0]?.messageText ?? 'unknown parse failure',
+        '\n',
+      ),
+    );
+  }
+  const referencedSpecifiers = [
+    ...preprocessed.importedFiles.map((reference) => reference.fileName),
+    ...preprocessed.referencedFiles.map((reference) => reference.fileName),
+    ...preprocessed.typeReferenceDirectives.map((reference) => reference.fileName),
+    ...preprocessed.libReferenceDirectives.map((reference) => reference.fileName),
+    ...(preprocessed.ambientExternalModules ?? []),
+    ...sourceFile.amdDependencies.map((dependency) => dependency.path),
+    ...(sourceFile.moduleName === undefined ? [] : [sourceFile.moduleName]),
+  ];
+  return referencedSpecifiers.some((specifier) =>
+    specifier.toLowerCase().includes('requestboundary.internal')
+  );
+}
+
 function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): string {
   let consumer = context.coreConsumer;
   const chartsConsumer = context.chartsConsumer;
@@ -6117,31 +7274,38 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   if (!packedPaths.includes('dist/internal/knowledge-graph-presentation-capability.cjs')) {
     throw new Error('tarball is missing the shared knowledge-graph capability runtime');
   }
-  for (const forbiddenAlternateRuntime of [
+  for (const forbiddenUnreachableOutput of [
+    'dist/cli/main.cjs',
+    'dist/cli/main.cjs.map',
+    'dist/cli/main.d.cts',
+    'dist/cli/main.d.ts',
     'dist/internal/figure-result-capability.js',
     'dist/internal/figure-result-capability.js.map',
+    'dist/internal/figure-result-capability.d.ts',
     'dist/internal/request-capability.js',
     'dist/internal/request-capability.js.map',
+    'dist/internal/request-capability.d.ts',
     'dist/internal/knowledge-graph-presentation-capability.js',
     'dist/internal/knowledge-graph-presentation-capability.js.map',
+    'dist/internal/knowledge-graph-presentation-capability.d.ts',
+    'dist/internal/figure-result-brand.d.cts',
+    'dist/internal/knowledge-graph-presentation-brand.d.cts',
+    'dist/internal/validated-request-brand.d.cts',
   ]) {
-    if (packedPaths.includes(forbiddenAlternateRuntime)) {
+    if (packedPaths.includes(forbiddenUnreachableOutput)) {
       throw new Error(
-        `tarball contains an alternate private capability runtime: ${forbiddenAlternateRuntime}`,
+        `tarball contains an unreachable alternate output: ${forbiddenUnreachableOutput}`,
       );
     }
   }
   for (const nominalBrandPath of [
     'dist/internal/figure-result-brand.cjs',
-    'dist/internal/figure-result-brand.d.cts',
     'dist/internal/figure-result-brand.d.ts',
     'dist/internal/figure-result-brand.js',
     'dist/internal/knowledge-graph-presentation-brand.cjs',
-    'dist/internal/knowledge-graph-presentation-brand.d.cts',
     'dist/internal/knowledge-graph-presentation-brand.d.ts',
     'dist/internal/knowledge-graph-presentation-brand.js',
     'dist/internal/validated-request-brand.cjs',
-    'dist/internal/validated-request-brand.d.cts',
     'dist/internal/validated-request-brand.d.ts',
     'dist/internal/validated-request-brand.js',
   ]) {
@@ -6151,6 +7315,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   }
 
   let installedRoot = join(consumer, 'node_modules', 'cortexel');
+  assertInstalledSourceMapClosure(installedRoot, packedPaths);
   for (const declarationPath of packedPaths.filter(
     (entry) => entry.endsWith('.d.ts') || entry.endsWith('.d.cts'),
   )) {
@@ -6159,7 +7324,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       `packed declaration ${declarationPath}`,
       PACKAGE_TARBALL_LIMITS.fileBytes,
     );
-    if (declaration.includes('requestBoundary.internal')) {
+    if (declarationReferencesPrivateRequestBoundary(declaration)) {
       throw new Error(
         `packed declaration leaks the private request-boundary module path: ${declarationPath}`,
       );
@@ -6171,6 +7336,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     'LICENSES/CC0-1.0.txt',
     'LICENSES/Matplotlib.txt',
     'LICENSES/PNNL-cividis.txt',
+    'LICENSES/Rolldown.txt',
   ]) {
     if (!existsSync(join(installedRoot, requiredNotice))) {
       throw new Error(`packed package is missing required third-party notice ${requiredNotice}`);
@@ -6207,6 +7373,10 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     ],
     consumer,
   );
+
+  const cjsUrlCacheProbePath = join(consumer, CJS_URL_CACHE_PROBE_FILENAME);
+  phaseWriteFile(cjsUrlCacheProbePath, generatedCjsUrlCacheProbeSource());
+  phaseRun(nodeExecutable, [cjsUrlCacheProbePath], consumer);
 
   phaseRun(
     nodeExecutable,
@@ -7196,7 +8366,6 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   phaseRun(nodeExecutable, [join(consumer, 'unrelated-cwd-probe.cjs')], unrelated);
 
   const installedCliEsm = join(installedRoot, 'dist', 'cli', 'main.js');
-  const installedCliCjs = join(installedRoot, 'dist', 'cli', 'main.cjs');
   assertInstalledNodeBinShim(consumer, 'cortexel', installedCliEsm);
   const runInstalledCli = (args: string[]) => {
     // Execute is a finalized, globally write-denied evidence phase. Publication
@@ -7215,7 +8384,10 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   );
   phaseWriteFile(
     join(consumer, 'import-cli.cjs'),
-    `require(${JSON.stringify(installedCliCjs)});\nprocess.stdout.write('imported\\n');\n`,
+    `(async () => {\n` +
+      `  await import(${JSON.stringify(pathToFileURL(installedCliEsm).href)});\n` +
+      `  process.stdout.write('imported\\n');\n` +
+      `})().catch(() => { process.exitCode = 1; });\n`,
   );
   const authoringFixturePaths = new Map<string, string>();
   for (const skillId of SOURCE_STABLE_SKILL_IDS) {
@@ -8719,20 +9891,22 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
   if (process.platform === 'win32') {
     fail('package smoke currently requires POSIX process-group semantics');
   }
+  resetPackageSmokeNpmCacheSession();
   commandNodeAuthority = undefined;
   commandRuntimeAuthority = undefined;
+  commandNpmCacheAuthorities = undefined;
   const workspace = canonicalWorkspacePath(options.workspace);
   const fixture = validateFixtureSources();
-  if (existsSync(join(root, '.npmrc'))) {
-    fail('package smoke rejects project-local npm configuration');
-  }
+  assertPackageSmokeProjectNpmConfigAbsent(root, 'initial package-smoke source');
   assertEmptyWorkspace(workspace);
   const nodeExecutable = resolveExecutable(options.nodeExecutable, 'node', 'Node executable');
   const nodeFileAuthority = inspectNodeExecutableAuthority(nodeExecutable);
   commandNodeAuthority = nodeFileAuthority;
-  createPackageSmokeOperationalDirectories(workspace);
+  const npmCacheAuthorities = createPackageSmokeOperationalDirectories(workspace);
+  commandNpmCacheAuthorities = npmCacheAuthorities;
   assertPackageSmokeOperationalDirectories(workspace);
   commandEnvironment = packageSmokeEnvironment(nodeExecutable, workspace);
+  beginPackageSmokeNpmCacheSession(workspace, npmCacheAuthorities);
   const nodeVersion = executableVersion(nodeExecutable, 'Node');
   assertSupportedNodeVersion(nodeVersion);
   const nodeRuntime = nodeRuntimeIdentity(nodeExecutable);
@@ -8744,35 +9918,38 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
     npm: npmAuthority,
   };
   commandRuntimeAuthority = runtimeAuthority;
-  const npmVersion = nodeCliVersion(nodeExecutable, npmExecutable, 'npm');
-  if (npmVersion !== npmAuthority.version) {
-    fail('npm CLI version differs from its package manifest authority');
-  }
-  const npmMajor = reviewedNpmMajor(npmVersion);
+  const npmConfigs = createPackageSmokeNpmConfigFiles(workspace);
+  commandEnvironment.npm_config_userconfig = npmConfigs.userConfig;
+  commandEnvironment.npm_config_globalconfig = npmConfigs.globalConfig;
   commandEnvironment.CORTEXEL_PACKAGE_SMOKE_PHASE = 'prepare';
   commandEnvironment.npm_config_ignore_scripts = 'true';
   commandEnvironment.npm_config_audit = 'false';
   commandEnvironment.npm_config_fund = 'false';
   commandEnvironment.npm_config_legacy_peer_deps = 'true';
   commandEnvironment.npm_config_install_strategy = 'nested';
-
-  const artifactDirectory = join(workspace, 'artifact');
-  const coreConsumer = join(workspace, 'core-consumer');
-  const chartsConsumer = join(workspace, 'charts-consumer');
-  const consumer = join(workspace, 'consumer');
-  const unrelated = join(workspace, 'unrelated-working-directory');
-  const npmUserConfig = join(workspace, 'npm-userconfig');
-  const npmGlobalConfig = join(workspace, 'npm-globalconfig');
-  writeFileSync(npmUserConfig, '# isolated package-smoke npm user config\n', { flag: 'wx' });
-  writeFileSync(npmGlobalConfig, '# isolated package-smoke npm global config\n', { flag: 'wx' });
-  commandEnvironment.npm_config_userconfig = npmUserConfig;
-  commandEnvironment.npm_config_globalconfig = npmGlobalConfig;
   commandEnvironment.npm_config_package_lock = 'true';
   commandEnvironment.npm_config_bin_links = 'true';
   commandEnvironment.npm_config_engine_strict = 'true';
   commandEnvironment.npm_config_update_notifier = 'false';
   commandEnvironment.npm_config_progress = 'false';
   commandEnvironment.npm_config_loglevel = 'error';
+  activatePackageSmokeNpmCache(
+    commandEnvironment,
+    npmCacheAuthorities,
+    'control',
+    'initial package-smoke control',
+  );
+  const npmVersion = nodeCliVersion(nodeExecutable, npmExecutable, 'npm');
+  if (npmVersion !== npmAuthority.version) {
+    fail('npm CLI version differs from its package manifest authority');
+  }
+  const npmMajor = reviewedNpmMajor(npmVersion);
+
+  const artifactDirectory = join(workspace, 'artifact');
+  const coreConsumer = join(workspace, 'core-consumer');
+  const chartsConsumer = join(workspace, 'charts-consumer');
+  const consumer = join(workspace, 'consumer');
+  const unrelated = join(workspace, 'unrelated-working-directory');
   mkdirSync(artifactDirectory, { mode: 0o755 });
   mkdirSync(unrelated, { mode: 0o755 });
   const packText = runNpmCommand(
@@ -8781,6 +9958,12 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
     ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactDirectory],
     root,
     PACKAGE_SMOKE_COMMAND_POLICIES.npmPack,
+  );
+  completePackageSmokeNpmCacheRole(
+    commandEnvironment,
+    npmCacheAuthorities,
+    'control',
+    'completed package-smoke control commands',
   );
   const rawPackValue = strictJson(packText, 'npm pack output');
   if (!Array.isArray(rawPackValue) || rawPackValue.length !== 1 || !isRecord(rawPackValue[0])) {
@@ -8793,6 +9976,7 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
   const generatedTarball = join(artifactDirectory, generatedFilename);
   const tarballPath = join(artifactDirectory, LOCAL_TARBALL_FILENAME);
   if (generatedTarball !== tarballPath) renameSync(generatedTarball, tarballPath);
+  chmodSync(tarballPath, 0o644);
   const tarballStats = lstatSync(tarballPath);
   const tarball = readRegularFileStable(
     tarballPath,
@@ -8812,10 +9996,12 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
   prepareConsumer(
     coreConsumer,
     tarballPath,
+    tarball,
     packed.integrity,
     fixture.lock,
     fixture.manifestRaw,
     expectedFiles,
+    npmConfigs,
     nodeExecutable,
     npmExecutable,
     PACKAGE_SMOKE_CONSUMER_PROFILES.core,
@@ -8825,10 +10011,12 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
   prepareConsumer(
     chartsConsumer,
     tarballPath,
+    tarball,
     packed.integrity,
     fixture.lock,
     fixture.manifestRaw,
     expectedFiles,
+    npmConfigs,
     nodeExecutable,
     npmExecutable,
     PACKAGE_SMOKE_CONSUMER_PROFILES.charts,
@@ -8838,16 +10026,19 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
   prepareConsumer(
     consumer,
     tarballPath,
+    tarball,
     packed.integrity,
     fixture.lock,
     fixture.manifestRaw,
     expectedFiles,
+    npmConfigs,
     nodeExecutable,
     npmExecutable,
     PACKAGE_SMOKE_CONSUMER_PROFILES.full,
     npmMajor,
     nodeRuntime,
   );
+  assertPackageSmokeNpmCacheSessionComplete(npmCacheAuthorities);
   writeFileSync(join(workspace, NETWORK_GUARD_FILENAME), NETWORK_AND_WRITE_GUARD, {
     encoding: 'utf8',
     flag: 'wx',
@@ -8941,9 +10132,14 @@ export function preparePackageSmokeWorkspace(options: {
   readonly nodeExecutable?: string;
   readonly npmExecutable?: string;
 }): PackageSmokePhaseSuccessOutput {
-  return withPackageSmokeCommandRuntime(
-    () => preparePackageSmokeWorkspaceWithinCommandRuntime(options),
-  );
+  resetPackageSmokeNpmCacheSession();
+  try {
+    return withPackageSmokeCommandRuntime(
+      () => preparePackageSmokeWorkspaceWithinCommandRuntime(options),
+    );
+  } finally {
+    resetPackageSmokeNpmCacheSession();
+  }
 }
 
 function executePackageSmokeWorkspaceWithinCommandRuntime(options: {
@@ -9013,9 +10209,117 @@ export function executePackageSmokeWorkspace(options: {
   readonly expectedStateDigest: string;
   readonly nodeExecutable?: string;
 }): PackageSmokePhaseSuccessOutput {
-  return withPackageSmokeCommandRuntime(
-    () => executePackageSmokeWorkspaceWithinCommandRuntime(options),
-  );
+  resetPackageSmokeNpmCacheSession();
+  try {
+    return withPackageSmokeCommandRuntime(
+      () => executePackageSmokeWorkspaceWithinCommandRuntime(options),
+    );
+  } finally {
+    resetPackageSmokeNpmCacheSession();
+  }
+}
+
+/**
+ * Flattens the bounded portion of nested AggregateError causes without letting
+ * control characters or an arbitrary thrown object's coercion forge CLI output.
+ */
+export function formatPackageSmokeFailure(error: unknown): string {
+  const maximumNodes = 8;
+  const maximumDepth = 4;
+  const fragments: string[] = [];
+  const visited = new Set<object>();
+  let nodeCount = 0;
+
+  const visit = (value: unknown, path: string, depth: number): void => {
+    if (nodeCount >= maximumNodes) return;
+    nodeCount += 1;
+    const objectValue =
+      value !== null && (typeof value === 'object' || typeof value === 'function')
+        ? value
+        : undefined;
+    if (objectValue !== undefined) {
+      if (visited.has(objectValue)) {
+        fragments.push(`${path}="[cyclic thrown value]"`);
+        return;
+      }
+      visited.add(objectValue);
+    }
+
+    let rawMessage: string;
+    let causes: readonly unknown[] | undefined;
+    let totalCauseCount: number | undefined;
+    let causeInspectionFailed = false;
+    let errorValue: Error | undefined;
+    try {
+      if (value instanceof Error) {
+        errorValue = value;
+        rawMessage = typeof value.message === 'string'
+          ? value.message
+          : '[Error with a non-string message]';
+      } else if (typeof value === 'string') {
+        rawMessage = value;
+      } else if (value === null) {
+        rawMessage = '[null thrown]';
+      } else {
+        rawMessage = `[non-Error ${typeof value} thrown]`;
+      }
+    } catch {
+      rawMessage = '[uninspectable thrown value]';
+    }
+    if (errorValue !== undefined && depth < maximumDepth) {
+      try {
+        if (errorValue instanceof AggregateError) {
+          const candidate = errorValue.errors;
+          if (Array.isArray(candidate)) {
+            const candidateLength: unknown = Reflect.get(candidate, 'length');
+            if (
+              typeof candidateLength !== 'number' ||
+              !Number.isSafeInteger(candidateLength) ||
+              candidateLength < 0 ||
+              candidateLength > 0xffff_ffff
+            ) {
+              causeInspectionFailed = true;
+            } else {
+              totalCauseCount = candidateLength;
+              const snapshot: unknown[] = [];
+              for (
+                let index = 0;
+                index < Math.min(candidateLength, maximumNodes);
+                index++
+              ) {
+                snapshot.push(Reflect.get(candidate, String(index)));
+              }
+              causes = Object.freeze(snapshot);
+            }
+          }
+        }
+      } catch {
+        causeInspectionFailed = true;
+        causes = undefined;
+        totalCauseCount = undefined;
+      }
+    }
+    const diagnostic = jsonDiagnosticString(rawMessage, 768);
+    fragments.push(
+      `${path}=${diagnostic.encoded}${diagnostic.truncated ? ' (truncated)' : ''}`,
+    );
+    if (causeInspectionFailed) {
+      fragments.push(`${path}.causes="[uninspectable aggregate causes]"`);
+    }
+    if (causes === undefined || depth >= maximumDepth) return;
+
+    const remainingNodes = maximumNodes - nodeCount;
+    const inspectedCauses = Math.min(causes.length, remainingNodes);
+    for (let index = 0; index < inspectedCauses; index++) {
+      visit(causes[index], `${path}.cause[${index}]`, depth + 1);
+    }
+    if (totalCauseCount !== undefined && totalCauseCount > inspectedCauses) {
+      fragments.push(`${path}.causesOmitted=${totalCauseCount - inspectedCauses}`);
+    }
+  };
+
+  visit(error, 'error', 0);
+  return fragments.join('; ');
 }
 
 function runMain(): void {
@@ -9071,7 +10375,7 @@ if (isDirectInvocation()) {
   try {
     runMain();
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatPackageSmokeFailure(error);
     const requestedPhase = process.argv[2] === 'prepare' || process.argv[2] === 'execute'
       ? process.argv[2]
       : 'all';
@@ -9083,7 +10387,7 @@ if (isDirectInvocation()) {
         phase: requestedPhase,
         status: 'failed',
         code: 'PACKAGE_SMOKE_FAILED',
-        message: message.slice(0, 8_192),
+        message,
       };
       process.stderr.write(`${canonicalize(failure)}\n`);
     }

@@ -63,7 +63,7 @@ def _reject_non_finite(value: Any) -> None:
         _assert_well_formed_unicode(value)
     elif isinstance(value, float):
         # Python's json accepts NaN/Infinity by default; Cortexel does not.
-        if value != value or value in (float("inf"), float("-inf")):
+        if not math.isfinite(value):
             raise JsonParseError(
                 "JSON_NON_FINITE_NUMBER",
                 "the number is outside the finite binary64 model",

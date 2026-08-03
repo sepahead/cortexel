@@ -28,13 +28,12 @@ import {
   type KnowledgeGraphFigureHostPolicyV1,
   type PrepareCorpusKnowledgeGraphFigureResultV1,
 } from './knowledgeGraphFigure';
-import type { PreparedKnowledgeGraphPresentationV1 } from
-  './knowledgeGraphPresentation.internal';
 import {
   knowledgeGraphPresentationContainsNode,
   knowledgeGraphViewContainsNode,
   prepareKnowledgeGraphView,
   type KnowledgeGraphViewPolicyV1,
+  type PreparedKnowledgeGraphPresentationV1,
   type PreparedKnowledgeGraphViewV1,
 } from './knowledgeGraphPresentation.internal';
 
