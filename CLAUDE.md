@@ -13,7 +13,7 @@ chart code — most changes are about keeping those invariants airtight.
 ## Commands
 
 ```bash
-bun install
+bun run bootstrap
 bun run typecheck   # tsc --noEmit
 bun run test        # vitest run
 bun run check       # generated parity + typecheck + test
@@ -34,7 +34,13 @@ floors without admitting unsupported intervening or future majors. CI pins the b
 runtime and separately exercises the exact floor/current pairs 22.12.0/22.23.2,
 24.0.0/24.19.0, and 26.0.0/26.6.0 with each release's exact bundled npm.
 There is no separate linter; TypeScript strict mode is the gate.
-`bunfig.toml` deliberately sets `env = false` and a regression test checks nested Bun
+`bun run bootstrap` asks Bun to force-rematerialize the frozen dependency closure with
+its cross-platform `copyfile` backend; the reviewed TSX gate still rejects a cache-linked
+entry. This is ordinary developer setup rather than a complete installed-tree or release
+receipt: only the clean CI path starts from an absent tree, downloads through a fresh
+private cache, and scans every installed regular file for additional hardlinks. `bunfig.toml`
+deliberately sets `env = false`,
+disables ambient auto-install, and regression tests check both policies and nested Bun
 scripts. That is not a filesystem sandbox: package managers and dependencies may still
 read checkout files. Keep credentials outside the repository and outside the invoking
 environment; a narrowly scoped first-party client may read its external credential store

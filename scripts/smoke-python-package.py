@@ -25,14 +25,13 @@ import sysconfig
 import tempfile
 import threading
 import time
+import tomllib
 import urllib.request
 import venv
 import zipfile
 import zlib
 from pathlib import Path, PurePosixPath
 from typing import Literal, NoReturn, overload
-
-import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON_PROJECT = ROOT / "python"

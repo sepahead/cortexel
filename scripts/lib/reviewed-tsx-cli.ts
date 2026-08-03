@@ -69,7 +69,8 @@ export function resolveReviewedTsxCli(repositoryRoot: string): string {
   }
   if (!cliStat.isFile() || cliStat.isSymbolicLink() || cliStat.nlink !== 1) {
     throw new Error(
-      'canonical reviewed tsx CLI is not a direct single-link regular file',
+      'canonical reviewed tsx CLI is not a direct single-link regular file; '
+        + 'run `bun run bootstrap` to replace cache hardlinks',
     );
   }
   return canonicalCli;

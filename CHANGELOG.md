@@ -6,6 +6,31 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — portable clean-run authority
+
+- Clean CI installs now acquire the frozen Bun closure through a fresh mode-0700
+  cache and materialize `node_modules` with the cross-platform `copyfile` backend,
+  then admit only directories, regular files, and symlinks while
+  rejecting any regular file that still has another hardlink.
+  This closes Linux Bun 1.3.14's intentional global-cache hardlink topology without
+  weakening the reviewed TSX gate. `bun run bootstrap` gives developers one command
+  that requests force-rematerialization through `copyfile`, but local setup remains
+  development convenience: only an initially absent tree plus the fresh-cache CI scan
+  supplies a complete regular-file unique-link scan of that clean install.
+  Each CI acquisition uses an `env -i` allowlist with separate private
+  cache/home/config/temp roots, a resolved Bun executable, and a minimal tool path, so
+  ambient credentials or user package configuration are not install inputs. Ambient
+  Bun auto-install is disabled so a missing dependency fails instead of silently
+  acquiring network authority.
+- The CJS bare-`url` cache-poison regression now runs from a private temporary
+  consumer containing the copied current runtime fixture, rather than using the
+  checkout as its working directory. Hosted runners whose `/home` carries an extended
+  default ACL therefore keep failing closed at the reviewed command boundary without
+  preventing the intended package semantic probe.
+- Python's two `tomllib` imports now occupy the standard-library block required by
+  the exact Ruff 0.16.1 CI gate. This is formatting-only; the package supervisor's
+  unreaped-leader cleanup order and no-post-reap signaling invariants are unchanged.
+
 ### Security — closed build-output authority
 
 - The package build now derives its runtime and declaration roots from the exact

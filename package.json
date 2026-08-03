@@ -177,6 +177,7 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
+    "bootstrap": "bun install --frozen-lockfile --force --backend=copyfile",
     "build": "bun run check:generated && tsx scripts/build-package.ts && tsx scripts/prepare-package.ts && tsx scripts/emit-manifest.ts && tsx scripts/finalize-package.ts",
     "manifest": "tsx scripts/emit-manifest.ts",
     "generate": "tsx scripts/generate-contract.ts",

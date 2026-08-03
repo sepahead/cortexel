@@ -3,3 +3,9 @@
 # needs dotenv data must opt in with an explicit --env-file argument.
 env = false
 telemetry = false
+
+[install]
+# Never turn a missing dependency into an ambient network mutation. The explicit
+# bootstrap command below chooses the install backend; Bun 1.3.14 does not expose
+# that backend as a bunfig setting.
+auto = "disable"

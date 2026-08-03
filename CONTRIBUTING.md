@@ -48,7 +48,7 @@ filesystem reads. A narrowly scoped first-party client may read its external cre
 store explicitly.
 
 ```bash
-bun install
+bun run bootstrap
 bun run typecheck  # tsc --noEmit
 bun run test       # vitest
 bun run build      # tsdown → dist/ (ESM + CJS + declarations + self-contained runtime source maps) + manifest

@@ -9,13 +9,12 @@ import json
 import math
 import os
 import sys
+import tomllib
 import unittest
 from collections.abc import Mapping
 from fractions import Fraction
 from importlib.resources import files
 from importlib.resources.abc import Traversable
-
-import tomllib
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 

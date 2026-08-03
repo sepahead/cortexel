@@ -2,6 +2,7 @@ import {
   chmodSync,
   closeSync,
   constants as fsConstants,
+  cpSync,
   existsSync,
   linkSync,
   lstatSync,
@@ -782,10 +783,49 @@ describe('two-phase package smoke contract', () => {
     if (reviewedRuntime === undefined) {
       throw new Error('the focused reviewed Node runtime is unavailable');
     }
+    // The reviewed command boundary correctly rejects the hosted runner's /home
+    // default ACL as cwd authority. Exercise package resolution from a fresh private
+    // consumer instead of weakening that gate or borrowing the checkout's ancestry.
+    const consumer = realpathSync(mkdtempSync(
+      join(tmpdir(), 'cortexel-cjs-url-cache-consumer-'),
+    ));
+    cleanups.push(consumer);
+    chmodSync(consumer, 0o700);
+    const installedRoot = join(consumer, 'node_modules', 'cortexel');
+    mkdirSync(installedRoot, { recursive: true, mode: 0o755 });
+    cpSync(join(root, 'package.json'), join(installedRoot, 'package.json'), {
+      errorOnExist: true,
+      force: false,
+    });
+    cpSync(join(root, 'dist'), join(installedRoot, 'dist'), {
+      dereference: false,
+      errorOnExist: true,
+      force: false,
+      recursive: true,
+    });
+    for (const dependency of [
+      'ajv',
+      'fast-deep-equal',
+      'fast-uri',
+      'json-schema-traverse',
+      'require-from-string',
+      'zod',
+    ]) {
+      cpSync(
+        join(root, 'node_modules', dependency),
+        join(consumer, 'node_modules', dependency),
+        {
+          dereference: false,
+          errorOnExist: true,
+          force: false,
+          recursive: true,
+        },
+      );
+    }
     const result = runReviewedNodeCommandWithStagedRuntime(
       reviewedRuntime.sourceNodeExecutable,
       ['--eval', generatedCjsUrlCacheProbeSource()],
-      root,
+      consumer,
       {
         environment: {},
         timeoutMs: 10_000,
@@ -795,7 +835,10 @@ describe('two-phase package smoke contract', () => {
     expect(result.timedOut).toBe(false);
     expect(result.outputOverflow).toBe(false);
     expect(result.guardianSweepIntentCount).toBe(1);
-    expect(result.status).toBe(0);
+    expect(
+      result.status,
+      formatReviewedNodeCommandFailure(reviewedRuntime.sourceNodeExecutable, result),
+    ).toBe(0);
     expect(result.signal).toBeNull();
     expect(result.stdout).toBe('');
     expect(result.stderr).toBe('');

@@ -409,7 +409,7 @@ Run twice, generation is byte-identical.
 ## Working on Cortexel
 
 ```bash
-bun install
+bun run bootstrap
 bun run generate        # derive all generated artifacts from contract/
 bun run check:generated # fail if generated files drift or generation is non-deterministic
 bun run typecheck

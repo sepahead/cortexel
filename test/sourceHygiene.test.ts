@@ -30,6 +30,7 @@ describe('source hygiene', () => {
   it('keeps ignored dotenv values out of Bun tooling, including nested invocations', () => {
     const bunfig = readFileSync(path.join(REPO, 'bunfig.toml'), 'utf8');
     expect(bunfig).toMatch(/^env = false$/mu);
+    expect(bunfig).toMatch(/^auto = "disable"$/mu);
 
     const temporary = mkdtempSync(path.join(os.tmpdir(), 'cortexel-no-dotenv-'));
     try {
@@ -60,6 +61,41 @@ describe('source hygiene', () => {
     } finally {
       rmSync(temporary, { recursive: true, force: true });
     }
+  });
+
+  it('requests copyfile bootstrapping and keeps CI installs on fresh detached caches', () => {
+    const packageJson = JSON.parse(
+      readFileSync(path.join(REPO, 'package.json'), 'utf8'),
+    ) as { scripts?: Record<string, unknown> };
+    expect(packageJson.scripts?.bootstrap).toBe(
+      'bun install --frozen-lockfile --force --backend=copyfile',
+    );
+
+    const workflow = readFileSync(
+      path.join(REPO, '.github', 'workflows', 'ci.yml'),
+      'utf8',
+    );
+    const workflowLines = workflow.split(/\r?\n/u);
+    const installLineIndexes = workflowLines.flatMap((line, index) =>
+      line.includes('install --frozen-lockfile --backend=copyfile') ? [index] : [],
+    );
+    expect(installLineIndexes).toHaveLength(3);
+    expect(workflow.match(/BUN_INSTALL_CACHE_DIR=/gu)).toHaveLength(3);
+    expect(
+      workflow.match(/find -P node_modules -type f -links \+1 -print -quit/gu),
+    ).toHaveLength(3);
+    for (const installLineIndex of installLineIndexes) {
+      const installBoundary = workflowLines
+        .slice(Math.max(0, installLineIndex - 10), installLineIndex + 1)
+        .join('\n');
+      expect(installBoundary).toContain('env -i');
+      expect(installBoundary).toContain('BUN_INSTALL_CACHE_DIR=');
+      expect(installBoundary).toContain('HOME=');
+      expect(installBoundary).toContain('XDG_CONFIG_HOME=');
+      expect(installBoundary).toContain('TMPDIR=');
+      expect(installBoundary).toContain('PATH="$(dirname "$');
+    }
+    expect(workflow).not.toMatch(/install --frozen-lockfile(?:\s|$)(?![^\r\n]*--backend)/u);
   });
 
   it('contains no literal NUL byte in tracked or unignored text sources', () => {
