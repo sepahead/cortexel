@@ -67,6 +67,7 @@ import { validateRequestValue as validateSourceRequestValue } from '../src/core/
 import {
   SKILL_AUTHORING as SOURCE_SKILL_AUTHORING,
   STABLE_SKILL_IDS as SOURCE_STABLE_SKILL_IDS,
+  type StableSkillId,
 } from '../src/generated';
 import { serializeManifest } from './emit-manifest';
 import {
@@ -99,9 +100,9 @@ const root = resolve(import.meta.dirname, '..');
 const fixtureRoot = join(root, 'scripts', 'fixtures', 'package-smoke');
 const fixtureManifestPath = join(fixtureRoot, 'package.json');
 const fixtureLockPath = join(fixtureRoot, 'package-lock.json');
-export const PACKAGE_SMOKE_PREPARED_SCHEMA = 'cortexel-package-smoke-prepared.v2' as const;
+export const PACKAGE_SMOKE_PREPARED_SCHEMA = 'cortexel-package-smoke-prepared.v3' as const;
 export const PACKAGE_SMOKE_PHASE_SCHEMA = 'cortexel-package-smoke-phase.v2' as const;
-export const PACKAGE_SMOKE_STATE_FILENAME = 'package-smoke-state.v2.json';
+export const PACKAGE_SMOKE_STATE_FILENAME = 'package-smoke-state.v3.json';
 const PREPARED_STATE_SCHEMA = PACKAGE_SMOKE_PREPARED_SCHEMA;
 const PHASE_OUTPUT_SCHEMA = PACKAGE_SMOKE_PHASE_SCHEMA;
 const STATE_FILENAME = PACKAGE_SMOKE_STATE_FILENAME;
@@ -115,6 +116,16 @@ const BROWSER_BUNDLE_RECEIPT_FILENAME = 'browser-bundle-receipt.v1.json';
 const BROWSER_BUNDLE_RECEIPT_SCHEMA = 'cortexel-package-smoke-browser-bundle.v1';
 const CJS_URL_CACHE_PROBE_FILENAME = 'cjs-url-cache-probe.cjs';
 const REVIEWED_ESBUILD_VERSION = '0.28.1';
+const TYPESCRIPT_CHECK_PROFILE = 'nodenext-noemit.v1' as const;
+const TYPESCRIPT_CHECK_COMPILER_BIN = 'consumer/node_modules/typescript/bin/tsc' as const;
+const TYPESCRIPT_CHECK_CWD = 'consumer' as const;
+const TYPESCRIPT_CHECK_ARGUMENTS = Object.freeze([
+  '-p',
+  'tsconfig.json',
+  '--noEmit',
+  '--pretty',
+  'false',
+] as const);
 const BROWSER_BARE_CHUNK_IMPORT_PATTERN =
   String.raw`^import "(\.\./chunk-[A-Za-z0-9_-]+\.js)";$`;
 const BROWSER_INSTALLED_CHUNK_PATH_PATTERN =
@@ -258,8 +269,12 @@ interface PackageSmokeCommandPolicy {
 }
 
 export const PACKAGE_SMOKE_COMMAND_POLICIES = Object.freeze({
-  ordinary: Object.freeze({
-    operation: 'package.ordinary',
+  executeNode: Object.freeze({
+    operation: 'execute.node-command',
+    timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
+  }),
+  nodeVersion: Object.freeze({
+    operation: 'runtime.node-version',
     timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
   }),
   npmVersion: Object.freeze({
@@ -267,7 +282,7 @@ export const PACKAGE_SMOKE_COMMAND_POLICIES = Object.freeze({
     timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
   }),
   nodeRuntimeIdentity: Object.freeze({
-    operation: 'prepare.node-runtime-identity',
+    operation: 'runtime.node-identity',
     timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
   }),
   npmPack: Object.freeze({
@@ -288,6 +303,10 @@ export const PACKAGE_SMOKE_COMMAND_POLICIES = Object.freeze({
   }),
   browserBundle: Object.freeze({
     operation: 'prepare.browser-bundle',
+    timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
+  }),
+  typescriptCheck: Object.freeze({
+    operation: 'prepare.typescript-nodenext',
     timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
   }),
 } satisfies Readonly<Record<string, PackageSmokeCommandPolicy>>);
@@ -968,7 +987,7 @@ function runResult(
   command: string,
   args: string[],
   cwd: string,
-  policy: PackageSmokeCommandPolicy = PACKAGE_SMOKE_COMMAND_POLICIES.ordinary,
+  policy: PackageSmokeCommandPolicy,
 ): ReviewedNodeCommandResult {
   assertClosedPackageSmokeCommandPolicy(policy);
   const result = runReviewedNodeCommand(command, args, cwd, {
@@ -1059,7 +1078,7 @@ function run(
   command: string,
   args: string[],
   cwd: string,
-  policy: PackageSmokeCommandPolicy = PACKAGE_SMOKE_COMMAND_POLICIES.ordinary,
+  policy: PackageSmokeCommandPolicy,
 ): string {
   const result = runResult(command, args, cwd, policy);
   if (result.status !== 0 || result.signal !== null) {
@@ -1253,6 +1272,24 @@ export interface PackageRuntimeAuthority {
   readonly npm: NpmPackageAuthority;
 }
 
+interface TypeScriptConsumerCheck {
+  readonly profile: typeof TYPESCRIPT_CHECK_PROFILE;
+  readonly compiler: {
+    readonly name: 'typescript';
+    readonly version: '7.0.2';
+    readonly bin: typeof TYPESCRIPT_CHECK_COMPILER_BIN;
+  };
+  readonly argv: typeof TYPESCRIPT_CHECK_ARGUMENTS;
+  readonly cwd: typeof TYPESCRIPT_CHECK_CWD;
+  readonly workspaceSealDigest: string;
+  readonly result: {
+    readonly status: 0;
+    readonly signal: null;
+    readonly stdoutBytes: 0;
+    readonly stderrBytes: 0;
+  };
+}
+
 interface PreparedState {
   readonly schema: typeof PREPARED_STATE_SCHEMA;
   readonly workspace: string;
@@ -1270,6 +1307,7 @@ interface PreparedState {
   readonly consumer: string;
   readonly unrelatedDirectory: string;
   readonly nodeModules: readonly [string, string, string];
+  readonly typescriptCheck: TypeScriptConsumerCheck;
   readonly workspaceSeal: WorkspaceSeal;
   readonly readOnlyWorkspace: boolean;
 }
@@ -3594,7 +3632,12 @@ export function packageSmokeEnvironment(
 }
 
 function executableVersion(executable: string, label: string): string {
-  const value = run(executable, ['--version'], root);
+  const value = run(
+    executable,
+    ['--version'],
+    root,
+    PACKAGE_SMOKE_COMMAND_POLICIES.nodeVersion,
+  );
   if (!/^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(value)) {
     fail(`${label} returned an invalid version`);
   }
@@ -4511,7 +4554,7 @@ function npmManifestIdentity(cli: string): {
   if (manifest.name !== 'npm' || bin.npm !== 'bin/npm-cli.js') {
     fail('npm package manifest does not bind the exact npm CLI identity');
   }
-  reviewedNpmMajor(version);
+  reviewedNpmTopologyProfile(version);
   return { root: rootPath, version, packageJson: packageJsonPath };
 }
 
@@ -4825,6 +4868,90 @@ export function assertInstalledTopLevelPackageInventory(
 
 type OmittedDependencyClass = 'dev' | 'optional';
 
+type OmittedScopeTopologyPolicy =
+  | 'exact-derived-empty-omitted-scopes'
+  | 'forbid-empty-omitted-scopes';
+
+interface ReviewedNpmTopologyProfile {
+  readonly exactNpmVersion: string;
+  readonly profileId: string;
+  readonly omittedScopePolicy: OmittedScopeTopologyPolicy;
+}
+
+const DERIVED_EMPTY_OMITTED_SCOPES_PROFILE_ID =
+  'npm-derived-empty-omitted-scopes.v1';
+const FORBID_EMPTY_OMITTED_SCOPES_PROFILE_ID =
+  'npm-forbid-empty-omitted-scopes.v1';
+
+const REVIEWED_NPM_VERSIONS = Object.freeze([
+  '10.9.0',
+  '10.9.8',
+  '11.3.0',
+  '11.12.1',
+  '11.16.0',
+  '11.17.0',
+  '11.18.0',
+] as const);
+type ReviewedNpmVersion = (typeof REVIEWED_NPM_VERSIONS)[number];
+
+const REVIEWED_NPM_TOPOLOGY_PROFILES = Object.freeze({
+  '10.9.0': Object.freeze({
+    exactNpmVersion: '10.9.0',
+    profileId: DERIVED_EMPTY_OMITTED_SCOPES_PROFILE_ID,
+    omittedScopePolicy: 'exact-derived-empty-omitted-scopes',
+  }),
+  '10.9.8': Object.freeze({
+    exactNpmVersion: '10.9.8',
+    profileId: DERIVED_EMPTY_OMITTED_SCOPES_PROFILE_ID,
+    omittedScopePolicy: 'exact-derived-empty-omitted-scopes',
+  }),
+  '11.3.0': Object.freeze({
+    exactNpmVersion: '11.3.0',
+    profileId: DERIVED_EMPTY_OMITTED_SCOPES_PROFILE_ID,
+    omittedScopePolicy: 'exact-derived-empty-omitted-scopes',
+  }),
+  '11.12.1': Object.freeze({
+    exactNpmVersion: '11.12.1',
+    profileId: FORBID_EMPTY_OMITTED_SCOPES_PROFILE_ID,
+    omittedScopePolicy: 'forbid-empty-omitted-scopes',
+  }),
+  '11.16.0': Object.freeze({
+    exactNpmVersion: '11.16.0',
+    profileId: FORBID_EMPTY_OMITTED_SCOPES_PROFILE_ID,
+    omittedScopePolicy: 'forbid-empty-omitted-scopes',
+  }),
+  '11.17.0': Object.freeze({
+    exactNpmVersion: '11.17.0',
+    profileId: FORBID_EMPTY_OMITTED_SCOPES_PROFILE_ID,
+    omittedScopePolicy: 'forbid-empty-omitted-scopes',
+  }),
+  '11.18.0': Object.freeze({
+    exactNpmVersion: '11.18.0',
+    profileId: FORBID_EMPTY_OMITTED_SCOPES_PROFILE_ID,
+    omittedScopePolicy: 'forbid-empty-omitted-scopes',
+  }),
+}) satisfies Readonly<Record<ReviewedNpmVersion, ReviewedNpmTopologyProfile>>;
+
+export function reviewedNpmTopologyProfile(
+  npmVersion: string,
+): ReviewedNpmTopologyProfile {
+  const profile = Object.hasOwn(REVIEWED_NPM_TOPOLOGY_PROFILES, npmVersion)
+    ? REVIEWED_NPM_TOPOLOGY_PROFILES[npmVersion as ReviewedNpmVersion]
+    : undefined;
+  if (profile === undefined) {
+    const received = jsonDiagnosticString(npmVersion, 128);
+    fail(
+      'package smoke requires one exact reviewed npm version ' +
+      `(${REVIEWED_NPM_VERSIONS.join(', ')}); received ${received.encoded}` +
+      `${received.truncated ? ' (truncated)' : ''}`,
+    );
+  }
+  if (profile.exactNpmVersion !== npmVersion) {
+    fail('reviewed npm topology profile identity is inconsistent');
+  }
+  return profile;
+}
+
 class RetryableOptionalMaterializationGapError extends Error {
   constructor(readonly missingPaths: readonly string[]) {
     const sample = missingPaths.slice(0, 8).map((path) => {
@@ -4962,14 +5089,15 @@ export function assertInstalledRecursivePackageClosure(
   consumer: string,
   preparedLockValue: JsonValue,
   omittedDependencyClasses: readonly OmittedDependencyClass[],
-  npmMajor: number,
+  npmVersion: string,
   runtime: NodeRuntimeIdentity,
 ): void {
+  const npmTopologyProfile = reviewedNpmTopologyProfile(npmVersion);
   assertInstalledRecursivePackageClosureWithRetryPolicy(
     consumer,
     preparedLockValue,
     omittedDependencyClasses,
-    npmMajor,
+    npmTopologyProfile,
     runtime,
     true,
   );
@@ -4979,13 +5107,10 @@ function assertInstalledRecursivePackageClosureWithRetryPolicy(
   consumer: string,
   preparedLockValue: JsonValue,
   omittedDependencyClasses: readonly OmittedDependencyClass[],
-  npmMajor: number,
+  npmTopologyProfile: ReviewedNpmTopologyProfile,
   runtime: NodeRuntimeIdentity,
   retryClassificationEnabled: boolean,
 ): void {
-  if (npmMajor !== 10 && npmMajor !== 11) {
-    fail('recursive package closure requires reviewed npm major 10 or 11');
-  }
   if (
     (runtime.platform !== 'darwin' && runtime.platform !== 'linux') ||
     !/^[a-z0-9][a-z0-9_-]{0,31}$/u.test(runtime.arch)
@@ -5129,7 +5254,7 @@ function assertInstalledRecursivePackageClosureWithRetryPolicy(
             consumer,
             retryableGap.reducedLock,
             [],
-            npmMajor,
+            npmTopologyProfile,
             runtime,
             false,
           );
@@ -5154,17 +5279,17 @@ function assertInstalledRecursivePackageClosureWithRetryPolicy(
 
   const expectedManagementPaths = new Set(containerPackages.keys());
   const expectedBinPaths = new Set<string>();
-  const npm10ScopeResidues = new Map<string, Set<string>>();
-  if (npmMajor === 10) {
+  const derivedEmptyOmittedScopes = new Map<string, Set<string>>();
+  if (npmTopologyProfile.omittedScopePolicy === 'exact-derived-empty-omitted-scopes') {
     for (const path of Object.keys(lockedPackages)) {
-      if (path === '') continue;
+      if (path === '' || expectedPackages.has(path)) continue;
       const container = lockPackageContainer(path);
       if (!containerPackages.has(container)) continue;
       const packageName = lockPackageName(path);
       if (!packageName.startsWith('@')) continue;
-      const scopes = npm10ScopeResidues.get(container) ?? new Set<string>();
+      const scopes = derivedEmptyOmittedScopes.get(container) ?? new Set<string>();
       scopes.add(packageName.split('/')[0]!);
-      npm10ScopeResidues.set(container, scopes);
+      derivedEmptyOmittedScopes.set(container, scopes);
     }
   }
   for (const [container, packageNames] of [...containerPackages].sort(([left], [right]) =>
@@ -5190,12 +5315,13 @@ function assertInstalledRecursivePackageClosureWithRetryPolicy(
         expectedEntries.add(packageName);
       }
     }
-    // npm 10 deterministically materializes an empty scope directory before it
-    // discovers that all direct members of that scope are omitted. npm 11 does
-    // not. Bind that exact reviewed-major difference without admitting any
-    // arbitrary empty directory or omitted package member.
-    if (npmMajor === 10) {
-      for (const scope of npm10ScopeResidues.get(container) ?? []) {
+    // Some exact reviewed npm versions materialize an empty scope directory
+    // when every lock member in that scope is filtered out. Other exact reviewed
+    // versions materialize no such residue. The profile is derived from the
+    // verified npm package authority, and the residue set is derived only from
+    // excluded scoped lock entries beneath an otherwise-live package container.
+    if (npmTopologyProfile.omittedScopePolicy === 'exact-derived-empty-omitted-scopes') {
+      for (const scope of derivedEmptyOmittedScopes.get(container) ?? []) {
         expectedEntries.add(scope);
         if (!scopes.has(scope)) scopes.set(scope, []);
       }
@@ -5212,7 +5338,13 @@ function assertInstalledRecursivePackageClosureWithRetryPolicy(
     ).sort();
     const wantedEntries = [...expectedEntries].sort();
     if (!exactJsonEqual(actualEntries, wantedEntries)) {
-      fail(`installed package container inventory differs: ${container}`);
+      const wantedDiagnostic = jsonDiagnosticString(JSON.stringify(wantedEntries), 768);
+      const actualDiagnostic = jsonDiagnosticString(JSON.stringify(actualEntries), 768);
+      fail(
+        `installed package container inventory differs: ${container}; expected ` +
+        `${wantedDiagnostic.encoded}${wantedDiagnostic.truncated ? ' (truncated)' : ''}; ` +
+        `actual ${actualDiagnostic.encoded}${actualDiagnostic.truncated ? ' (truncated)' : ''}`,
+      );
     }
 
     for (const [scope, expectedMembers] of scopes) {
@@ -5475,7 +5607,7 @@ function makeWorkspaceWritableForCleanup(workspace: string): void {
   }
 }
 
-const NETWORK_AND_WRITE_GUARD = String.raw`'use strict';
+export const NETWORK_AND_WRITE_GUARD = String.raw`'use strict';
 const denied = (authority) => {
   throw new Error('[cortexel package smoke] denied execute-phase authority: ' + authority);
 };
@@ -5514,6 +5646,13 @@ if (typeof globalThis.WebSocket === 'function') globalThis.WebSocket = deny('Web
 const childProcess = require('node:child_process');
 for (const name of ['exec', 'execFile', 'execFileSync', 'execSync', 'fork', 'spawn', 'spawnSync']) {
   childProcess[name] = deny('child_process.' + name);
+}
+if (typeof childProcess.ChildProcess?.prototype?.spawn === 'function') {
+  childProcess.ChildProcess.prototype.spawn =
+    deny('child_process.ChildProcess.prototype.spawn');
+}
+if (typeof process.execve === 'function') {
+  process.execve = deny('process.execve');
 }
 
 const fs = require('node:fs');
@@ -5571,15 +5710,6 @@ for (const promises of promiseSurfaces) {
 }
 require('node:module').syncBuiltinESMExports();
 `;
-
-function reviewedNpmMajor(npmVersion: string): 10 | 11 {
-  if (!/^(?:10|11)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?$/u.test(
-    npmVersion,
-  )) {
-    fail(`package smoke requires an exact reviewed npm 10 or 11 version; received ${npmVersion}`);
-  }
-  return npmVersion.startsWith('10.') ? 10 : 11;
-}
 
 function artifactBoundFixtureLock(
   exactFixtureLockValue: JsonValue,
@@ -5690,9 +5820,10 @@ function prepareConsumer(
   nodeExecutable: string,
   npmExecutable: string,
   profile: PackageSmokeConsumerProfile,
-  npmMajor: number,
+  npmVersion: string,
   runtime: NodeRuntimeIdentity,
 ): void {
+  reviewedNpmTopologyProfile(npmVersion);
   const {
     commandPolicy,
     maximumMaterializationAttempts,
@@ -5796,7 +5927,7 @@ function prepareConsumer(
         consumer,
         derivedLock,
         omittedDependencyClasses,
-        npmMajor,
+        npmVersion,
         runtime,
       );
     },
@@ -5831,7 +5962,7 @@ function assertPreparedConsumerClosures(options: {
   if (sha512Integrity(options.artifact) !== options.artifactIntegrity) {
     fail('semantic consumer revalidation received artifact bytes with the wrong integrity');
   }
-  const npmMajor = reviewedNpmMajor(options.npmVersion);
+  reviewedNpmTopologyProfile(options.npmVersion);
   const expectedLock = artifactBoundFixtureLock(
     options.exactFixtureLockValue,
     options.artifactIntegrity,
@@ -5879,7 +6010,7 @@ function assertPreparedConsumerClosures(options: {
       consumer,
       installedLock,
       omittedDependencyClasses,
-      npmMajor,
+      options.npmVersion,
       options.runtime,
     );
   }
@@ -6097,7 +6228,7 @@ function parsePackageRuntimeAuthority(value: JsonValue | undefined): PackageRunt
   ) {
     fail('prepared npm package authority paths are inconsistent');
   }
-  reviewedNpmMajor(npmVersion);
+  reviewedNpmTopologyProfile(npmVersion);
   return {
     scope: RUNTIME_AUTHORITY_SCOPE,
     node: {
@@ -6155,6 +6286,65 @@ function parseWorkspaceRootAuthority(
   };
 }
 
+export function parseTypeScriptConsumerCheck(
+  value: JsonValue | undefined,
+  workspaceSealDigest: string,
+): TypeScriptConsumerCheck {
+  const label = 'prepared TypeScript consumer check';
+  if (!/^sha256:[0-9a-f]{64}$/u.test(workspaceSealDigest)) {
+    fail(`${label} received an invalid workspace seal digest`);
+  }
+  const record = expectRecord(value, label);
+  exactKeys(record, [
+    'profile',
+    'compiler',
+    'argv',
+    'cwd',
+    'workspaceSealDigest',
+    'result',
+  ], label);
+  const compiler = expectRecord(record.compiler, `${label} compiler`);
+  exactKeys(compiler, ['name', 'version', 'bin'], `${label} compiler`);
+  const result = expectRecord(record.result, `${label} result`);
+  exactKeys(
+    result,
+    ['status', 'signal', 'stdoutBytes', 'stderrBytes'],
+    `${label} result`,
+  );
+  if (
+    record.profile !== TYPESCRIPT_CHECK_PROFILE ||
+    compiler.name !== 'typescript' ||
+    compiler.version !== EXPECTED_DEV_DEPENDENCIES.typescript ||
+    compiler.bin !== TYPESCRIPT_CHECK_COMPILER_BIN ||
+    !exactJsonEqual(record.argv, TYPESCRIPT_CHECK_ARGUMENTS) ||
+    record.cwd !== TYPESCRIPT_CHECK_CWD ||
+    record.workspaceSealDigest !== workspaceSealDigest ||
+    result.status !== 0 ||
+    result.signal !== null ||
+    result.stdoutBytes !== 0 ||
+    result.stderrBytes !== 0
+  ) {
+    fail('prepared TypeScript consumer check differs from the exact sealed success profile');
+  }
+  return {
+    profile: TYPESCRIPT_CHECK_PROFILE,
+    compiler: {
+      name: 'typescript',
+      version: EXPECTED_DEV_DEPENDENCIES.typescript,
+      bin: TYPESCRIPT_CHECK_COMPILER_BIN,
+    },
+    argv: TYPESCRIPT_CHECK_ARGUMENTS,
+    cwd: TYPESCRIPT_CHECK_CWD,
+    workspaceSealDigest,
+    result: {
+      status: 0,
+      signal: null,
+      stdoutBytes: 0,
+      stderrBytes: 0,
+    },
+  };
+}
+
 function validatePreparedState(value: JsonValue, workspace: string): PreparedState {
   const record = expectRecord(value, 'prepared package-smoke state');
   exactKeys(
@@ -6176,6 +6366,7 @@ function validatePreparedState(value: JsonValue, workspace: string): PreparedSta
       'consumer',
       'unrelatedDirectory',
       'nodeModules',
+      'typescriptCheck',
       'workspaceSeal',
       'readOnlyWorkspace',
     ],
@@ -6239,6 +6430,7 @@ function validatePreparedState(value: JsonValue, workspace: string): PreparedSta
       join(expectedCharts, 'node_modules'),
       join(expectedConsumer, 'node_modules'),
     ],
+    typescriptCheck: parseTypeScriptConsumerCheck(record.typescriptCheck, digest),
     workspaceSeal: {
       digest,
       entryCount: expectInteger(sealValue.entryCount, 'prepared workspace entry count'),
@@ -7209,6 +7401,91 @@ export function declarationReferencesPrivateRequestBoundary(source: string): boo
   );
 }
 
+const PACKAGE_SMOKE_PHASE_OPERATIONS = Object.freeze([
+  'browser-bundle.esm',
+  'charts.import',
+  'charts.require',
+  'cjs-url-cache',
+  'core.cjs',
+  'core.esm',
+  'guard.cjs',
+  'guard.esm',
+  'mixed-capability.esm',
+  'react.import',
+  'react.require',
+  'unrelated-cwd.cjs',
+  'unrelated-cwd.esm',
+] as const);
+type PackageSmokePhaseOperation = (typeof PACKAGE_SMOKE_PHASE_OPERATIONS)[number];
+
+const PACKAGE_SMOKE_FIXED_CLI_OPERATIONS = Object.freeze([
+  'cli.identity',
+  'cli.catalog',
+  'cli.source-catalog',
+  'cli.source-describe',
+  'cli.source-example.initial',
+  'cli.source-example.repeat',
+  'cli.source-adapt.guarded-envelope',
+  'cli.source-adapt.guarded-input',
+  'cli.source-adapt.caller-capture',
+  'cli.validate-adapted',
+  'cli.render-adapted',
+  'cli.source-render',
+  'cli.unknown-skill',
+  'cli.unknown-source',
+] as const);
+
+const PACKAGE_SMOKE_CLI_EXIT_OPERATIONS = Object.freeze([
+  'cli.exit.usage',
+  'cli.exit.valid',
+  'cli.exit.malformed',
+  'cli.exit.structural',
+  'cli.exit.legacy',
+  'cli.exit.absent',
+] as const);
+
+type PackageSmokeExecuteOperation =
+  | PackageSmokePhaseOperation
+  | 'cli.import.esm'
+  | 'cli.import.cjs'
+  | (typeof PACKAGE_SMOKE_FIXED_CLI_OPERATIONS)[number]
+  | (typeof PACKAGE_SMOKE_CLI_EXIT_OPERATIONS)[number]
+  | `cli.describe-all.${StableSkillId}`
+  | `cli.validate-authoring.${StableSkillId}`;
+
+const PACKAGE_SMOKE_STABLE_SKILL_CLI_OPERATIONS = Object.freeze(
+  SOURCE_STABLE_SKILL_IDS.flatMap((skillId) => [
+    `cli.describe-all.${skillId}` as const,
+    `cli.validate-authoring.${skillId}` as const,
+  ]),
+);
+
+export const PACKAGE_SMOKE_EXECUTE_OPERATIONS = Object.freeze([
+  ...PACKAGE_SMOKE_PHASE_OPERATIONS,
+  'cli.import.esm',
+  'cli.import.cjs',
+  ...PACKAGE_SMOKE_FIXED_CLI_OPERATIONS,
+  ...PACKAGE_SMOKE_STABLE_SKILL_CLI_OPERATIONS,
+  ...PACKAGE_SMOKE_CLI_EXIT_OPERATIONS,
+] satisfies readonly PackageSmokeExecuteOperation[]);
+
+export function assertPackageSmokeExecuteArgumentsExcludeTypeScript(
+  args: readonly string[],
+): void {
+  if (!Array.isArray(args) || args.some((argument) => typeof argument !== 'string')) {
+    fail('package-smoke execute arguments must be one string array');
+  }
+  for (const argument of args) {
+    const normalized = argument.replaceAll('\\', '/').toLowerCase();
+    if (
+      normalized.includes('typescript') ||
+      /(?:^|\/)tsc(?:$|[./-])/u.test(normalized)
+    ) {
+      fail('package-smoke execute command attempted to target the TypeScript compiler');
+    }
+  }
+}
+
 function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): string {
   let consumer = context.coreConsumer;
   const chartsConsumer = context.chartsConsumer;
@@ -7216,9 +7493,67 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   const unrelated = context.unrelated;
   const nodeExecutable = context.nodeExecutable;
   const packed = context.packed;
-  const phaseRun = (command: string, args: string[], cwd: string): string => {
-    if (command !== nodeExecutable) fail('package-smoke phase attempted a non-reviewed runtime');
-    return phase === 'execute' ? run(command, args, cwd) : '';
+  const observedOperations = new Set<PackageSmokeExecuteOperation>();
+  if (
+    new Set(PACKAGE_SMOKE_EXECUTE_OPERATIONS).size !==
+    PACKAGE_SMOKE_EXECUTE_OPERATIONS.length
+  ) {
+    fail('package-smoke execute operation inventory contains duplicates');
+  }
+  const recordOperation = (operation: PackageSmokeExecuteOperation): void => {
+    if (!(PACKAGE_SMOKE_EXECUTE_OPERATIONS as readonly string[]).includes(operation)) {
+      fail('package-smoke phase received an unreviewed operation identity');
+    }
+    if (observedOperations.has(operation)) {
+      fail(`package-smoke phase repeated operation ${operation}`);
+    }
+    observedOperations.add(operation);
+  };
+  const phaseRun = (
+    operation: PackageSmokePhaseOperation,
+    args: string[],
+    cwd: string,
+  ): string => {
+    assertPackageSmokeExecuteArgumentsExcludeTypeScript(args);
+    recordOperation(operation);
+    if (phase !== 'execute') return '';
+    try {
+      return run(
+        nodeExecutable,
+        args,
+        cwd,
+        PACKAGE_SMOKE_COMMAND_POLICIES.executeNode,
+      );
+    } catch (error) {
+      throw new AggregateError(
+        [error],
+        `package-smoke execute probe ${operation} failed`,
+      );
+    }
+  };
+  const executeRunResult = (
+    operation: Exclude<PackageSmokeExecuteOperation, PackageSmokePhaseOperation>,
+    args: string[],
+    cwd: string,
+  ): ReviewedNodeCommandResult => {
+    if (phase !== 'execute') {
+      fail('execute-only package-smoke operation was requested during prepare');
+    }
+    assertPackageSmokeExecuteArgumentsExcludeTypeScript(args);
+    recordOperation(operation);
+    try {
+      return runResult(
+        nodeExecutable,
+        args,
+        cwd,
+        PACKAGE_SMOKE_COMMAND_POLICIES.executeNode,
+      );
+    } catch (error) {
+      throw new AggregateError(
+        [error],
+        `package-smoke execute operation ${operation} failed`,
+      );
+    }
   };
   const phaseWriteFile = (path: string, intendedUtf8: string): void => {
     if (phase === 'prepare') {
@@ -7355,19 +7690,40 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   }
 
   phaseRun(
-    nodeExecutable,
+    'guard.cjs',
     [
       '-e',
       `
         let networkDenied = false;
         let writeDenied = false;
+        let childProcessDenied = false;
+        let childProcessPrototypeDenied = false;
+        let execveDeniedOrUnavailable = typeof process.execve !== 'function';
         try { require('node:net').connect({ host: '127.0.0.1', port: 9 }); }
         catch (error) { networkDenied = String(error).includes('denied execute-phase authority'); }
         try { require('node:fs').writeFileSync('forbidden-execute-write', 'x'); }
         catch (error) { writeDenied = String(error).includes('denied execute-phase authority'); }
-        if (!networkDenied || !writeDenied ||
+        const childProcess = require('node:child_process');
+        try { childProcess.execFileSync('/cortexel-does-not-exist'); }
+        catch (error) {
+          childProcessDenied = String(error).includes('denied execute-phase authority');
+        }
+        try { new childProcess.ChildProcess().spawn({ file: '/cortexel-does-not-exist' }); }
+        catch (error) {
+          childProcessPrototypeDenied =
+            String(error).includes('denied execute-phase authority');
+        }
+        if (typeof process.execve === 'function') {
+          try { process.execve('/cortexel-does-not-exist', ['/cortexel-does-not-exist'], {}); }
+          catch (error) {
+            execveDeniedOrUnavailable = String(error).includes('denied execute-phase authority');
+          }
+        }
+        if (!networkDenied || !writeDenied || !childProcessDenied ||
+            !childProcessPrototypeDenied ||
+            !execveDeniedOrUnavailable ||
             process.env.CORTEXEL_PACKAGE_SMOKE_PHASE !== 'execute') {
-          throw new Error('execute-phase network/write guard is not active');
+          throw new Error('execute-phase authority guard is not active');
         }
       `,
     ],
@@ -7376,10 +7732,10 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
 
   const cjsUrlCacheProbePath = join(consumer, CJS_URL_CACHE_PROBE_FILENAME);
   phaseWriteFile(cjsUrlCacheProbePath, generatedCjsUrlCacheProbeSource());
-  phaseRun(nodeExecutable, [cjsUrlCacheProbePath], consumer);
+  phaseRun('cjs-url-cache', [cjsUrlCacheProbePath], consumer);
 
   phaseRun(
-    nodeExecutable,
+    'guard.esm',
     [
       '--input-type=module',
       '-e',
@@ -7388,11 +7744,13 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         import { resolve4 } from 'node:dns/promises';
         import { writeFileSync } from 'node:fs';
         import { open } from 'node:fs/promises';
+        import { execFileSync } from 'node:child_process';
         const denied = (error) => String(error).includes('denied execute-phase authority');
         let netDenied = false;
         let dnsDenied = false;
         let writeDenied = false;
         let handleDenied = false;
+        let childProcessDenied = false;
         try { connect({ host: '127.0.0.1', port: 9 }); } catch (error) { netDenied = denied(error); }
         try { await resolve4('invalid.example'); } catch (error) { dnsDenied = denied(error); }
         try { writeFileSync('forbidden-esm-write', 'x'); } catch (error) { writeDenied = denied(error); }
@@ -7400,8 +7758,11 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         try { await handle.utimes(new Date(0), new Date(0)); }
         catch (error) { handleDenied = denied(error); }
         finally { await handle.close(); }
-        if (!netDenied || !dnsDenied || !writeDenied || !handleDenied) {
-          throw new Error('execute-phase ESM network/write guard is not active');
+        try { execFileSync('/cortexel-does-not-exist'); }
+        catch (error) { childProcessDenied = denied(error); }
+        if (!netDenied || !dnsDenied || !writeDenied || !handleDenied ||
+            !childProcessDenied) {
+          throw new Error('execute-phase ESM network/write/launch guard is not active');
         }
       `,
     ],
@@ -7409,7 +7770,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   );
 
   phaseRun(
-    nodeExecutable,
+    'core.esm',
     [
       '--input-type=module',
       '-e',
@@ -7495,7 +7856,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     consumer,
   );
   phaseRun(
-    nodeExecutable,
+    'core.cjs',
     [
       '-e',
       `
@@ -8128,7 +8489,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     `,
   );
   phaseRun(
-    nodeExecutable,
+    'mixed-capability.esm',
     [join(fullConsumer, 'mixed-capability-probe.mjs')],
     fullConsumer,
   );
@@ -8137,7 +8498,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   // during prepare, while the reviewed POSIX supervisor can contain esbuild's
   // native service. The generated bundle and canonical build receipt are then
   // sealed with the workspace. Execute imports only that sealed bundle under the
-  // normal child-process/network/write-denying guard; the guard is never weakened.
+  // normal reviewed launch-surface/network/write guard; the guard is never weakened.
   const browserBundleEntrySource = `
     import * as headless from 'cortexel/knowledge-graph';
     import * as interactive from 'cortexel/react/knowledge-graph';
@@ -8327,7 +8688,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     packedPaths,
     permissionPhase: phase === 'prepare' ? 'prepared-writable' : 'finalized-read-only',
   });
-  phaseRun(nodeExecutable, [browserOutputPath], fullConsumer);
+  phaseRun('browser-bundle.esm', [browserOutputPath], fullConsumer);
 
   // Resolve the package from the probe module, then execute it from a directory with
   // no package.json, node_modules, or contract tree. Validation must locate schemas
@@ -8362,12 +8723,23 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       }
     `,
   );
-  phaseRun(nodeExecutable, [join(consumer, 'unrelated-cwd-probe.mjs')], unrelated);
-  phaseRun(nodeExecutable, [join(consumer, 'unrelated-cwd-probe.cjs')], unrelated);
+  phaseRun(
+    'unrelated-cwd.esm',
+    [join(consumer, 'unrelated-cwd-probe.mjs')],
+    unrelated,
+  );
+  phaseRun(
+    'unrelated-cwd.cjs',
+    [join(consumer, 'unrelated-cwd-probe.cjs')],
+    unrelated,
+  );
 
   const installedCliEsm = join(installedRoot, 'dist', 'cli', 'main.js');
   assertInstalledNodeBinShim(consumer, 'cortexel', installedCliEsm);
-  const runInstalledCli = (args: string[]) => {
+  const runInstalledCli = (
+    operation: Exclude<PackageSmokeExecuteOperation, PackageSmokePhaseOperation>,
+    args: string[],
+  ): ReviewedNodeCommandResult => {
     // Execute is a finalized, globally write-denied evidence phase. Publication
     // semantics have their own CLI tests; the installed-package probe exercises the
     // complete adapter/validation/derivation/render path through --dry-run without
@@ -8375,7 +8747,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     if (args.includes('--output') || args.includes('--force')) {
       fail('finalized installed-CLI probe requested forbidden publication authority');
     }
-    return runResult(nodeExecutable, [installedCliEsm, ...args], unrelated);
+    return executeRunResult(operation, [installedCliEsm, ...args], unrelated);
   };
 
   phaseWriteFile(
@@ -8461,13 +8833,17 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   phaseWriteFile(adaptedRequestPath, expectedAdaptedRequest);
   if (phase === 'execute') {
     for (const importer of ['import-cli.mjs', 'import-cli.cjs']) {
-      const imported = runResult(nodeExecutable, [join(consumer, importer)], unrelated);
+      const imported = executeRunResult(
+        importer === 'import-cli.mjs' ? 'cli.import.esm' : 'cli.import.cjs',
+        [join(consumer, importer)],
+        unrelated,
+      );
       if (imported.status !== 0 || imported.stdout !== 'imported\n' || imported.stderr !== '') {
         throw new Error(`packed CLI import guard failed for ${importer}`);
       }
     }
 
-    const identityResult = runInstalledCli(['identity', '--json']);
+    const identityResult = runInstalledCli('cli.identity', ['identity', '--json']);
     if (identityResult.status !== 0 || identityResult.stderr !== '') {
       throw new Error('packed CLI identity command failed');
     }
@@ -8498,7 +8874,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       throw new Error('packed CLI identity differs from shipped package/contract bytes');
     }
 
-    const catalogResult = runInstalledCli(['catalog', '--json']);
+    const catalogResult = runInstalledCli('cli.catalog', ['catalog', '--json']);
     if (catalogResult.status !== 0 || catalogResult.stderr !== '') {
       throw new Error('packed CLI catalog command failed');
     }
@@ -8529,7 +8905,10 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       throw new Error('packed CLI catalog does not enumerate the exact stable manifest ids');
     }
 
-    const sourceCatalogResult = runInstalledCli(['source', 'catalog', '--json']);
+    const sourceCatalogResult = runInstalledCli(
+      'cli.source-catalog',
+      ['source', 'catalog', '--json'],
+    );
     if (sourceCatalogResult.status !== 0 || sourceCatalogResult.stderr !== '') {
       throw new Error('packed CLI source catalog command failed');
     }
@@ -8570,7 +8949,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     ) {
       throw new Error('packed CLI source discovery bytes do not reproduce its digest');
     }
-    const sourceDescribeResult = runInstalledCli([
+    const sourceDescribeResult = runInstalledCli('cli.source-describe', [
       'source',
       'describe',
       'nest-spike-recorder',
@@ -8599,7 +8978,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     ) {
       throw new Error('packed CLI source description differs from prepared source');
     }
-    const sourceExampleResult = runInstalledCli([
+    const sourceExampleResult = runInstalledCli('cli.source-example.initial', [
       'source',
       'example',
       'nest-spike-recorder',
@@ -8614,7 +8993,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     );
     // Deterministic stdout is a separate property from the descriptor-bound JSON
     // value: compare two packed invocations, never pretty JSON against JCS bytes.
-    const repeatedSourceExampleResult = runInstalledCli([
+    const repeatedSourceExampleResult = runInstalledCli('cli.source-example.repeat', [
       'source',
       'example',
       'nest-spike-recorder',
@@ -8626,7 +9005,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     ) {
       throw new Error('packed CLI source example output is not deterministic');
     }
-    const guardedSourceAdapt = runInstalledCli([
+    const guardedSourceAdapt = runInstalledCli('cli.source-adapt.guarded-envelope', [
       'source',
       'adapt',
       'nest-spike-recorder',
@@ -8641,7 +9020,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     ) {
       throw new Error('packed CLI admitted its unchanged synthetic source example');
     }
-    const guardedInputAdapt = runInstalledCli([
+    const guardedInputAdapt = runInstalledCli('cli.source-adapt.guarded-input', [
       'source',
       'adapt',
       'nest-spike-recorder',
@@ -8656,7 +9035,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     ) {
       throw new Error('packed CLI admitted the extracted guarded synthetic input');
     }
-    const sourceAdaptResult = runInstalledCli([
+    const sourceAdaptResult = runInstalledCli('cli.source-adapt.caller-capture', [
       'source',
       'adapt',
       'nest-spike-recorder',
@@ -8679,8 +9058,11 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     ) {
       throw new Error('packed CLI source adapter emitted bytes differing from prepared source');
     }
-    const adaptedValidation = runInstalledCli(['validate', adaptedRequestPath]);
-    const adaptedRender = runInstalledCli([
+    const adaptedValidation = runInstalledCli(
+      'cli.validate-adapted',
+      ['validate', adaptedRequestPath],
+    );
+    const adaptedRender = runInstalledCli('cli.render-adapted', [
       'render',
       adaptedRequestPath,
       '--dry-run',
@@ -8699,7 +9081,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       adaptedRender.stdout,
       'installed CLI adapted-request dry render',
     );
-    const directSourceDryRun = runInstalledCli([
+    const directSourceDryRun = runInstalledCli('cli.source-render', [
       'source',
       'render',
       'nest-spike-recorder',
@@ -8746,8 +9128,10 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     let discoveryCompilationProfile: Record<string, JsonValue> | undefined;
     let discoveryResources: JsonValue[] | undefined;
     const discoverySkills: Record<string, JsonValue>[] = [];
-    for (const skillId of catalogIds as string[]) {
-      const describeResult = runInstalledCli([
+    // Process output is evidence to compare, never command-selection authority.
+    // Drive the closed matrix from the source-owned stable-id tuple.
+    for (const skillId of SOURCE_STABLE_SKILL_IDS) {
+      const describeResult = runInstalledCli(`cli.describe-all.${skillId}`, [
         'describe',
         skillId,
         '--json',
@@ -8817,7 +9201,10 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       ) {
         throw new Error(`packed CLI authoring fixture differs from prepared source for ${skillId}`);
       }
-      const validateResult = runInstalledCli(['validate', authoringPath]);
+      const validateResult = runInstalledCli(
+        `cli.validate-authoring.${skillId}`,
+        ['validate', authoringPath],
+      );
       if (validateResult.status !== 0 || validateResult.stderr !== '') {
         throw new Error(`packed CLI rejected its own authoring fixture for ${skillId}`);
       }
@@ -8838,7 +9225,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       throw new Error('packed CLI discovery bytes do not reproduce catalogDigest');
     }
 
-    const unknownResult = runInstalledCli([
+    const unknownResult = runInstalledCli('cli.unknown-skill', [
       'describe',
       'neuro.reponse_curve',
       '--json',
@@ -8858,7 +9245,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     ) {
       throw new Error('packed CLI unknown-skill protocol is malformed');
     }
-    const unknownSourceResult = runInstalledCli([
+    const unknownSourceResult = runInstalledCli('cli.unknown-source', [
       'source',
       'describe',
       'nest-multimeter',
@@ -8896,17 +9283,33 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     legacyPath,
     '{"skill":{"id":"nest.voltage_trace"},"data":{},"parameters":{}}\n',
   );
-  const cliExitCases: Array<{ args: string[]; expected: number }> = [
-    { args: [], expected: 2 },
-    { args: ['validate', validRequestPath], expected: 0 },
-    { args: ['validate', malformedPath], expected: 3 },
-    { args: ['validate', structuralPath], expected: 4 },
-    { args: ['migrate', legacyPath], expected: 5 },
-    { args: ['validate', join(unrelated, 'absent.json')], expected: 7 },
+  const cliExitCases: Array<{
+    operation: (typeof PACKAGE_SMOKE_CLI_EXIT_OPERATIONS)[number];
+    args: string[];
+    expected: number;
+  }> = [
+    { operation: 'cli.exit.usage', args: [], expected: 2 },
+    { operation: 'cli.exit.valid', args: ['validate', validRequestPath], expected: 0 },
+    {
+      operation: 'cli.exit.malformed',
+      args: ['validate', malformedPath],
+      expected: 3,
+    },
+    {
+      operation: 'cli.exit.structural',
+      args: ['validate', structuralPath],
+      expected: 4,
+    },
+    { operation: 'cli.exit.legacy', args: ['migrate', legacyPath], expected: 5 },
+    {
+      operation: 'cli.exit.absent',
+      args: ['validate', join(unrelated, 'absent.json')],
+      expected: 7,
+    },
   ];
   if (phase === 'execute') {
     for (const testCase of cliExitCases) {
-      const result = runInstalledCli(testCase.args);
+      const result = runInstalledCli(testCase.operation, testCase.args);
       if (result.status !== testCase.expected) {
         throw new Error(
           `packed CLI exit mismatch: expected ${testCase.expected}, got ${result.status}`,
@@ -8958,7 +9361,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
           }
         `;
     phaseRun(
-      nodeExecutable,
+      `charts.${mode}`,
       mode === 'import'
         ? ['--input-type=module', '-e', expression]
         : ['-e', expression],
@@ -9049,7 +9452,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
             }
           `;
     phaseRun(
-      nodeExecutable,
+      `react.${mode}`,
       mode === 'import'
         ? ['--input-type=module', '-e', expression]
         : ['-e', expression],
@@ -9857,11 +10260,6 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   );
   const installedTsc = join(consumer, 'node_modules', 'typescript', 'bin', 'tsc');
   assertInstalledNodeBinShim(consumer, 'tsc', installedTsc);
-  phaseRun(
-    nodeExecutable,
-    [installedTsc, '-p', 'tsconfig.json'],
-    consumer,
-  );
 
   // Guard that the packed manifest is the exact deterministic artifact emitted
   // by this source tree, not merely a version-compatible stale file.
@@ -9880,7 +10278,189 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       MAX_JSON_BYTES,
     ),
   ) as { version: string };
+  const expectedOperations = phase === 'prepare'
+    ? PACKAGE_SMOKE_PHASE_OPERATIONS
+    : PACKAGE_SMOKE_EXECUTE_OPERATIONS;
+  if (!exactJsonEqual(
+    [...observedOperations].sort(),
+    [...expectedOperations].sort(),
+  )) {
+    fail(`package-smoke ${phase} did not cover its closed operation inventory`);
+  }
   return packageJson.version;
+}
+
+export function buildTypeScriptConsumerCheck(
+  result: Pick<ReviewedNodeCommandResult, 'status' | 'signal' | 'stdout' | 'stderr'>,
+  finalizedWorkspaceSealDigest: string,
+): TypeScriptConsumerCheck {
+  if (!/^sha256:[0-9a-f]{64}$/u.test(finalizedWorkspaceSealDigest)) {
+    fail('TypeScript consumer check received an invalid finalized workspace digest');
+  }
+  if (result.status !== 0 || result.signal !== null) {
+    fail(formatReviewedNodeCommandFailure('typescript', result));
+  }
+  if (result.stdout.length !== 0 || result.stderr.length !== 0) {
+    const stdout = jsonDiagnosticString(
+      result.stdout,
+      REVIEWED_COMMAND_DIAGNOSTIC_LIMITS.channelEncodedBytes,
+    );
+    const stderr = jsonDiagnosticString(
+      result.stderr,
+      REVIEWED_COMMAND_DIAGNOSTIC_LIMITS.channelEncodedBytes,
+    );
+    fail(
+      'finalized TypeScript consumer check emitted unexpected output: ' +
+      `{"stdout":${stdout.encoded},"stdoutTruncated":${String(stdout.truncated)},` +
+      `"stderr":${stderr.encoded},"stderrTruncated":${String(stderr.truncated)}}`,
+    );
+  }
+  return {
+    profile: TYPESCRIPT_CHECK_PROFILE,
+    compiler: {
+      name: 'typescript',
+      version: EXPECTED_DEV_DEPENDENCIES.typescript,
+      bin: TYPESCRIPT_CHECK_COMPILER_BIN,
+    },
+    argv: TYPESCRIPT_CHECK_ARGUMENTS,
+    cwd: TYPESCRIPT_CHECK_CWD,
+    workspaceSealDigest: finalizedWorkspaceSealDigest,
+    result: {
+      status: 0,
+      signal: null,
+      stdoutBytes: 0,
+      stderrBytes: 0,
+    },
+  };
+}
+
+export function assertTypeScriptConsumerCheckSealStability(
+  before: WorkspaceSeal,
+  after: WorkspaceSeal,
+  check: TypeScriptConsumerCheck,
+): void {
+  if (!exactJsonEqual(before, after)) {
+    fail(
+      'package-smoke workspace changed across the finalized TypeScript check ' +
+      'and semantic revalidation',
+    );
+  }
+  if (check.workspaceSealDigest !== after.digest) {
+    fail('TypeScript consumer check is not bound to the finalized workspace seal');
+  }
+}
+
+interface FinalizedTypeScriptEvidenceSteps {
+  readonly captureFirstSeal: () => WorkspaceSeal;
+  readonly runTypeScriptCheck: (seal: WorkspaceSeal) => TypeScriptConsumerCheck;
+  readonly revalidateConsumerClosures: () => void;
+  readonly captureSecondSeal: () => WorkspaceSeal;
+  readonly revalidateRuntimeAuthority: () => void;
+}
+
+interface FinalizedTypeScriptEvidence {
+  readonly typescriptCheck: TypeScriptConsumerCheck;
+  readonly workspaceSeal: WorkspaceSeal;
+}
+
+let finalizedTypeScriptEvidenceSequenceActive = false;
+
+function invokeSynchronousFinalizationStep<T>(
+  label: string,
+  operation: () => T,
+): T {
+  const result = operation();
+  if (isPotentiallyAsynchronousResult(result)) {
+    fail(`${label} must be strictly synchronous`);
+  }
+  return result;
+}
+
+function invokeSynchronousFinalizationVoidStep(
+  label: string,
+  operation: () => void,
+): void {
+  const result: unknown = operation();
+  if (isPotentiallyAsynchronousResult(result)) {
+    fail(`${label} must be strictly synchronous`);
+  }
+  if (result !== undefined) {
+    fail(`${label} must return undefined`);
+  }
+}
+
+/**
+ * Builds the only evidence value that may precede prepared-state publication.
+ * A failed or asynchronous compiler, semantic recheck, second seal, stability
+ * check, or runtime-authority check cannot return this value. Publication remains
+ * an explicit irreversible action in the caller after this function succeeds.
+ */
+export function finalizeTypeScriptConsumerCheckBeforePublication(
+  steps: FinalizedTypeScriptEvidenceSteps,
+): FinalizedTypeScriptEvidence {
+  if (finalizedTypeScriptEvidenceSequenceActive) {
+    fail('finalized TypeScript evidence sequence is already active');
+  }
+  finalizedTypeScriptEvidenceSequenceActive = true;
+  try {
+    const firstSeal = invokeSynchronousFinalizationStep(
+      'first finalized workspace seal',
+      steps.captureFirstSeal,
+    );
+    const candidateCheck = invokeSynchronousFinalizationStep(
+      'finalized TypeScript consumer check',
+      () => steps.runTypeScriptCheck(firstSeal),
+    );
+    const check = parseTypeScriptConsumerCheck(
+      candidateCheck as unknown as JsonValue,
+      firstSeal.digest,
+    );
+    invokeSynchronousFinalizationVoidStep(
+      'finalized consumer-closure revalidation',
+      steps.revalidateConsumerClosures,
+    );
+    const secondSeal = invokeSynchronousFinalizationStep(
+      'second finalized workspace seal',
+      steps.captureSecondSeal,
+    );
+    assertTypeScriptConsumerCheckSealStability(firstSeal, secondSeal, check);
+    invokeSynchronousFinalizationVoidStep(
+      'pre-publication runtime-authority revalidation',
+      steps.revalidateRuntimeAuthority,
+    );
+    return Object.freeze({
+      typescriptCheck: check,
+      workspaceSeal: secondSeal,
+    });
+  } finally {
+    finalizedTypeScriptEvidenceSequenceActive = false;
+  }
+}
+
+function runFinalizedTypeScriptConsumerCheck(
+  context: PackageSmokeContext,
+  finalizedWorkspaceSeal: WorkspaceSeal,
+): TypeScriptConsumerCheck {
+  if (
+    context.consumer !== join(context.workspace, TYPESCRIPT_CHECK_CWD) ||
+    finalizedWorkspaceSeal.root.path !== context.workspace ||
+    finalizedWorkspaceSeal.root.mode !== 0o555
+  ) {
+    fail('TypeScript consumer check received an inconsistent finalized workspace');
+  }
+  assertWorkspaceReadOnly(context.workspace, true);
+  const installedTsc = join(
+    context.workspace,
+    ...TYPESCRIPT_CHECK_COMPILER_BIN.split('/'),
+  );
+  assertInstalledNodeBinShim(context.consumer, 'tsc', installedTsc);
+  const result = runResult(
+    context.nodeExecutable,
+    [installedTsc, ...TYPESCRIPT_CHECK_ARGUMENTS],
+    context.consumer,
+    PACKAGE_SMOKE_COMMAND_POLICIES.typescriptCheck,
+  );
+  return buildTypeScriptConsumerCheck(result, finalizedWorkspaceSeal.digest);
 }
 
 function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
@@ -9898,9 +10478,13 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
   const workspace = canonicalWorkspacePath(options.workspace);
   const fixture = validateFixtureSources();
   assertPackageSmokeProjectNpmConfigAbsent(root, 'initial package-smoke source');
-  assertEmptyWorkspace(workspace);
   const nodeExecutable = resolveExecutable(options.nodeExecutable, 'node', 'Node executable');
   const nodeFileAuthority = inspectNodeExecutableAuthority(nodeExecutable);
+  const npmExecutable = resolveNpmCli(options.npmExecutable);
+  // Exact npm topology is a read-only preflight. Reject an unknown manifest
+  // before creating the workspace, operational cache tree, or any subprocess.
+  const npmAuthority = inspectNpmPackageAuthority(npmExecutable);
+  assertEmptyWorkspace(workspace);
   commandNodeAuthority = nodeFileAuthority;
   const npmCacheAuthorities = createPackageSmokeOperationalDirectories(workspace);
   commandNpmCacheAuthorities = npmCacheAuthorities;
@@ -9910,8 +10494,6 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
   const nodeVersion = executableVersion(nodeExecutable, 'Node');
   assertSupportedNodeVersion(nodeVersion);
   const nodeRuntime = nodeRuntimeIdentity(nodeExecutable);
-  const npmExecutable = resolveNpmCli(options.npmExecutable);
-  const npmAuthority = inspectNpmPackageAuthority(npmExecutable);
   const runtimeAuthority: PackageRuntimeAuthority = {
     scope: RUNTIME_AUTHORITY_SCOPE,
     node: { ...nodeFileAuthority, version: nodeVersion, runtime: nodeRuntime },
@@ -9943,7 +10525,7 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
   if (npmVersion !== npmAuthority.version) {
     fail('npm CLI version differs from its package manifest authority');
   }
-  const npmMajor = reviewedNpmMajor(npmVersion);
+  reviewedNpmTopologyProfile(npmVersion);
 
   const artifactDirectory = join(workspace, 'artifact');
   const coreConsumer = join(workspace, 'core-consumer');
@@ -10005,7 +10587,7 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
     nodeExecutable,
     npmExecutable,
     PACKAGE_SMOKE_CONSUMER_PROFILES.core,
-    npmMajor,
+    npmVersion,
     nodeRuntime,
   );
   prepareConsumer(
@@ -10020,7 +10602,7 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
     nodeExecutable,
     npmExecutable,
     PACKAGE_SMOKE_CONSUMER_PROFILES.charts,
-    npmMajor,
+    npmVersion,
     nodeRuntime,
   );
   prepareConsumer(
@@ -10035,7 +10617,7 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
     nodeExecutable,
     npmExecutable,
     PACKAGE_SMOKE_CONSUMER_PROFILES.full,
-    npmMajor,
+    npmVersion,
     nodeRuntime,
   );
   assertPackageSmokeNpmCacheSessionComplete(npmCacheAuthorities);
@@ -10080,16 +10662,19 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
       ...consumerClosureOptions,
       permissionPhase: 'finalized-read-only',
     });
-    const firstFinalizedSeal = fingerprintPackageSmokeWorkspace(workspace, true);
-    assertPreparedConsumerClosures({
-      ...consumerClosureOptions,
-      permissionPhase: 'finalized-read-only',
+    const finalizedTypeScriptEvidence = finalizeTypeScriptConsumerCheckBeforePublication({
+      captureFirstSeal: () => fingerprintPackageSmokeWorkspace(workspace, true),
+      runTypeScriptCheck: (firstFinalizedSeal) =>
+        runFinalizedTypeScriptConsumerCheck(context, firstFinalizedSeal),
+      revalidateConsumerClosures: () => assertPreparedConsumerClosures({
+        ...consumerClosureOptions,
+        permissionPhase: 'finalized-read-only',
+      }),
+      captureSecondSeal: () => fingerprintPackageSmokeWorkspace(workspace, true),
+      revalidateRuntimeAuthority: () =>
+        assertPackageRuntimeAuthority(runtimeAuthority, 'pre-publication'),
     });
-    const workspaceSeal = fingerprintPackageSmokeWorkspace(workspace, true);
-    if (!exactJsonEqual(firstFinalizedSeal, workspaceSeal)) {
-      fail('package-smoke workspace changed across finalized semantic revalidation');
-    }
-    assertPackageRuntimeAuthority(runtimeAuthority, 'pre-publication');
+    const { typescriptCheck, workspaceSeal } = finalizedTypeScriptEvidence;
     const state: PreparedState = {
       schema: PREPARED_STATE_SCHEMA,
       workspace,
@@ -10111,6 +10696,7 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
         join(chartsConsumer, 'node_modules'),
         join(consumer, 'node_modules'),
       ],
+      typescriptCheck,
       workspaceSeal,
       readOnlyWorkspace,
     };
@@ -10322,6 +10908,42 @@ export function formatPackageSmokeFailure(error: unknown): string {
   return fragments.join('; ');
 }
 
+export function allocateDefaultPackageSmokeWorkspaceAfterRuntimePreflight(
+  options: {
+    readonly nodeExecutable?: string;
+    readonly npmExecutable?: string;
+    readonly temporaryParent?: string;
+  } = {},
+): {
+  readonly temp: string;
+  readonly workspace: string;
+  readonly nodeExecutable: string;
+  readonly npmExecutable: string;
+} {
+  const nodeExecutable = resolveExecutable(
+    options.nodeExecutable,
+    'node',
+    'Node executable',
+  );
+  inspectNodeExecutableAuthority(nodeExecutable);
+  const npmExecutable = resolveNpmCli(options.npmExecutable);
+  // This exact-profile check must finish before the default no-argument entry
+  // creates even its outer temporary directory.
+  inspectNpmPackageAuthority(npmExecutable);
+  const temporaryParent = realpathSync(options.temporaryParent ?? tmpdir());
+  const parentStats = lstatSync(temporaryParent);
+  if (!parentStats.isDirectory() || parentStats.isSymbolicLink()) {
+    fail('package-smoke temporary parent must be one canonical real directory');
+  }
+  const temp = mkdtempSync(join(temporaryParent, 'cortexel-package-smoke-'));
+  return Object.freeze({
+    temp,
+    workspace: join(temp, 'workspace'),
+    nodeExecutable,
+    npmExecutable,
+  });
+}
+
 function runMain(): void {
   if (process.platform === 'win32') {
     fail('package smoke currently requires POSIX process-group semantics');
@@ -10350,10 +10972,14 @@ function runMain(): void {
     return;
   }
 
-  const temp = mkdtempSync(join(tmpdir(), 'cortexel-package-smoke-'));
-  const workspace = join(temp, 'workspace');
+  const allocation = allocateDefaultPackageSmokeWorkspaceAfterRuntimePreflight();
+  const { temp, workspace, nodeExecutable, npmExecutable } = allocation;
   try {
-    const prepared = preparePackageSmokeWorkspace({ workspace });
+    const prepared = preparePackageSmokeWorkspace({
+      workspace,
+      nodeExecutable,
+      npmExecutable,
+    });
     const result = executePackageSmokeWorkspace({
       workspace,
       expectedStateDigest: prepared.stateDigest,

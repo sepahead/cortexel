@@ -702,11 +702,14 @@ The machine-readable state of every release gate is in
   verification remain independent of PyNEST. TypeScript and Python must share a closed
   conformance corpus rather than silently becoming two semantic authorities. Until the
   packages are published and these paths exist, a source checkout remains part of setup.
-- **Package-smoke authority is not a hostile process sandbox.** Prepared-state v2
+- **Package-smoke authority is not a hostile process sandbox.** Prepared-state v3
   seals the original source Node executable and npm package tree. Only the reviewed
-  npm 10 and npm 11 majors are admitted; current npm 12 is deliberately rejected until
-  its exact install topology and residue behavior have a separate reviewed profile and
-  CI lane. Prepare and execute
+  exact versions `10.9.0`, `10.9.8`, `11.3.0`, `11.12.1`, `11.16.0`, `11.17.0`,
+  and `11.18.0` are admitted; every other version is rejected before materialization
+  until its complete consumer topology has a separate reviewed profile and exact
+  full-smoke evidence.
+  The version is change-detected package metadata, not upstream-origin authentication.
+  Prepare and execute
   each descriptor-acquire those exact Node bytes into one ephemeral, operation-scoped
   private runtime; source and staged digests must equal the prepared digest, and both
   authorities are re-bound around every command. Only the staged copy is used as the
@@ -720,6 +723,16 @@ The machine-readable state of every release gate is in
   and `full`) each start with a disjoint empty private cache and have the shared
   reviewed-POSIX maximum of 900,000 ms each. These are per-command bounds, not an
   aggregate phase deadline, network-availability guarantee, or hostile hard deadline.
+  The TypeScript 7.0.2 NodeNext/no-emit consumer check runs only during prepare, after
+  the workspace becomes read-only and between two required-identical workspace seals.
+  Prepared state binds its fixed launcher/arguments, exact silent result, and seal.
+  Execute validates that record without launching TypeScript. Its guard denies seven
+  reviewed top-level `node:child_process` launch functions,
+  `ChildProcess.prototype.spawn`, and `process.execve` when present. This covers the
+  reviewed launcher's `execFileSync` fallback and `execve` path, not every possible
+  same-realm authority or hostile-process escape. The check is one bounded
+  declaration-consumer check, not compiler provenance, native-binary authentication,
+  or semantic proof.
   Empty first use is established by a prepare-local per-role
   `unused` -> `active` -> `complete` state machine. Command-adjacent cold activation
   rebinds the exact canonical workspace, captured ancestry and cache inode, enumerates
@@ -737,16 +750,24 @@ The machine-readable state of every release gate is in
   never accepts that subset: its final state must satisfy the complete lock, package,
   scope, `.bin`, and filesystem closure. No command failure, required-package gap,
   ambiguous metadata, caller-controlled retry, or caller-controlled timeout is
-  admitted. In particular, an npm 10 optional failure that retains an otherwise empty
-  scope is conservatively nonretryable because its reduced filesystem closure is not
-  exact; a fresh prepare is required. All npm invocations use exact owner-only
-  user/global configs and reject a cwd-local `.npmrc`. Every npm-command boundary also
-  rechecks the active role's canonical current-UID mode-`0700` directory identity;
+  admitted. In particular, an optional failure that retains an empty scope outside its
+  exact version profile is conservatively nonretryable because its reduced filesystem
+  closure is not exact; a fresh prepare is required. The residue profile requires the
+  complete derived empty-scope set for `10.9.0`, `10.9.8`, and `11.3.0`; the
+  no-residue profile applies to `11.12.1`,
+  `11.16.0`, `11.17.0`, and `11.18.0`. `@npmcli/arborist` 9.1.5 first contains the
+  sparse-tree change and npm 11.6.1 first bundles it; npm 11.6.0 bundles Arborist
+  9.1.4. That is explanatory source history, not a `>=11.6.1` admission rule, and
+  both exact 11.6.x versions remain rejected. All npm invocations use exact
+  owner-only user/global configs and reject a cwd-local `.npmrc`. Every npm-command
+  boundary also rechecks the active role's canonical current-UID mode-`0700` directory
+  identity;
   retry authorization and its immediate command boundary recheck that cache authority,
   config identity, raw manifest/lock bytes and modes, and both tarball copies. The
-  finalized workspace seal, rather than the per-command directory-identity check, binds
-  the resulting cache contents. Bound failures identify only a fixed operation label plus the numeric
-  bound. CI's 60-minute job timeout is an outer operational cap; it does not cover the
+  finalized workspace seal, rather than the per-command directory-identity check,
+  binds the resulting cache contents. Bound failures identify only a fixed operation
+  label plus the numeric bound. CI's 60-minute job timeout is an outer operational cap;
+  it does not cover the
   theoretical sum of every sequential per-command maximum and is not a completion
   receipt. On the reviewed path,
   a live detached guardian is the sole process-group signal authority
@@ -754,10 +775,10 @@ The machine-readable state of every release gate is in
   guardian-local failures trigger the guardian directly; bounds, handled
   cancellation, and supervisor death close the lease, whose EOF triggers the same
   path. The guardian publishes one bounded intent and self-addresses the group
-  exactly once while its own unreaped leader identity pins the PGID. The supervisor observes
-  guardian exit, then only drains local pipes under a separate bound; neither it nor
-  the outer caller signals or probes any numeric identity after the reap. The outer
-  caller receives no PID/PGID and has no fallback.
+  exactly once while its own unreaped leader identity pins the PGID. The supervisor
+  observes guardian exit, then only drains local pipes under a separate bound; neither
+  it nor the outer caller signals or probes any numeric identity after the reap. The
+  outer caller receives no PID/PGID and has no fallback.
   A canonical completion-free sweep before READY is accepted only for the closed
   pre-READY reason set and becomes a terminal diagnostic after the same `SIGKILL`
   and EOF checks; it cannot publish the public handshake, `GO`, a command result, or
@@ -775,9 +796,10 @@ The machine-readable state of every release gate is in
   descriptor type/identity proof, so a file-to-FIFO exchange cannot block at
   `open`; reviewed directory opens additionally require `O_DIRECTORY`.
   This evidence is not an independent kernel receipt that every member was killed.
-  Direct guardian death, `EPERM`/`ESRCH`, malformed protocol, or a retained pipe preventing EOF
-  fails closed without a later numeric signal. Same-UID guardian discovery/signaling,
-  deliberate re-grouping or detachment, inherited-pipe retention, and a
+  Direct guardian death, `EPERM`/`ESRCH`, malformed protocol, or a retained pipe
+  preventing EOF fails closed without a later numeric signal. Same-UID guardian
+  discovery/signaling, deliberate re-grouping or detachment, inherited-pipe retention,
+  and a
   credential/security-label transition can escape or defeat the group sweep and
   require external cgroup/sandbox/VM containment. A target can also stop the complete
   group. Because `SIGSTOP` is uncatchable, a stopped guardian cannot consume lease
@@ -809,10 +831,11 @@ The machine-readable state of every release gate is in
   loss, unexpected exit, and drain uncertainty fail closed without a numeric
   fallback. Any descriptor-close exception is ambiguous and makes the standalone smoke
   worker fail-stop with `_exit(70)`, relying on kernel teardown instead of retrying a
-  possibly reused descriptor number. The status-plus-`SIGKILL` observation is not an independent kernel receipt
-  that the guardian delivered the signal: a same-UID target could kill it after the
-  status write and before its self-sweep. This proves only the reviewed same-authority
-  group path. A same-UID target can kill the guardian, detach or regroup, retain
+  possibly reused descriptor number. The status-plus-`SIGKILL` observation is not an
+  independent kernel receipt that the guardian delivered the signal: a same-UID target
+  could kill it after the status write and before its self-sweep. This proves only the
+  reviewed same-authority group path. A same-UID target can kill the guardian, detach or
+  regroup, retain
   output or lease descriptors, stop the complete private group, change credentials or
   security labels, or signal the supervisor. A stopped guardian cannot consume lease
   EOF, so the final blocking `waitpid` is not a hostile hard deadline and can

@@ -493,10 +493,10 @@ three reported `nodeModules` trees. Every executable JavaScript entry point is i
 through the operation-scoped staged copy of the exact reviewed Node bytes;
 package-local shebang shims are validated but never trusted for runtime selection.
 
-The v2 prepared state is `cortexel-package-smoke-prepared.v2` in
-`package-smoke-state.v2.json`. Its `runtimeAuthority` binds the canonical source Node
-executable's stable bytes, metadata, and path ancestry and the canonical npm 10 or
-11 package root's exact manifest/CLI identity plus a bounded recursive seal of
+The v3 prepared state is `cortexel-package-smoke-prepared.v3` in
+`package-smoke-state.v3.json`. Its `runtimeAuthority` binds the canonical source Node
+executable's stable bytes, metadata, and path ancestry and one canonical npm package
+root's exact admitted manifest/CLI identity plus a bounded recursive seal of
 every directory, ordinary file, and permitted internal direct-file symlink. It does
 not retain an ephemeral staged pathname, staged acquisition record, or execution-time
 runtime root. A staged acquisition copies the executable and only the bounded, known
@@ -514,6 +514,23 @@ descriptor/path identity, stable readback, and file/directory synchronization.
 Execute also retains the first inspected state-file authority and revalidates its
 digest, identity, workspace ownership, and exact `0444` mode after active work.
 These are change detectors, not hostile same-UID containment.
+
+The TypeScript 7.0.2 NodeNext/no-emit consumer check is prepare-only. Prepare first
+finalizes the entire workspace read-only and seals it, invokes the exact installed
+`typescript/bin/tsc` launcher through the reviewed Node supervisor with fixed arguments
+and an exact silent-success requirement, revalidates the package closures, and requires
+the second workspace seal to equal the first. One synchronous finalizer requires the
+compiler, strict record reparse, semantic recheck, second seal, seal-stability check,
+and runtime-authority recheck in that order. It rejects thenables and non-void validator
+returns and yields the check/seal evidence only after all stages succeed. The caller
+then binds that exact evidence into state and performs the irreversible exclusive
+publication as a visible later step. Execute validates the record but never invokes
+the launcher or native compiler. Its defense-in-depth guard denies the seven reviewed top-level
+`node:child_process` launch functions, `ChildProcess.prototype.spawn`, and
+`process.execve` where Node exposes it. This covers the reviewed TypeScript launcher's
+two native-launch paths; it is not compiler provenance, compiler semantic correctness,
+native-binary authentication, a hostile-process sandbox, or a substitute for the
+release harness's external containment.
 
 Before `npm ci`, prepare independently accepts only one canonical npm-portable
 gzip member containing regular-file USTAR entries and exactly two end blocks.
@@ -535,14 +552,36 @@ retry above is only a bounded cache-reuse recovery step; its preconditions and b
 attempts remain in the one `full`-owned cache in the sealed operational tree, and
 final equality is mandatory. No consumer profile reads cache state produced by either
 of the other consumer profiles; the final workspace seal binds all four cache trees.
-npm 10 may retain only the exact empty scope directories implied by omitted scoped
-lock siblings; npm 11 must not retain them. A failed npm 10 optional branch that leaves
-an empty scope does not qualify for the internal retry because the reduced closure is
-not exact. This is a conservative availability failure; rerun prepare in a fresh
-workspace instead of widening the evidence rule. The workspace seal independently binds
-all remaining registry-package bytes and topology across the inspection gap. npm 12
-is not a supported alias for npm 11: until its exact materialization behavior receives
-an independent reviewed profile and CI lane, prepare rejects that major explicitly.
+Topology behavior is selected only by the exact npm manifest version already inside
+the change-detected runtime authority. Versions `10.9.0`, `10.9.8`, and `11.3.0` must
+contain exactly the empty scope directories derived from excluded scoped lock entries
+beneath otherwise-live package containers. Versions `11.12.1`, `11.16.0`, `11.17.0`,
+and `11.18.0` admit no such residue. Every other npm version rejects before package
+materialization; neither a major version nor a SemVer range selects a profile.
+`@npmcli/arborist` 9.1.5 first contains the sparse-tree change, and npm 11.6.1 first
+bundles that Arborist release, while npm 11.6.0 bundles 9.1.4. This explains the
+historical source boundary but is not a `>=11.6.1` rule; both exact 11.6.x versions
+remain rejected without the full Cortexel consumer matrix. A failed optional branch
+that leaves a profile-forbidden or otherwise non-exact scope does not qualify for the
+internal retry because the reduced closure is not exact. This is a conservative
+availability failure; rerun prepare in a fresh workspace instead of widening the
+evidence rule. The workspace seal independently binds all remaining registry-package
+bytes and topology across the inspection gap. The exact manifest version and tree are
+change-detected metadata, not authentication that the package originated from upstream
+npm.
+
+The exact npm manifest/profile preflight runs before Cortexel creates the requested
+workspace or its workspace-owned operational tree and before it launches Node. The
+default no-argument runner also completes that read-only preflight before creating its
+outer temporary directory. Execute routes all 73 target/consumer probes through one
+closed, nonrepeating operation-id inventory. The skill-dependent portion is derived
+from Cortexel's source-owned 19-id stable tuple rather than CLI output; two CLI imports,
+14 fixed CLI cases, 38 per-skill cases, six exit cases, and 13 module/runtime probes
+must all be observed exactly once. The two execute preflight Node version/identity
+commands use separate phase-neutral closed policies. The target-probe boundary rejects
+any argument that names TypeScript or a `tsc` executable; direct low-level command calls
+inside the body remain a tested closed count. This is a reviewed-code invariant, not a
+sandbox against code already executing in the Node realm.
 
 ## Design laws (non-negotiable)
 

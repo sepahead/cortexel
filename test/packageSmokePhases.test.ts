@@ -29,17 +29,21 @@ import { gzipSync, gunzipSync } from 'node:zlib';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   activatePackageSmokeNpmCache,
+  allocateDefaultPackageSmokeWorkspaceAfterRuntimePreflight,
   assertPackageSmokeNpmCacheRoleActive,
   assertFinalizedHostFile,
   assertInstalledRecursivePackageClosure,
   assertInstalledSourceMapClosure as assertExactInstalledSourceMapClosure,
   assertInstalledTopLevelPackageInventory,
   assertPackageMaterializationInputAuthority,
+  assertPackageSmokeExecuteArgumentsExcludeTypeScript,
   assertPackageSmokeNpmConfigIdentity,
   assertPackageSmokeProjectNpmConfigAbsent,
   assertPackedMarkdownLinkClosure,
   assertPreparedNodeRuntimeIdentity,
+  assertTypeScriptConsumerCheckSealStability,
   beginPackageSmokeNpmCacheSession,
+  buildTypeScriptConsumerCheck,
   closePackageSmokeStateFile,
   completePackageSmokeNpmCacheRole,
   createPackageSmokeNpmConfigFiles,
@@ -61,21 +65,27 @@ import {
   installedArtifactMode,
   packageSmokeEnvironment,
   packageSmokeNpmCachePath,
+  NETWORK_AND_WRITE_GUARD,
   NPM_AUTHORITY_LIMITS,
   PACKAGE_SMOKE_COMMAND_POLICIES,
   PACKAGE_SMOKE_CONSUMER_PROFILES,
+  PACKAGE_SMOKE_EXECUTE_OPERATIONS,
   PACKAGE_SMOKE_PHASE_SCHEMA,
   PACKAGE_SMOKE_PREPARED_SCHEMA,
   PACKAGE_SMOKE_STATE_FILENAME,
   parseAndAssertExactJsonValue,
   parsePackageSmokeInvocation,
+  parseTypeScriptConsumerCheck,
+  preparePackageSmokeWorkspace,
   publishPackageSmokeStateFile,
   readDirectoryNamesBounded,
+  reviewedNpmTopologyProfile,
   resetPackageSmokeNpmCacheSession,
   reservePackageSmokeStateFile,
   runReviewedNodeCommand,
   runVerifiedPackageMaterialization,
   scrubbedEnvironment,
+  finalizeTypeScriptConsumerCheckBeforePublication,
   withPackageSmokeCommandRuntime,
   type ExpectedPackageFile,
   type PackageSmokeRegularFileTestEvent,
@@ -87,6 +97,7 @@ import {
   validatePackageSmokeFixture,
   verifyInstalledPackageClosure,
 } from '../scripts/smoke-package';
+import { STABLE_SKILL_IDS } from '../src/generated';
 import {
   createReviewedNodeRuntime,
   disposeReviewedNodeRuntime,
@@ -339,7 +350,7 @@ function fakeRuntimeAuthorityTree(): {
     join(npmRoot, 'package.json'),
     `${JSON.stringify({
       name: 'npm',
-      version: '11.0.0',
+      version: '11.16.0',
       bin: { npm: 'bin/npm-cli.js', npx: 'bin/npx-cli.js' },
     })}\n`,
     { mode: 0o644 },
@@ -878,15 +889,16 @@ describe('two-phase package smoke contract', () => {
     expect(result.stderr).toBe('');
   }, 30_000);
 
-  it('publishes only the fresh v2 state and phase identities', () => {
-    expect(PACKAGE_SMOKE_PREPARED_SCHEMA).toBe('cortexel-package-smoke-prepared.v2');
+  it('publishes only the fresh v3 state and v2 phase identities', () => {
+    expect(PACKAGE_SMOKE_PREPARED_SCHEMA).toBe('cortexel-package-smoke-prepared.v3');
     expect(PACKAGE_SMOKE_PHASE_SCHEMA).toBe('cortexel-package-smoke-phase.v2');
-    expect(PACKAGE_SMOKE_STATE_FILENAME).toBe('package-smoke-state.v2.json');
+    expect(PACKAGE_SMOKE_STATE_FILENAME).toBe('package-smoke-state.v3.json');
     expect(PACKAGE_SMOKE_COMMAND_POLICIES).toEqual({
-      ordinary: { operation: 'package.ordinary', timeoutMs: 300_000 },
+      executeNode: { operation: 'execute.node-command', timeoutMs: 300_000 },
+      nodeVersion: { operation: 'runtime.node-version', timeoutMs: 300_000 },
       npmVersion: { operation: 'prepare.npm-version', timeoutMs: 300_000 },
       nodeRuntimeIdentity: {
-        operation: 'prepare.node-runtime-identity',
+        operation: 'runtime.node-identity',
         timeoutMs: 300_000,
       },
       npmPack: { operation: 'prepare.npm-pack', timeoutMs: 300_000 },
@@ -894,7 +906,76 @@ describe('two-phase package smoke contract', () => {
       npmCiCharts: { operation: 'prepare.npm-ci.charts', timeoutMs: 900_000 },
       npmCiFull: { operation: 'prepare.npm-ci.full', timeoutMs: 900_000 },
       browserBundle: { operation: 'prepare.browser-bundle', timeoutMs: 300_000 },
+      typescriptCheck: {
+        operation: 'prepare.typescript-nodenext',
+        timeoutMs: 300_000,
+      },
     });
+    const expectedExecuteOperations = [
+      'browser-bundle.esm',
+      'charts.import',
+      'charts.require',
+      'cjs-url-cache',
+      'core.cjs',
+      'core.esm',
+      'guard.cjs',
+      'guard.esm',
+      'mixed-capability.esm',
+      'react.import',
+      'react.require',
+      'unrelated-cwd.cjs',
+      'unrelated-cwd.esm',
+      'cli.import.esm',
+      'cli.import.cjs',
+      'cli.identity',
+      'cli.catalog',
+      'cli.source-catalog',
+      'cli.source-describe',
+      'cli.source-example.initial',
+      'cli.source-example.repeat',
+      'cli.source-adapt.guarded-envelope',
+      'cli.source-adapt.guarded-input',
+      'cli.source-adapt.caller-capture',
+      'cli.validate-adapted',
+      'cli.render-adapted',
+      'cli.source-render',
+      'cli.unknown-skill',
+      'cli.unknown-source',
+      ...STABLE_SKILL_IDS.flatMap((skillId) => [
+        `cli.describe-all.${skillId}`,
+        `cli.validate-authoring.${skillId}`,
+      ]),
+      'cli.exit.usage',
+      'cli.exit.valid',
+      'cli.exit.malformed',
+      'cli.exit.structural',
+      'cli.exit.legacy',
+      'cli.exit.absent',
+    ];
+    expect(PACKAGE_SMOKE_EXECUTE_OPERATIONS).toEqual(expectedExecuteOperations);
+    expect(PACKAGE_SMOKE_EXECUTE_OPERATIONS).toHaveLength(
+      13 + 2 + 14 + (2 * STABLE_SKILL_IDS.length) + 6,
+    );
+    expect(new Set(PACKAGE_SMOKE_EXECUTE_OPERATIONS).size)
+      .toBe(PACKAGE_SMOKE_EXECUTE_OPERATIONS.length);
+    expect(Object.isFrozen(PACKAGE_SMOKE_EXECUTE_OPERATIONS)).toBe(true);
+    expect(PACKAGE_SMOKE_EXECUTE_OPERATIONS.some((operation) =>
+      operation.toLowerCase().includes('typescript') || operation.includes('tsc')
+    )).toBe(false);
+    expect(() => assertPackageSmokeExecuteArgumentsExcludeTypeScript([
+      '/sealed/consumer/node_modules/typescript/bin/tsc',
+    ])).toThrow(/attempted to target the TypeScript compiler/u);
+    expect(() => assertPackageSmokeExecuteArgumentsExcludeTypeScript([
+      'C:\\sealed\\node_modules\\@typescript\\native\\bin\\tsc.exe',
+    ])).toThrow(/attempted to target the TypeScript compiler/u);
+    expect(() => assertPackageSmokeExecuteArgumentsExcludeTypeScript([
+      '/sealed/bin/tsc-native',
+    ])).toThrow(/attempted to target the TypeScript compiler/u);
+    expect(() => assertPackageSmokeExecuteArgumentsExcludeTypeScript([
+      '--input-type=module',
+      '-e',
+      "await import('cortexel/figure')",
+    ])).not.toThrow();
     expect(PACKAGE_SMOKE_CONSUMER_PROFILES).toEqual({
       core: {
         commandPolicy: PACKAGE_SMOKE_COMMAND_POLICIES.npmCiCore,
@@ -937,14 +1018,323 @@ describe('two-phase package smoke contract', () => {
     )).toThrow(/not one closed host-authored profile/u);
 
     if (process.platform === 'win32') return;
-    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-v1-state-rejection-')));
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-v2-state-rejection-')));
     cleanups.push(workspace);
-    const staleState = '{"schema":"cortexel-package-smoke-prepared.v1"}\n';
+    const staleState = '{"schema":"cortexel-package-smoke-prepared.v2"}\n';
     writeFileSync(join(workspace, PACKAGE_SMOKE_STATE_FILENAME), staleState, { mode: 0o444 });
     const expectedStateDigest = `sha256:${createHash('sha256').update(staleState).digest('hex')}`;
     expect(() => executePackageSmokeWorkspace({ workspace, expectedStateDigest })).toThrow(
       /prepared package-smoke state/u,
     );
+  });
+
+  it('requires an exact sealed TypeScript check before prepared-state publication', () => {
+    const sealDigest = `sha256:${'a'.repeat(64)}`;
+    const silentSuccess = {
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+    } as const;
+    const valid = buildTypeScriptConsumerCheck(silentSuccess, sealDigest);
+    expect(valid).toEqual({
+      profile: 'nodenext-noemit.v1',
+      compiler: {
+        name: 'typescript',
+        version: '7.0.2',
+        bin: 'consumer/node_modules/typescript/bin/tsc',
+      },
+      argv: ['-p', 'tsconfig.json', '--noEmit', '--pretty', 'false'],
+      cwd: 'consumer',
+      workspaceSealDigest: sealDigest,
+      result: {
+        status: 0,
+        signal: null,
+        stdoutBytes: 0,
+        stderrBytes: 0,
+      },
+    });
+    expect(parseTypeScriptConsumerCheck(structuredClone(valid) as any, sealDigest)).toEqual(valid);
+
+    const invalidChecks: unknown[] = [];
+    for (const key of Object.keys(valid)) {
+      const candidate = structuredClone(valid) as unknown as Record<string, unknown>;
+      delete candidate[key];
+      invalidChecks.push(candidate);
+    }
+    invalidChecks.push(
+      { ...structuredClone(valid), extra: true },
+      { ...structuredClone(valid), profile: 'nodenext-noemit.v2' },
+      { ...structuredClone(valid), cwd: '.' },
+      { ...structuredClone(valid), argv: ['-p', 'tsconfig.json'] },
+      { ...structuredClone(valid), argv: [...valid.argv, '--incremental'] },
+      { ...structuredClone(valid), workspaceSealDigest: `sha256:${'b'.repeat(64)}` },
+      { ...structuredClone(valid), compiler: { ...valid.compiler, name: 'not-typescript' } },
+      { ...structuredClone(valid), compiler: { ...valid.compiler, version: '7.0.3' } },
+      { ...structuredClone(valid), compiler: { ...valid.compiler, bin: '/tmp/tsc' } },
+      { ...structuredClone(valid), compiler: { ...valid.compiler, extra: true } },
+      { ...structuredClone(valid), result: { ...valid.result, status: 1 } },
+      { ...structuredClone(valid), result: { ...valid.result, signal: 'SIGTERM' } },
+      { ...structuredClone(valid), result: { ...valid.result, stdoutBytes: 1 } },
+      { ...structuredClone(valid), result: { ...valid.result, stderrBytes: 1 } },
+      { ...structuredClone(valid), result: { ...valid.result, extra: true } },
+    );
+    for (const nestedKey of Object.keys(valid.compiler)) {
+      const candidate = structuredClone(valid) as any;
+      delete candidate.compiler[nestedKey];
+      invalidChecks.push(candidate);
+    }
+    for (const nestedKey of Object.keys(valid.result)) {
+      const candidate = structuredClone(valid) as any;
+      delete candidate.result[nestedKey];
+      invalidChecks.push(candidate);
+    }
+    for (const [index, candidate] of invalidChecks.entries()) {
+      expect(() => parseTypeScriptConsumerCheck(candidate as any, sealDigest), String(index))
+        .toThrow();
+    }
+    expect(() => parseTypeScriptConsumerCheck(
+      valid as any,
+      `sha256:${'b'.repeat(64)}`,
+    )).toThrow(
+      /differs from the exact sealed success profile/u,
+    );
+
+    const stableSeal = {
+      digest: sealDigest,
+      entryCount: 1,
+      fileCount: 1,
+      byteCount: 1,
+      root: {
+        path: '/sealed-workspace',
+        device: '1',
+        inode: '2',
+        mode: 0o555,
+        uid: 1,
+        gid: 1,
+        linkCount: 1,
+      },
+      parentAncestry: {
+        sha256: `sha256:${'c'.repeat(64)}`,
+        entryCount: 1,
+      },
+    } satisfies ReturnType<typeof fingerprintPackageSmokeWorkspace>;
+    type FinalizationStep =
+      | 'first-seal'
+      | 'compiler'
+      | 'semantic-recheck'
+      | 'second-seal'
+      | 'runtime-recheck';
+    const runFinalization = (
+      events: string[],
+      options: {
+        readonly throwAt?: FinalizationStep;
+        readonly asyncAt?: FinalizationStep;
+        readonly nonVoidAt?: 'semantic-recheck' | 'runtime-recheck';
+        readonly changedSecondSeal?: boolean;
+        readonly forgedCheck?: boolean;
+        readonly reenterAtCompiler?: boolean;
+      } = {},
+    ) => {
+      const valueAt = <T>(step: FinalizationStep, value: T): T => {
+        events.push(step);
+        if (options.throwAt === step) throw new Error(`injected ${step} failure`);
+        if (options.asyncAt === step) return Promise.resolve(value) as T;
+        if (options.nonVoidAt === step) return 1 as T;
+        return value;
+      };
+      return finalizeTypeScriptConsumerCheckBeforePublication({
+        captureFirstSeal: () => valueAt('first-seal', stableSeal),
+        runTypeScriptCheck: (firstSeal) => {
+          const check = options.forgedCheck
+            ? { ...valid, result: { ...valid.result, status: 1 } } as unknown as typeof valid
+            : buildTypeScriptConsumerCheck(silentSuccess, firstSeal.digest);
+          if (options.reenterAtCompiler) {
+            finalizeTypeScriptConsumerCheckBeforePublication({
+              captureFirstSeal: () => stableSeal,
+              runTypeScriptCheck: () => valid,
+              revalidateConsumerClosures: () => undefined,
+              captureSecondSeal: () => stableSeal,
+              revalidateRuntimeAuthority: () => undefined,
+            });
+          }
+          return valueAt('compiler', check);
+        },
+        revalidateConsumerClosures: () =>
+          valueAt<void>('semantic-recheck', undefined),
+        captureSecondSeal: () => valueAt(
+          'second-seal',
+          options.changedSecondSeal
+            ? { ...stableSeal, byteCount: stableSeal.byteCount + 1 }
+            : structuredClone(stableSeal),
+        ),
+        revalidateRuntimeAuthority: () =>
+          valueAt<void>('runtime-recheck', undefined),
+      });
+    };
+
+    const successEvents: string[] = [];
+    const finalized = runFinalization(successEvents);
+    expect(finalized.typescriptCheck).toEqual(valid);
+    expect(finalized.workspaceSeal).toEqual(stableSeal);
+    expect(Object.isFrozen(finalized)).toBe(true);
+    expect(successEvents).toEqual([
+      'first-seal',
+      'compiler',
+      'semantic-recheck',
+      'second-seal',
+      'runtime-recheck',
+    ]);
+
+    const failureCases: ReadonlyArray<{
+      readonly step: FinalizationStep;
+      readonly expectedEvents: readonly string[];
+    }> = [
+      { step: 'first-seal', expectedEvents: ['first-seal'] },
+      { step: 'compiler', expectedEvents: ['first-seal', 'compiler'] },
+      {
+        step: 'semantic-recheck',
+        expectedEvents: ['first-seal', 'compiler', 'semantic-recheck'],
+      },
+      {
+        step: 'second-seal',
+        expectedEvents: ['first-seal', 'compiler', 'semantic-recheck', 'second-seal'],
+      },
+      {
+        step: 'runtime-recheck',
+        expectedEvents: [
+          'first-seal',
+          'compiler',
+          'semantic-recheck',
+          'second-seal',
+          'runtime-recheck',
+        ],
+      },
+    ];
+    for (const failureCase of failureCases) {
+      const events: string[] = [];
+      let publicationReached = false;
+      expect(() => {
+        runFinalization(events, { throwAt: failureCase.step });
+        publicationReached = true;
+      }, failureCase.step).toThrow(`injected ${failureCase.step} failure`);
+      expect(events, failureCase.step).toEqual(failureCase.expectedEvents);
+      expect(publicationReached, failureCase.step).toBe(false);
+    }
+
+    for (const asyncStep of failureCases.map((candidate) => candidate.step)) {
+      const events: string[] = [];
+      let publicationReached = false;
+      expect(() => {
+        runFinalization(events, { asyncAt: asyncStep });
+        publicationReached = true;
+      }, asyncStep).toThrow(/must be strictly synchronous/u);
+      expect(publicationReached, asyncStep).toBe(false);
+    }
+    let accessorReads = 0;
+    const accessorThenable = Object.defineProperty({}, 'then', {
+      get: () => {
+        accessorReads++;
+        return () => undefined;
+      },
+    });
+    const inheritedThenable = Object.create({ then: () => undefined }) as object;
+    for (const [label, thenable] of [
+      ['accessor', accessorThenable],
+      ['inherited', inheritedThenable],
+    ] as const) {
+      const events: string[] = [];
+      expect(() => finalizeTypeScriptConsumerCheckBeforePublication({
+        captureFirstSeal: () => {
+          events.push('first-seal');
+          return stableSeal;
+        },
+        runTypeScriptCheck: () => {
+          events.push('compiler');
+          return valid;
+        },
+        revalidateConsumerClosures: () => {
+          events.push('semantic-recheck');
+          return thenable as unknown as void;
+        },
+        captureSecondSeal: () => {
+          events.push('second-seal');
+          return stableSeal;
+        },
+        revalidateRuntimeAuthority: () => {
+          events.push('runtime-recheck');
+        },
+      }), label).toThrow(/must be strictly synchronous/u);
+      expect(events, label).toEqual(['first-seal', 'compiler', 'semantic-recheck']);
+    }
+    expect(accessorReads).toBe(0);
+    for (const nonVoidAt of ['semantic-recheck', 'runtime-recheck'] as const) {
+      let publicationReached = false;
+      expect(() => {
+        runFinalization([], { nonVoidAt });
+        publicationReached = true;
+      }, nonVoidAt).toThrow(/must return undefined/u);
+      expect(publicationReached, nonVoidAt).toBe(false);
+    }
+
+    const driftEvents: string[] = [];
+    expect(() => runFinalization(driftEvents, { changedSecondSeal: true }))
+      .toThrow(/workspace changed across the finalized TypeScript check/u);
+    expect(driftEvents).toEqual([
+      'first-seal',
+      'compiler',
+      'semantic-recheck',
+      'second-seal',
+    ]);
+    const forgedEvents: string[] = [];
+    expect(() => runFinalization(forgedEvents, { forgedCheck: true }))
+      .toThrow(/differs from the exact sealed success profile/u);
+    expect(forgedEvents).toEqual(['first-seal', 'compiler']);
+    expect(() => runFinalization([], { reenterAtCompiler: true }))
+      .toThrow(/sequence is already active/u);
+    expect(runFinalization([]).typescriptCheck).toEqual(valid);
+
+    expect(() => buildTypeScriptConsumerCheck(
+      { ...silentSuccess, signal: 'SIGTERM' },
+      sealDigest,
+    )).toThrow(/reviewed Node command failed/u);
+    expect(() => buildTypeScriptConsumerCheck(
+      { ...silentSuccess, stdout: 'forged\u001b[2J' },
+      sealDigest,
+    )).toThrow(/unexpected output/u);
+    expect(() => buildTypeScriptConsumerCheck(
+      { ...silentSuccess, stderr: 'diagnostic' },
+      sealDigest,
+    )).toThrow(/unexpected output/u);
+    expect(() => buildTypeScriptConsumerCheck(silentSuccess, 'sha256:invalid')).toThrow(
+      /invalid finalized workspace digest/u,
+    );
+
+    if (process.platform === 'win32') return;
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-ts-check-seal-')));
+    cleanups.push(workspace);
+    const evidence = join(workspace, 'evidence');
+    writeFileSync(evidence, 'before\n', { mode: 0o444 });
+    chmodSync(evidence, 0o444);
+    chmodSync(workspace, 0o555);
+    const before = fingerprintPackageSmokeWorkspace(workspace, true);
+    const check = buildTypeScriptConsumerCheck(silentSuccess, before.digest);
+    const unchanged = fingerprintPackageSmokeWorkspace(workspace, true);
+    expect(() => assertTypeScriptConsumerCheckSealStability(before, unchanged, check))
+      .not.toThrow();
+    chmodSync(evidence, 0o644);
+    writeFileSync(evidence, 'after!\n');
+    chmodSync(evidence, 0o444);
+    const changed = fingerprintPackageSmokeWorkspace(workspace, true);
+    expect(() => assertTypeScriptConsumerCheckSealStability(before, changed, check)).toThrow(
+      /workspace changed across the finalized TypeScript check/u,
+    );
+    expect(() => assertTypeScriptConsumerCheckSealStability(
+      before,
+      before,
+      { ...check, workspaceSealDigest: `sha256:${'b'.repeat(64)}` },
+    )).toThrow(/not bound to the finalized workspace seal/u);
+    chmodSync(workspace, 0o755);
   });
 
   it('cold-activates every npm role exactly once and seals each distinct cache', () => {
@@ -1364,6 +1754,17 @@ describe('two-phase package smoke contract', () => {
     expect(report).toContain('second\\u202evalue');
     expect(report).not.toContain('first\nforged line');
 
+    const probeReport = formatPackageSmokeFailure(new AggregateError(
+      [new Error(`underlying\u001b[2J${'x'.repeat(4_000)}`)],
+      'package-smoke execute probe core.esm failed',
+    ));
+    expect(probeReport).toContain(
+      'error="package-smoke execute probe core.esm failed"',
+    );
+    expect(probeReport).toContain('error.cause[0]="underlying\\u001b[2J');
+    expect(probeReport).not.toContain('\u001b');
+    expect(Buffer.byteLength(probeReport, 'utf8')).toBeLessThanOrEqual(8_192);
+
     const oversized = formatPackageSmokeFailure(new AggregateError(
       Array.from({ length: 100 }, (_, index) => new Error(`${index}:${'x'.repeat(2_000)}`)),
       'bounded',
@@ -1658,8 +2059,13 @@ describe('two-phase package smoke contract', () => {
     )).toThrow(/differs from the expected JSON value/u);
 
     const source = readFileSync(join(root, 'scripts', 'smoke-package.ts'), 'utf8');
-    const start = source.indexOf("const sourceExampleResult = runInstalledCli([");
-    const end = source.indexOf('const guardedSourceAdapt = runInstalledCli([', start);
+    const start = source.indexOf(
+      "const sourceExampleResult = runInstalledCli('cli.source-example.initial', [",
+    );
+    const end = source.indexOf(
+      "const guardedSourceAdapt = runInstalledCli('cli.source-adapt.guarded-envelope', [",
+      start,
+    );
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     const check = source.slice(start, end);
@@ -1705,6 +2111,20 @@ describe('two-phase package smoke contract', () => {
 
   it('binds Node bytes and exact npm manifest, CLI, topology, metadata, and bytes', () => {
     if (process.platform === 'win32') return;
+    const unreviewedFixture = fakeRuntimeAuthorityTree();
+    writeFileSync(
+      join(unreviewedFixture.npmRoot, 'package.json'),
+      `${JSON.stringify({
+        name: 'npm',
+        version: '11.6.1',
+        bin: { npm: 'bin/npm-cli.js', npx: 'bin/npx-cli.js' },
+      })}\n`,
+      { mode: 0o644 },
+    );
+    expect(() => inspectNpmPackageAuthority(unreviewedFixture.npmCli)).toThrow(
+      /requires one exact reviewed npm version/u,
+    );
+
     const fixture = fakeRuntimeAuthorityTree();
     const firstNode = inspectNodeExecutableAuthority(fixture.node);
     const firstNpm = inspectNpmPackageAuthority(fixture.npmCli);
@@ -1712,7 +2132,7 @@ describe('two-phase package smoke contract', () => {
     expect(firstNpm).toMatchObject({
       root: fixture.npmRoot,
       cli: fixture.npmCli,
-      version: '11.0.0',
+      version: '11.16.0',
       tree: {
         schema: 'cortexel-package-smoke-npm-tree.v1',
         directoryCount: 5,
@@ -1758,7 +2178,7 @@ describe('two-phase package smoke contract', () => {
     const manifestPath = join(fixture.npmRoot, 'package.json');
     writeFileSync(
       manifestPath,
-      `${JSON.stringify({ name: 'npm', version: '11.0.0', bin: { npm: 'bin/other.js' } })}\n`,
+      `${JSON.stringify({ name: 'npm', version: '11.16.0', bin: { npm: 'bin/other.js' } })}\n`,
     );
     expect(() => inspectNpmPackageAuthority(fixture.npmCli)).toThrow(/manifest.*CLI identity/u);
   });
@@ -2027,6 +2447,141 @@ describe('two-phase package smoke contract', () => {
     )).toThrow(/test execute Node runtime identity changed/u);
   });
 
+  it('sequences the finalized TypeScript check and closes every execute command label', () => {
+    const source = readFileSync(join(root, 'scripts', 'smoke-package.ts'), 'utf8');
+    const prepare = source.slice(
+      source.indexOf('function preparePackageSmokeWorkspaceWithinCommandRuntime('),
+      source.indexOf('export function preparePackageSmokeWorkspace('),
+    );
+    const sequenceIndex = prepare.indexOf(
+      'finalizeTypeScriptConsumerCheckBeforePublication({',
+    );
+    const sequenceEnd = prepare.indexOf(
+      'const { typescriptCheck, workspaceSeal } = finalizedTypeScriptEvidence;',
+      sequenceIndex,
+    );
+    const sequence = prepare.slice(sequenceIndex, sequenceEnd);
+    const orderedSteps = [
+      'captureFirstSeal:',
+      'runTypeScriptCheck:',
+      'revalidateConsumerClosures:',
+      'captureSecondSeal:',
+      'revalidateRuntimeAuthority:',
+    ];
+    let priorStep = -1;
+    for (const step of orderedSteps) {
+      const stepIndex = sequence.indexOf(step);
+      expect(stepIndex, step).toBeGreaterThan(priorStep);
+      priorStep = stepIndex;
+    }
+    const stateBindingIndex = prepare.indexOf(
+      '      typescriptCheck,\n      workspaceSeal,',
+      sequenceEnd,
+    );
+    const statePublicationIndex = prepare.indexOf(
+      'publishPackageSmokeStateFile(',
+      stateBindingIndex,
+    );
+    expect(stateBindingIndex).toBeGreaterThan(sequenceEnd);
+    expect(statePublicationIndex).toBeGreaterThan(stateBindingIndex);
+
+    const body = source.slice(
+      source.indexOf('function runPackageSmokeBody('),
+      source.indexOf('export function buildTypeScriptConsumerCheck('),
+    );
+    expect(body).not.toContain('PACKAGE_SMOKE_COMMAND_POLICIES.typescriptCheck');
+    expect(body).not.toContain("phaseRun(\n    'typescript");
+    expect([...body.matchAll(/\brunResult\s*\(/gu)]).toHaveLength(1);
+    expect([...body.matchAll(/\brun\s*\(/gu)]).toHaveLength(2);
+    expect(body).toContain('const executeRunResult = (');
+    expect(body).toContain('PACKAGE_SMOKE_COMMAND_POLICIES.executeNode');
+    expect(body).toContain('for (const skillId of SOURCE_STABLE_SKILL_IDS)');
+    expect(body).not.toMatch(/for\s*\([^)]*catalogIds/gu);
+
+    const execute = source.slice(
+      source.indexOf('function executePackageSmokeWorkspaceWithinCommandRuntime('),
+      source.indexOf('export function executePackageSmokeWorkspace('),
+    );
+    expect(execute).not.toContain('runFinalizedTypeScriptConsumerCheck');
+    expect(execute).not.toContain('typescript/bin/tsc');
+
+    const guard = source.slice(
+      source.indexOf('const NETWORK_AND_WRITE_GUARD ='),
+      source.indexOf('function artifactBoundFixtureLock('),
+    );
+    expect(guard).toContain("process.execve = deny('process.execve')");
+    expect(guard).toContain("deny('child_process.ChildProcess.prototype.spawn')");
+    expect(body).toContain("execFileSync('/cortexel-does-not-exist')");
+    expect(body).toContain('new childProcess.ChildProcess().spawn');
+    expect(body).toContain("process.execve('/cortexel-does-not-exist'");
+    expect(body).toContain('execveDeniedOrUnavailable');
+  });
+
+  it('executes the exact launch-surface guard denials in a fresh Node process', () => {
+    if (process.platform === 'win32') return;
+    if (reviewedRuntime === undefined) {
+      throw new Error('the focused reviewed Node runtime is unavailable');
+    }
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-execute-guard-')));
+    cleanups.push(workspace);
+    const guardPath = join(workspace, 'guard.cjs');
+    writeFileSync(guardPath, NETWORK_AND_WRITE_GUARD, { mode: 0o444 });
+    const probe = String.raw`
+      const childProcess = require('node:child_process');
+      const denied = (error) =>
+        String(error).includes('[cortexel package smoke] denied execute-phase authority:');
+      for (const name of [
+        'exec', 'execFile', 'execFileSync', 'execSync', 'fork', 'spawn', 'spawnSync',
+      ]) {
+        let blocked = false;
+        try { childProcess[name](); } catch (error) { blocked = denied(error); }
+        if (!blocked) throw new Error('unguarded child_process.' + name);
+      }
+      let prototypeBlocked = false;
+      try { new childProcess.ChildProcess().spawn({ file: '/cortexel-does-not-exist' }); }
+      catch (error) { prototypeBlocked = denied(error); }
+      if (!prototypeBlocked) throw new Error('unguarded ChildProcess.prototype.spawn');
+      if (typeof process.execve === 'function') {
+        let execveBlocked = false;
+        try { process.execve('/cortexel-does-not-exist', [], {}); }
+        catch (error) { execveBlocked = denied(error); }
+        if (!execveBlocked) throw new Error('unguarded process.execve');
+      }
+      process.stdout.write('guarded\n');
+    `;
+    const reviewedNode = reviewedRuntime.node.authority.executable;
+    const result = spawnSync(
+      reviewedNode,
+      ['--require', guardPath, '--eval', probe],
+      { cwd: workspace, encoding: 'utf8' },
+    );
+    expect(result.status).toBe(0);
+    expect(result.signal).toBeNull();
+    expect(result.stdout).toBe('guarded\n');
+    expect(result.stderr).toBe('');
+    const esmProbe = String.raw`
+      import { execFileSync } from 'node:child_process';
+      let blocked = false;
+      try { execFileSync('/cortexel-does-not-exist'); }
+      catch (error) {
+        blocked = String(error).includes(
+          '[cortexel package smoke] denied execute-phase authority: child_process.execFileSync',
+        );
+      }
+      if (!blocked) throw new Error('unguarded ESM child_process.execFileSync');
+      process.stdout.write('esm-guarded\n');
+    `;
+    const esmResult = spawnSync(
+      reviewedNode,
+      ['--require', guardPath, '--input-type=module', '--eval', esmProbe],
+      { cwd: workspace, encoding: 'utf8' },
+    );
+    expect(esmResult.status).toBe(0);
+    expect(esmResult.signal).toBeNull();
+    expect(esmResult.stdout).toBe('esm-guarded\n');
+    expect(esmResult.stderr).toBe('');
+  });
+
   it('derives packaged NEST adapter probes from the shipped closed branch examples', () => {
     const source = readFileSync(join(root, 'scripts', 'smoke-package.ts'), 'utf8');
     const probe = source.slice(
@@ -2154,16 +2709,16 @@ describe('two-phase package smoke contract', () => {
 
   it('keeps finalized installed-CLI probes free of publication authority', () => {
     const source = readFileSync(join(root, 'scripts', 'smoke-package.ts'), 'utf8');
-    const runnerStart = source.indexOf('const runInstalledCli = (args: string[]) => {');
+    const runnerStart = source.indexOf('const runInstalledCli = (');
     const runnerEnd = source.indexOf("phaseWriteFile(\n    join(consumer, 'import-cli.mjs')", runnerStart);
     expect(runnerStart).toBeGreaterThan(-1);
     expect(runnerEnd).toBeGreaterThan(runnerStart);
     const runner = source.slice(runnerStart, runnerEnd);
     expect(runner).toContain("args.includes('--output') || args.includes('--force')");
     expect(runner.indexOf("args.includes('--output')"))
-      .toBeLessThan(runner.indexOf('return runResult('));
+      .toBeLessThan(runner.indexOf('return executeRunResult('));
     expect(
-      source.match(/runResult\(nodeExecutable, \[installedCliEsm, \.\.\.args\]/gu) ?? [],
+      source.match(/executeRunResult\(operation, \[installedCliEsm, \.\.\.args\], unrelated\)/gu) ?? [],
     ).toHaveLength(1);
     expect(source).not.toContain('adapted-source-pipeline.svg');
     expect(source).not.toContain('direct-source-render.svg');
@@ -3733,6 +4288,194 @@ describe('two-phase package smoke contract', () => {
     )).toThrow(/inventory differs/u);
   });
 
+  it('derives one immutable topology policy from each exact reviewed npm version', () => {
+    for (const exactNpmVersion of ['10.9.0', '10.9.8', '11.3.0']) {
+      const profile = reviewedNpmTopologyProfile(exactNpmVersion);
+      expect(profile).toEqual({
+        exactNpmVersion,
+        profileId: 'npm-derived-empty-omitted-scopes.v1',
+        omittedScopePolicy: 'exact-derived-empty-omitted-scopes',
+      });
+      expect(Object.isFrozen(profile)).toBe(true);
+    }
+    for (const exactNpmVersion of ['11.12.1', '11.16.0', '11.17.0', '11.18.0']) {
+      const profile = reviewedNpmTopologyProfile(exactNpmVersion);
+      expect(profile).toEqual({
+        exactNpmVersion,
+        profileId: 'npm-forbid-empty-omitted-scopes.v1',
+        omittedScopePolicy: 'forbid-empty-omitted-scopes',
+      });
+      expect(Object.isFrozen(profile)).toBe(true);
+    }
+    for (const unreviewed of [
+      '10.9.1',
+      '11.3.0-pre.1',
+      '11.3.0+build.1',
+      '11.6.0',
+      '11.6.1',
+      '11.19.0',
+      '12.0.0',
+      '011.3.0',
+      '11.03.0',
+      'v11.3.0',
+      'constructor',
+      '__proto__',
+    ]) {
+      expect(() => reviewedNpmTopologyProfile(unreviewed), unreviewed).toThrow(
+        /requires one exact reviewed npm version/u,
+      );
+    }
+    expect(() => reviewedNpmTopologyProfile('11.6.1')).toThrow(
+      /10\.9\.0, 10\.9\.8, 11\.3\.0, 11\.12\.1, 11\.16\.0, 11\.17\.0, 11\.18\.0/u,
+    );
+    let controlDiagnostic = '';
+    try {
+      reviewedNpmTopologyProfile('11.3.0\u001b[2Junreviewed');
+    } catch (error) {
+      controlDiagnostic = error instanceof Error ? error.message : String(error);
+    }
+    expect(controlDiagnostic).toContain('\\u001b');
+    expect(controlDiagnostic).not.toContain('\u001b');
+
+    const absentConsumer = join(tmpdir(), `cortexel-absent-${process.pid}-${Date.now()}`);
+    expect(() => assertInstalledRecursivePackageClosure(
+      absentConsumer,
+      null,
+      [],
+      '11.6.1',
+      currentNodeRuntimeIdentity,
+    )).toThrow(/requires one exact reviewed npm version/u);
+
+    if (process.platform === 'win32') return;
+    const preflightRoot = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-npm-preflight-')));
+    cleanups.push(preflightRoot);
+    const marker = join(preflightRoot, 'node-invoked');
+    const fakeNode = join(preflightRoot, 'node');
+    const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
+    writeFileSync(
+      fakeNode,
+      `#!/bin/sh\n: > ${shellQuote(marker)}\nexit 99\n`,
+      { mode: 0o755 },
+    );
+    chmodSync(fakeNode, 0o755);
+    const npmRoot = join(preflightRoot, 'npm');
+    const npmBin = join(npmRoot, 'bin');
+    mkdirSync(npmBin, { recursive: true, mode: 0o755 });
+    const fakeNpmCli = join(npmBin, 'npm-cli.js');
+    writeFileSync(fakeNpmCli, '#!/usr/bin/env node\n', { mode: 0o755 });
+    chmodSync(fakeNpmCli, 0o755);
+    const fakeNpmManifest = join(npmRoot, 'package.json');
+    writeFileSync(
+      fakeNpmManifest,
+      '{"name":"npm","version":"11.6.1","bin":{"npm":"bin/npm-cli.js"}}\n',
+      { mode: 0o644 },
+    );
+    const defaultTempParent = join(preflightRoot, 'default-temp-parent');
+    mkdirSync(defaultTempParent, { mode: 0o700 });
+    const defaultParentBefore = readDirectoryNamesBounded(
+      defaultTempParent,
+      'default npm preflight temporary parent',
+    );
+    const defaultParentStatsBefore = lstatSync(defaultTempParent);
+    expect(() => allocateDefaultPackageSmokeWorkspaceAfterRuntimePreflight({
+      nodeExecutable: fakeNode,
+      npmExecutable: fakeNpmCli,
+      temporaryParent: defaultTempParent,
+    })).toThrow(/requires one exact reviewed npm version/u);
+    expect(readDirectoryNamesBounded(
+      defaultTempParent,
+      'default npm postflight temporary parent',
+    )).toEqual(defaultParentBefore);
+    const defaultParentStatsAfter = lstatSync(defaultTempParent);
+    expect({
+      dev: defaultParentStatsAfter.dev,
+      ino: defaultParentStatsAfter.ino,
+      mode: defaultParentStatsAfter.mode,
+      nlink: defaultParentStatsAfter.nlink,
+      size: defaultParentStatsAfter.size,
+      mtimeMs: defaultParentStatsAfter.mtimeMs,
+      ctimeMs: defaultParentStatsAfter.ctimeMs,
+    }).toEqual({
+      dev: defaultParentStatsBefore.dev,
+      ino: defaultParentStatsBefore.ino,
+      mode: defaultParentStatsBefore.mode,
+      nlink: defaultParentStatsBefore.nlink,
+      size: defaultParentStatsBefore.size,
+      mtimeMs: defaultParentStatsBefore.mtimeMs,
+      ctimeMs: defaultParentStatsBefore.ctimeMs,
+    });
+    expect(existsSync(marker)).toBe(false);
+    const rejectedWorkspace = join(preflightRoot, 'rejected-workspace');
+    const parentNamesBefore = readDirectoryNamesBounded(
+      preflightRoot,
+      'unreviewed npm preflight parent',
+    ).sort();
+    const parentStatsBefore = lstatSync(preflightRoot);
+    expect(() => preparePackageSmokeWorkspace({
+      workspace: rejectedWorkspace,
+      nodeExecutable: fakeNode,
+      npmExecutable: fakeNpmCli,
+    })).toThrow(/requires one exact reviewed npm version/u);
+    expect(existsSync(rejectedWorkspace)).toBe(false);
+    expect(existsSync(marker)).toBe(false);
+    expect(readDirectoryNamesBounded(
+      preflightRoot,
+      'unreviewed npm postflight parent',
+    ).sort()).toEqual(parentNamesBefore);
+    const parentStatsAfter = lstatSync(preflightRoot);
+    expect({
+      dev: parentStatsAfter.dev,
+      ino: parentStatsAfter.ino,
+      mode: parentStatsAfter.mode,
+      nlink: parentStatsAfter.nlink,
+      size: parentStatsAfter.size,
+      mtimeMs: parentStatsAfter.mtimeMs,
+      ctimeMs: parentStatsAfter.ctimeMs,
+    }).toEqual({
+      dev: parentStatsBefore.dev,
+      ino: parentStatsBefore.ino,
+      mode: parentStatsBefore.mode,
+      nlink: parentStatsBefore.nlink,
+      size: parentStatsBefore.size,
+      mtimeMs: parentStatsBefore.mtimeMs,
+      ctimeMs: parentStatsBefore.ctimeMs,
+    });
+
+    // Negative control: once the exact manifest preflight is admitted, this
+    // executable is reached and makes the marker observable.
+    writeFileSync(
+      fakeNpmManifest,
+      '{"name":"npm","version":"11.16.0","bin":{"npm":"bin/npm-cli.js"}}\n',
+      { mode: 0o644 },
+    );
+    const defaultAllocation = allocateDefaultPackageSmokeWorkspaceAfterRuntimePreflight({
+      nodeExecutable: fakeNode,
+      npmExecutable: fakeNpmCli,
+      temporaryParent: defaultTempParent,
+    });
+    expect(dirname(defaultAllocation.temp)).toBe(defaultTempParent);
+    expect(defaultAllocation.workspace).toBe(join(defaultAllocation.temp, 'workspace'));
+    expect(readDirectoryNamesBounded(
+      defaultTempParent,
+      'admitted default npm preflight temporary parent',
+    )).toEqual([defaultAllocation.temp.slice(defaultTempParent.length + 1)]);
+    expect(existsSync(defaultAllocation.workspace)).toBe(false);
+    expect(existsSync(marker)).toBe(false);
+    rmSync(defaultAllocation.temp, { recursive: true });
+    expect(readDirectoryNamesBounded(
+      defaultTempParent,
+      'cleaned admitted default npm preflight temporary parent',
+    )).toEqual([]);
+    const admittedWorkspace = join(preflightRoot, 'admitted-workspace');
+    expect(() => preparePackageSmokeWorkspace({
+      workspace: admittedWorkspace,
+      nodeExecutable: fakeNode,
+      npmExecutable: fakeNpmCli,
+    })).toThrow(/no Node candidate passed staged identity review/u);
+    expect(existsSync(admittedWorkspace)).toBe(true);
+    expect(existsSync(marker)).toBe(true);
+  }, 30_000);
+
   it('derives and closes every recursive package-management path from the omit-filtered lock', () => {
     const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-recursive-inventory-')));
     cleanups.push(workspace);
@@ -3745,6 +4488,14 @@ describe('two-phase package smoke contract', () => {
       },
       'node_modules/cortexel/node_modules/zod': { version: '4.0.0' },
       'node_modules/cortexel/node_modules/@scope/safe': { version: '2.0.0' },
+      'node_modules/cortexel/node_modules/@scope/omitted': {
+        version: '2.1.0',
+        optional: true,
+      },
+      'node_modules/cortexel/node_modules/@nested-omitted/pkg': {
+        version: '2.2.0',
+        optional: true,
+      },
       'node_modules/cortexel/node_modules/optional-child': {
         version: '3.0.0',
         optional: true,
@@ -3804,29 +4555,103 @@ describe('two-phase package smoke contract', () => {
       consumer,
       preparedLock,
       ['dev', 'optional'],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     );
     expect(assertClosure).not.toThrow();
 
-    const npm10ResidualScope = join(nodeModules, '@omitted');
-    expect(() => assertInstalledRecursivePackageClosure(
-      consumer,
-      preparedLock,
-      ['dev', 'optional'],
-      10,
-      currentNodeRuntimeIdentity,
-    )).toThrow(/package container inventory differs/u);
-    mkdirSync(npm10ResidualScope);
+    const residualScope = join(nodeModules, '@omitted');
+    const nestedResidualScope = join(
+      nodeModules,
+      'cortexel',
+      'node_modules',
+      '@nested-omitted',
+    );
+    for (const residueVersion of ['10.9.0', '10.9.8', '11.3.0']) {
+      expect(() => assertInstalledRecursivePackageClosure(
+        consumer,
+        preparedLock,
+        ['dev', 'optional'],
+        residueVersion,
+        currentNodeRuntimeIdentity,
+      ), residueVersion).toThrow(/package container inventory differs/u);
+    }
+    mkdirSync(residualScope);
+    mkdirSync(nestedResidualScope);
     expect(assertClosure).toThrow(/package container inventory differs/u);
+    for (const cleanVersion of ['11.12.1', '11.16.0', '11.17.0', '11.18.0']) {
+      expect(() => assertInstalledRecursivePackageClosure(
+        consumer,
+        preparedLock,
+        ['dev', 'optional'],
+        cleanVersion,
+        currentNodeRuntimeIdentity,
+      ), cleanVersion).toThrow(/package container inventory differs/u);
+    }
+    for (const residueVersion of ['10.9.0', '10.9.8', '11.3.0']) {
+      expect(() => assertInstalledRecursivePackageClosure(
+        consumer,
+        preparedLock,
+        ['dev', 'optional'],
+        residueVersion,
+        currentNodeRuntimeIdentity,
+      ), residueVersion).not.toThrow();
+    }
+
+    writeFileSync(join(residualScope, 'unexpected'), 'unreviewed\n');
     expect(() => assertInstalledRecursivePackageClosure(
       consumer,
       preparedLock,
       ['dev', 'optional'],
-      10,
+      '11.3.0',
       currentNodeRuntimeIdentity,
-    )).not.toThrow();
-    rmSync(npm10ResidualScope, { recursive: true, force: true });
+    )).toThrow(/package scope inventory differs/u);
+    rmSync(join(residualScope, 'unexpected'));
+    rmSync(residualScope, { recursive: true });
+    rmSync(nestedResidualScope, { recursive: true });
+
+    writeFileSync(residualScope, 'not a directory\n');
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      ['dev', 'optional'],
+      '10.9.8',
+      currentNodeRuntimeIdentity,
+    )).toThrow(/package scope is not a canonical real directory/u);
+    rmSync(residualScope);
+
+    const residualScopeTarget = join(consumer, 'residual-scope-target');
+    mkdirSync(residualScopeTarget);
+    symlinkSync(residualScopeTarget, residualScope);
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      ['dev', 'optional'],
+      '11.3.0',
+      currentNodeRuntimeIdentity,
+    )).toThrow(/package scope is not a canonical real directory/u);
+    rmSync(residualScope);
+
+    const diagnosticNames = Array.from({ length: 32 }, (_, index) =>
+      `unreviewed-${String(index).padStart(2, '0')}-${'x'.repeat(40)}`
+    );
+    diagnosticNames.push('!control-\u001b[2J-\u202e');
+    for (const name of diagnosticNames) mkdirSync(join(nodeModules, name));
+    let inventoryDiagnostic = '';
+    try {
+      assertClosure();
+    } catch (error) {
+      inventoryDiagnostic = error instanceof Error ? error.message : String(error);
+    }
+    expect(inventoryDiagnostic).toContain('expected ');
+    expect(inventoryDiagnostic).toContain('actual ');
+    expect(inventoryDiagnostic).toContain('(truncated)');
+    expect(inventoryDiagnostic).toContain('\\u001b');
+    expect(inventoryDiagnostic).toContain('\\u202e');
+    expect(inventoryDiagnostic).not.toContain('\u001b');
+    expect(inventoryDiagnostic).not.toContain('\u202e');
+    expect(Buffer.byteLength(inventoryDiagnostic, 'utf8')).toBeLessThanOrEqual(1_800);
+    for (const name of diagnosticNames) rmSync(join(nodeModules, name), { recursive: true });
 
     const omittedPackage = join(nodeModules, 'cortexel', 'node_modules', 'optional-child');
     writeManifest(
@@ -3913,7 +4738,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       preparedLock,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/pruning an exact optional-only package subset/u);
 
@@ -3922,7 +4747,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       preparedLock,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/exact filtered prepared lock/u);
     rmSync(join(nodeModules, 'optional-peer'), { recursive: true });
@@ -3938,7 +4763,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       requiredGapLock,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/exact filtered prepared lock/u);
 
@@ -3956,7 +4781,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       devOptionalOnlyLock,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/exact filtered prepared lock/u);
 
@@ -3967,7 +4792,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       preparedLock,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/exact filtered prepared lock/u);
 
@@ -3979,7 +4804,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       preparedLock,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/exact filtered prepared lock/u);
 
@@ -3994,7 +4819,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       preparedLock,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/exact filtered prepared lock/u);
 
@@ -4008,11 +4833,11 @@ describe('two-phase package smoke contract', () => {
       consumer,
       preparedLock,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/appears more than once/u);
 
-    const npm10ScopedGapLock = {
+    const residueScopedGapLock = {
       ...preparedLock,
       packages: {
         '': preparedLock.packages[''],
@@ -4024,9 +4849,9 @@ describe('two-phase package smoke contract', () => {
     mkdirSync(join(nodeModules, '@optional'));
     expect(() => assertInstalledRecursivePackageClosure(
       consumer,
-      npm10ScopedGapLock,
+      residueScopedGapLock,
       [],
-      10,
+      '10.9.8',
       currentNodeRuntimeIdentity,
     )).toThrow(/exact filtered prepared lock/u);
     rmSync(join(nodeModules, '@optional'), { recursive: true });
@@ -4036,7 +4861,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       preparedLock,
       ['optional'],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).not.toThrow();
   });
@@ -4081,35 +4906,35 @@ describe('two-phase package smoke contract', () => {
       consumer,
       preparedLock,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).not.toThrow();
     expect(() => assertInstalledRecursivePackageClosure(
       consumer,
       preparedLock,
       ['optional'],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).not.toThrow();
     expect(() => assertInstalledRecursivePackageClosure(
       consumer,
       preparedLock,
       [],
-      10,
+      '10.9.8',
       currentNodeRuntimeIdentity,
     )).not.toThrow();
     expect(() => assertInstalledRecursivePackageClosure(
       consumer,
       preparedLock,
       ['optional'],
-      10,
+      '10.9.8',
       currentNodeRuntimeIdentity,
     )).not.toThrow();
     expect(() => assertInstalledRecursivePackageClosure(
       consumer,
       preparedLock,
       ['dev', 'optional'],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/exact filtered prepared lock|package container inventory differs/u);
 
@@ -4119,7 +4944,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       falseFlag,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/noncanonical devOptional flag/u);
 
@@ -4134,7 +4959,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       redundantFlags,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/redundant dependency-class flags/u);
 
@@ -4154,7 +4979,7 @@ describe('two-phase package smoke contract', () => {
         consumer,
         preparedLock,
         [],
-        11,
+        '11.16.0',
         currentNodeRuntimeIdentity,
       );
     } catch (error) {
@@ -4178,7 +5003,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       preparedLock,
       ['dev', 'optional'],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).not.toThrow();
   });
@@ -4275,7 +5100,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       preparedLock,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).not.toThrow();
 
@@ -4293,7 +5118,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       nonOptionalMismatch,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/runtime-incompatible but not optional/u);
 
@@ -4312,7 +5137,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       nonOptionalCpuMismatch,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/runtime-incompatible but not optional/u);
 
@@ -4330,7 +5155,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       libcSelector,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/unreviewed libc selector/u);
 
@@ -4348,7 +5173,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       invalidSelector,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/invalid selector/u);
 
@@ -4366,7 +5191,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       hiddenInvalidCpuSelector,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/invalid selector/u);
 
@@ -4384,7 +5209,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       emptySelector,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(/non-empty selector array/u);
 
@@ -4402,7 +5227,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       negatedCurrentPlatform,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).not.toThrow();
 
@@ -4424,7 +5249,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       preparedLock,
       [],
-      11,
+      '11.16.0',
       currentNodeRuntimeIdentity,
     )).toThrow(
       /exact optional-only package subset \(1 missing; sample: "node_modules\/runtime-match"\)/u,
@@ -4448,7 +5273,7 @@ describe('two-phase package smoke contract', () => {
       consumer,
       preparedLock,
       [],
-      11,
+      '11.16.0',
       Object.freeze({
         platform: process.platform,
         arch: incompatibleArchitecture,

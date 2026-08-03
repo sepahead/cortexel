@@ -6,6 +6,46 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — exact npm topology and sealed TypeScript checking
+
+- Replaced the false npm-major topology rule with closed exact-version profiles.
+  npm `10.9.0`, `10.9.8`, and `11.3.0` require exactly the empty scope directories
+  derived from excluded scoped lock records beneath live package containers; npm `11.12.1`,
+  `11.16.0`, `11.17.0`, and `11.18.0` forbid every such residue. Unknown versions,
+  prereleases, build spellings, and future releases now reject before materialization.
+  [`@npmcli/arborist` 9.1.5](https://github.com/npm/cli/releases/tag/arborist-v9.1.5)
+  first contains npm CLI
+  [f6c868d](https://github.com/npm/cli/commit/f6c868d8a2df4d2961983d4e52095d6e7551e9cb),
+  and [npm 11.6.1](https://github.com/npm/cli/releases/tag/v11.6.1) first bundles
+  that Arborist release; [npm 11.6.0](https://github.com/npm/cli/releases/tag/v11.6.0)
+  bundles 9.1.4. This is documented only as the historical source boundary, not as
+  a `>=11.6.1` admission rule or substitute for Cortexel's full consumer matrix.
+  Both exact 11.6.x versions remain rejected. The manifest/profile check now precedes
+  workspace creation, operational-directory creation, and every child command.
+- Moved the TypeScript 7.0.2 NodeNext/no-emit consumer check out of execute. The
+  native TypeScript launcher attempts `process.execve` when Node exposes it and falls
+  back to `child_process.execFileSync`; executing it under the JavaScript guard either
+  failed or escaped that guard. Prepare now runs the exact fixed command only after
+  the workspace is finalized read-only, requires exact silent success, revalidates
+  the package closures, and requires identical workspace seals before and after.
+  Prepared state binds that bounded check to the seal. Execute never launches the
+  compiler. Its defense-in-depth guard denies the seven reviewed top-level
+  `node:child_process` launch functions, `ChildProcess.prototype.spawn`, and
+  `process.execve` when Node exposes it; this closes the two native TypeScript launcher
+  paths without claiming a hostile-process sandbox.
+- Advanced the prepared-state contract and filename from v2 to v3 because the sealed
+  TypeScript check is a new required member. Old v2 state therefore rejects instead of
+  being reinterpreted under a changed shape. The phase envelope remains v2 because its
+  own wire shape is unchanged.
+- Routed all 73 execute-phase target/consumer probes through one closed operation inventory,
+  including the two CLI import probes, 14 fixed CLI checks, two checks for each of 19
+  source-owned stable skill ids, and six exit-status cases. Every command has one
+  nonrepeating stable label and bounded terminal-safe underlying diagnostic; process
+  output never chooses the skill matrix, and the shared boundary rejects an argument
+  targeting TypeScript/`tsc`. Container inventory failures now report bounded
+  expected/actual entries without changing acceptance. The two execute preflight Node
+  version/identity commands remain separately bound by phase-neutral closed policies.
+
 ### Fixed — consumer/build Node separation
 
 - Removed the source-build-only Node floor from packaged `devEngines`. npm evaluates
@@ -217,8 +257,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   26.0.0/26.6.0, and binds their exact bundled npm versions 10.9.0, 10.9.8,
   11.3.0, 11.17.0, 11.12.1, and 11.18.0 respectively. Node, npm root, and npm CLI
   must resolve beneath the same setup-node installation prefix before their private
-  copy is admitted. npm 12 is newer but has no reviewed topology/materialization
-  profile in this milestone and is rejected rather than treated as npm 11.
+  copy is admitted. Every unlisted npm version, including npm 12, lacks a reviewed
+  topology/materialization profile in this milestone and is rejected.
 - CI now pins checkout 7.0.1, setup-node 7.0.0, setup-python 7.0.0, and setup-uv
   9.0.0 by immutable upstream commit SHA. setup-uv's changed cache-pruning default is
   inapplicable because this workflow disables its cache; the exact workflow run remains
@@ -432,7 +472,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reviewed class of redundant esbuild `ignored-bare-import` warnings whose targets
   independently
   contribute bundle bytes, seals the bundle and canonical receipt, and executes the
-  sealed handoff under the unchanged network/write/child-process-denying guard.
+  sealed handoff under the unchanged reviewed network/write/launch-surface guard.
 - **Breaking (experimental pre-1.0 subpath):** `KnowledgeGraph3DScene`,
   `KnowledgeGraphLegend`, and `KnowledgeGraphA11yList` no longer accept independent raw
   `nodes`, `edges`, `context`, or `graphIdentity` props. They require one exact
@@ -1121,11 +1161,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   outer bound so it does not routinely preempt the three sequential installations.
 - Every executable entry point now runs through an operation-scoped,
   descriptor-acquired private copy of the exact reviewed Node bytes. Prepared-state
-  v2 retains the original source Node's stable bytes, metadata, and path ancestry—not
+  v3 retains the original source Node's stable bytes, metadata, and path ancestry—not
   the ephemeral staged pathname, runtime root, or acquisition record—and binds the
-  exact npm 10/11 manifest, CLI, and bounded recursive package tree. Source and staged
-  SHA-256 values must equal that prepared source digest, and their authorities are
-  revalidated around every command before the private runtime is disposed. Staging
+  exact admitted npm manifest version, CLI, and bounded recursive package tree. Source
+  and staged SHA-256 values must equal that prepared source digest, and their
+  authorities are revalidated around every command before the private runtime is
+  disposed. Staging
   copies only the bounded known Homebrew-relative `libnode.<number>.dylib` companions;
   neither that inventory nor the deliberately narrow prepared authority scope claims
   a closed Node dynamic-library/OS authority or the TypeScript harness runtime. The
@@ -1184,8 +1225,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   installed package container, scope, package identity,
   `.bin` inventory/shim, and hidden lock entry is derived from the exact
   omit-filtered prepared lock at every nested depth; concealed package-management
-  subtrees are rejected. npm 10's exact empty omitted-scope residue is modeled
-  separately, while npm 11 admits no such residue.
+  subtrees are rejected. Empty omitted-scope residue is selected only by the exact
+  reviewed npm version: `10.9.0`, `10.9.8`, and `11.3.0` use the derived-residue
+  profile, while `11.12.1`, `11.16.0`, `11.17.0`, and `11.18.0` forbid it.
 - Generated browser-bundle helpers now construct their sealed import matchers from
   JSON-encoded pattern strings. A focused test executes those exact declarations under
   the reviewed Node and proves both accepted and rejected import spellings, preventing
