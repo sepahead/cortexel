@@ -28,10 +28,15 @@ Run both `bun run check` and `bun run check:formal` before finishing.
 
 Use `bun`. Published-package Node support is `^22.12.0 || ^24.0.0 || ^26.0.0`;
 22.12 is the first Node 22 release that can load the ESM-only graph peer from the
-CommonJS graph entry without a flag. Source development additionally requires
-Node `^22.18.0 || ^24.11.0 || ^26.0.0`, retaining the current tsdown build-tool
-floors without admitting unsupported intervening or future majors. CI pins the build
-runtime and separately exercises the exact floor/current pairs 22.12.0/22.23.2,
+CommonJS graph entry without a flag. Source package construction (`bun run build`)
+additionally requires Node `^22.18.0 || ^24.11.0 || ^26.0.0`, retaining the current
+tsdown build-tool floors without admitting unsupported intervening or future majors.
+A source-only preflight enforces that narrower range at the build boundary; it is
+deliberately not packaged as `devEngines`, because npm evaluates that field before
+local-tarball consumer installs. The preflight is nominal known-runtime detection,
+not runtime provenance or an identity binding to later build processes. CI pins the
+build runtime and separately exercises
+the exact floor/current pairs 22.12.0/22.23.2,
 24.0.0/24.19.0, and 26.0.0/26.6.0 with each release's exact bundled npm.
 There is no separate linter; TypeScript strict mode is the gate.
 `bun run bootstrap` asks Bun to force-rematerialize the frozen dependency closure with

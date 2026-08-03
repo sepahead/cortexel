@@ -6,6 +6,21 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — consumer/build Node separation
+
+- Removed the source-build-only Node floor from packaged `devEngines`. npm evaluates
+  that field before `install`/`ci`, so the stricter tsdown floor rejected the declared
+  Node 22.12 and 24.0 consumer rows before their packed-runtime smoke could start.
+  `engines.node` remains the closed consumer range
+  `^22.12.0 || ^24.0.0 || ^26.0.0`.
+- Package construction now runs a source-only preflight before loading tsdown and
+  accepts final core version strings in `^22.18.0 || ^24.11.0 || ^26.0.0`. Boundary
+  and property tests bind that closed predicate, reject Bun- and Deno-marked
+  compatibility runtimes, and ensure the build-only policy cannot leak back into the
+  source manifest consumed by packing. Runtime-marker rejection is nominal fail-closed
+  detection, not provenance, authentication, or an identity binding to later processes;
+  the package smoke remains the exact packed-consumer evidence.
+
 ### Fixed — portable clean-run authority
 
 - Clean CI installs now acquire the frozen Bun closure through a fresh mode-0700

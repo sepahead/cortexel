@@ -66,10 +66,15 @@ bun run test:package
 ```
 
 The installed package supports Node `^22.12.0 || ^24.0.0 || ^26.0.0`. Building
-from source requires Node `^22.18.0 || ^24.11.0 || ^26.0.0`: those bounds retain
-the current tsdown tool floors while closing the development environment to the
-same three supported majors. This narrower development floor does not raise the
-runtime floor for consumers of the committed `dist/` package.
+the package from source requires Node `^22.18.0 || ^24.11.0 || ^26.0.0`: those
+bounds retain the current tsdown tool floors while closing package construction to
+the same three supported majors. `bun run build` enforces the narrower range through
+a source-only preflight. It is intentionally not a packaged `devEngines` field,
+because npm evaluates that metadata before local-tarball consumer installs; build
+policy must not raise the runtime floor for consumers of committed `dist/` bytes.
+The preflight is nominal known-runtime detection, not runtime provenance or an
+identity binding to later build processes; the package smoke is the packed-consumer
+evidence.
 
 The build treats source maps as publishable source disclosure. Their exact source
 identity inventory and aggregate decoded-content digest live in
