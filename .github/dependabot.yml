@@ -1,0 +1,41 @@
+version: 2
+updates:
+  - package-ecosystem: bun
+    directory: "/"
+    schedule:
+      interval: weekly
+    # Routine version updates are applied as reviewed maintenance changes.
+    # Security-update PRs are exempt from this limit and remain eligible.
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: npm
+    directory: "/scripts/fixtures/package-smoke"
+    schedule:
+      interval: weekly
+    # Routine version updates are applied as reviewed maintenance changes.
+    # Security-update PRs are exempt from this limit and remain eligible.
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: pip
+    directory: "/python"
+    schedule:
+      interval: weekly
+    # Routine version updates are applied as reviewed maintenance changes.
+    # Security-update PRs are exempt from this limit and remain eligible.
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: pip
+    directory: "/.github/requirements"
+    schedule:
+      interval: weekly
+    # Routine version updates are applied as reviewed maintenance changes.
+    # Security-update PRs are exempt from this limit and remain eligible.
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    # Routine version updates are applied as reviewed maintenance changes.
+    # Security-update PRs are exempt from this limit and remain eligible.
+    open-pull-requests-limit: 0

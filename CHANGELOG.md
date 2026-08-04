@@ -40,6 +40,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed — repository hygiene and CI substrate
 
+- Added an explicit Dependabot policy for the root Bun lock, package-smoke npm
+  fixture, Python package and build-backend manifests, and GitHub Actions. Each
+  ecosystem sets the routine version-update pull-request limit to zero while
+  leaving security updates eligible for review. This is an automation policy,
+  not dependency-audit or security-clean evidence.
 - Root-anchored the `.superstack` ignore rule as `/.superstack`, covering a root file,
   directory, or dangling symlink without hiding a nested source path of the same name.
   A source-hygiene regression exercises all four cases and rejects a forced tracked
