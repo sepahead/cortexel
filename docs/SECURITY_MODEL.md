@@ -3,7 +3,7 @@
 > **Status: `0.9.0` is the last tagged pre-1.0 release; this document tracks the
 > private, unreleased `0.10.0-dev.0` source tree.** It describes the threat model and
 > the technical controls that back it. Neither identity makes a stable-contract
-> claim**: interfaces, limits, and even control boundaries may change before 1.0. No
+> claim: interfaces, limits, and even control boundaries may change before 1.0. No
 > package is published to npm or PyPI, and no DOI has been minted, so the npm/PyPI/DOI
 > badges are inactive by design.
 >
