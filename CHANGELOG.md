@@ -6,6 +6,18 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — repository hygiene and CI substrate
+
+- Root-anchored the `.superstack` ignore rule as `/.superstack`, covering a root file,
+  directory, or dangling symlink without hiding a nested source path of the same name.
+  A source-hygiene regression exercises all four cases and rejects a forced tracked
+  root entry. The path is absent from the repository; the ignore remains only an
+  accidental-commit control and does not deny reads or an explicit forced add.
+- Replaced all five `ubuntu-latest` job labels with `ubuntu-24.04`, preventing an alias
+  migration from silently changing the intended OS family. GitHub's hosted image still
+  rolls; each automatic **Set up job** record supplies observational image/version and
+  included-software provenance, not an immutable image or reproducibility receipt.
+
 ### Fixed — exact npm topology and sealed TypeScript checking
 
 - Replaced the false npm-major topology rule with closed exact-version profiles.

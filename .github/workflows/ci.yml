@@ -19,7 +19,7 @@ jobs:
   # The generated contract must be fresh and deterministic, and the evidence ledger must
   # be structurally sound — a forged PASS or a drifted generated file fails here.
   contract:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -75,7 +75,7 @@ jobs:
         run: bun run check:ledger
 
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -166,7 +166,7 @@ jobs:
   # non-identifiability laws. TypeScript property and parity tests in `check`
   # separately establish correspondence with the executable gates.
   formal:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -182,7 +182,7 @@ jobs:
   # The independent Python reader must pass its own suite. Cross-language digest parity is
   # asserted by the TypeScript suite (test/crossLanguageParity.test.ts) in `check`.
   python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -454,7 +454,7 @@ jobs:
 
   package-smoke:
     name: Package smoke (Node ${{ matrix.node }}, npm ${{ matrix.expected_npm_version }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
       fail-fast: false

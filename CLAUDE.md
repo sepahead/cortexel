@@ -38,6 +38,9 @@ not runtime provenance or an identity binding to later build processes. CI pins 
 build runtime and separately exercises
 the exact floor/current pairs 22.12.0/22.23.2,
 24.0.0/24.19.0, and 26.0.0/26.6.0 with each release's exact bundled npm.
+Every job names `ubuntu-24.04`; do not restore the migrating `ubuntu-latest` alias.
+The hosted image itself still rolls, and its automatic **Set up job** record is
+observational provenance rather than an immutable image or reproducibility receipt.
 There is no separate linter; TypeScript strict mode is the gate.
 `bun run bootstrap` asks Bun to force-rematerialize the frozen dependency closure with
 its cross-platform `copyfile` backend; the reviewed TSX gate still rejects a cache-linked

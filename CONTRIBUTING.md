@@ -253,7 +253,13 @@ does not inventory the complete stdlib or `libpython` closure. CI also places a
 300-second TERM/KILL bound around the network step; the smoke applies finite bounds to
 every build, install, and executable probe.
 This release-evidence procedure is currently supported on macOS and Linux; the pinned
-CI realization runs on Ubuntu. It is not evidence for a Windows package-build boundary.
+CI realization names `ubuntu-24.04` instead of the migrating `ubuntu-latest` alias, so
+the intended OS family cannot silently change. GitHub still refreshes that hosted image:
+each job's automatic **Set up job** log records the image release and exact
+included-software link observed by that job. Those records are run provenance, not
+an immutable image digest, complete environment inventory, or clean-room reproducibility
+receipt.
+This is not evidence for a Windows package-build boundary.
 Result mode additionally requires a filesystem whose path and open-descriptor ACL APIs
 are authoritative: `ENOTSUP`/`EOPNOTSUPP` fails closed. Cortexel does not yet classify
 network or stacked filesystems, so release evidence must keep the result parent on a

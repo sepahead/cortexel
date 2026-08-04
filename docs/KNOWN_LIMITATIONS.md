@@ -855,7 +855,11 @@ The machine-readable state of every release gate is in
 - **CI is a development workflow, not a release-certification matrix.** It runs
   contract, TypeScript, Python, and package-smoke jobs, but does not implement the full
   supported Node/OS matrix, nightly/RC soak, clean-room reproduction, or protected
-  trusted-publishing workflow. The package engine and package-smoke definition now
-  name the same closed Node 22/24/26 major set, but this change has not yet produced
+  trusted-publishing workflow. Jobs name the `ubuntu-24.04` OS family rather than the
+  migrating `ubuntu-latest` alias, but GitHub's hosted image remains rolling. The
+  automatic per-job **Set up job** record identifies the observed image release and
+  included-software link/list; it is not an immutable image pin, complete environment
+  inventory, or reproducibility receipt. The package engine and package-smoke
+  definition now name the same closed Node 22/24/26 major set, but this change has not yet produced
   an executed release receipt and does not establish OS or prerelease-runtime support.
   *Gates: R098, R103, R116, R134–R155.*

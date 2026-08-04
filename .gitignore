@@ -8,7 +8,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .venv/
-.superstack/
+/.superstack
 python/uv.lock
 .env
 .env.*

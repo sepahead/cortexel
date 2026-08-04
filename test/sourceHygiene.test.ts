@@ -1,5 +1,12 @@
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -27,6 +34,79 @@ const TEXT_EXTENSIONS = new Set([
 ]);
 
 describe('source hygiene', () => {
+  it('ignores every root .superstack entry type without hiding nested source paths', () => {
+    const gitignore = readFileSync(path.join(REPO, '.gitignore'), 'utf8');
+    expect(gitignore.split(/\r?\n/u).filter((line) => line.includes('.superstack'))).toEqual([
+      '/.superstack',
+    ]);
+    expect(
+      execFileSync('git', ['ls-files', '--', '.superstack'], {
+        cwd: REPO,
+        encoding: 'utf8',
+      }),
+    ).toBe('');
+
+    const temporary = mkdtempSync(path.join(os.tmpdir(), 'cortexel-superstack-ignore-'));
+    const emptyGitTemplate = path.join(temporary, 'empty-git-template');
+    const isolatedGitConfig = ['-c', `core.excludesFile=${os.devNull}`] as const;
+    const ignored = (candidate: string): number | null =>
+      spawnSync(
+        'git',
+        [...isolatedGitConfig, 'check-ignore', '--no-index', '--quiet', '--', candidate],
+        {
+          cwd: temporary,
+          encoding: 'utf8',
+        },
+      ).status;
+    try {
+      mkdirSync(emptyGitTemplate);
+      execFileSync(
+        'git',
+        [...isolatedGitConfig, 'init', '--quiet', `--template=${emptyGitTemplate}`],
+        { cwd: temporary },
+      );
+      writeFileSync(path.join(temporary, '.gitignore'), gitignore, {
+        encoding: 'utf8',
+        mode: 0o644,
+      });
+
+      const superstack = path.join(temporary, '.superstack');
+      writeFileSync(superstack, 'regular file\n');
+      expect(ignored('.superstack')).toBe(0);
+      rmSync(superstack);
+
+      mkdirSync(superstack);
+      writeFileSync(path.join(superstack, 'probe'), 'directory member\n');
+      expect(ignored('.superstack')).toBe(0);
+      expect(ignored('.superstack/probe')).toBe(0);
+      rmSync(superstack, { recursive: true });
+
+      if (process.platform !== 'win32') {
+        symlinkSync('missing-superstack-target', superstack);
+        expect(ignored('.superstack')).toBe(0);
+        rmSync(superstack);
+      }
+
+      mkdirSync(path.join(temporary, 'nested'));
+      writeFileSync(path.join(temporary, 'nested', '.superstack'), 'nested source\n');
+      expect(ignored('nested/.superstack')).toBe(1);
+    } finally {
+      rmSync(temporary, { recursive: true, force: true });
+    }
+  });
+
+  it('pins every CI job to the reviewed Ubuntu OS family', () => {
+    const workflow = readFileSync(
+      path.join(REPO, '.github', 'workflows', 'ci.yml'),
+      'utf8',
+    );
+    const runnerLabels = [...workflow.matchAll(/^\s+runs-on:\s+(\S+)\s*$/gmu)].map(
+      (match) => match[1],
+    );
+    expect(runnerLabels).toEqual(Array.from({ length: 5 }, () => 'ubuntu-24.04'));
+    expect(workflow).not.toContain('ubuntu-latest');
+  });
+
   it('keeps ignored dotenv values out of Bun tooling, including nested invocations', () => {
     const bunfig = readFileSync(path.join(REPO, 'bunfig.toml'), 'utf8');
     expect(bunfig).toMatch(/^env = false$/mu);
