@@ -4872,16 +4872,24 @@ type OmittedScopeTopologyPolicy =
   | 'exact-derived-empty-omitted-scopes'
   | 'forbid-empty-omitted-scopes';
 
+type RuntimeIncompatibleOptionalHiddenLockPolicy =
+  | 'exclude-runtime-incompatible-optionals'
+  | 'retain-runtime-incompatible-optionals-as-ideally-inert';
+
 interface ReviewedNpmTopologyProfile {
   readonly exactNpmVersion: string;
   readonly profileId: string;
   readonly omittedScopePolicy: OmittedScopeTopologyPolicy;
+  readonly runtimeIncompatibleOptionalHiddenLockPolicy:
+    RuntimeIncompatibleOptionalHiddenLockPolicy;
 }
 
-const DERIVED_EMPTY_OMITTED_SCOPES_PROFILE_ID =
-  'npm-derived-empty-omitted-scopes.v1';
-const FORBID_EMPTY_OMITTED_SCOPES_PROFILE_ID =
-  'npm-forbid-empty-omitted-scopes.v1';
+const DERIVED_EMPTY_SCOPES_FILTERED_INCOMPATIBLE_PROFILE_ID =
+  'npm-derived-empty-scopes-filtered-incompatible-optionals.v1';
+const DERIVED_EMPTY_SCOPES_INERT_INCOMPATIBLE_PROFILE_ID =
+  'npm-derived-empty-scopes-inert-incompatible-optionals.v1';
+const FORBID_EMPTY_SCOPES_FILTERED_INCOMPATIBLE_PROFILE_ID =
+  'npm-forbid-empty-scopes-filtered-incompatible-optionals.v1';
 
 const REVIEWED_NPM_VERSIONS = Object.freeze([
   '10.9.0',
@@ -4897,38 +4905,52 @@ type ReviewedNpmVersion = (typeof REVIEWED_NPM_VERSIONS)[number];
 const REVIEWED_NPM_TOPOLOGY_PROFILES = Object.freeze({
   '10.9.0': Object.freeze({
     exactNpmVersion: '10.9.0',
-    profileId: DERIVED_EMPTY_OMITTED_SCOPES_PROFILE_ID,
+    profileId: DERIVED_EMPTY_SCOPES_FILTERED_INCOMPATIBLE_PROFILE_ID,
     omittedScopePolicy: 'exact-derived-empty-omitted-scopes',
+    runtimeIncompatibleOptionalHiddenLockPolicy:
+      'exclude-runtime-incompatible-optionals',
   }),
   '10.9.8': Object.freeze({
     exactNpmVersion: '10.9.8',
-    profileId: DERIVED_EMPTY_OMITTED_SCOPES_PROFILE_ID,
+    profileId: DERIVED_EMPTY_SCOPES_FILTERED_INCOMPATIBLE_PROFILE_ID,
     omittedScopePolicy: 'exact-derived-empty-omitted-scopes',
+    runtimeIncompatibleOptionalHiddenLockPolicy:
+      'exclude-runtime-incompatible-optionals',
   }),
   '11.3.0': Object.freeze({
     exactNpmVersion: '11.3.0',
-    profileId: DERIVED_EMPTY_OMITTED_SCOPES_PROFILE_ID,
+    profileId: DERIVED_EMPTY_SCOPES_INERT_INCOMPATIBLE_PROFILE_ID,
     omittedScopePolicy: 'exact-derived-empty-omitted-scopes',
+    runtimeIncompatibleOptionalHiddenLockPolicy:
+      'retain-runtime-incompatible-optionals-as-ideally-inert',
   }),
   '11.12.1': Object.freeze({
     exactNpmVersion: '11.12.1',
-    profileId: FORBID_EMPTY_OMITTED_SCOPES_PROFILE_ID,
+    profileId: FORBID_EMPTY_SCOPES_FILTERED_INCOMPATIBLE_PROFILE_ID,
     omittedScopePolicy: 'forbid-empty-omitted-scopes',
+    runtimeIncompatibleOptionalHiddenLockPolicy:
+      'exclude-runtime-incompatible-optionals',
   }),
   '11.16.0': Object.freeze({
     exactNpmVersion: '11.16.0',
-    profileId: FORBID_EMPTY_OMITTED_SCOPES_PROFILE_ID,
+    profileId: FORBID_EMPTY_SCOPES_FILTERED_INCOMPATIBLE_PROFILE_ID,
     omittedScopePolicy: 'forbid-empty-omitted-scopes',
+    runtimeIncompatibleOptionalHiddenLockPolicy:
+      'exclude-runtime-incompatible-optionals',
   }),
   '11.17.0': Object.freeze({
     exactNpmVersion: '11.17.0',
-    profileId: FORBID_EMPTY_OMITTED_SCOPES_PROFILE_ID,
+    profileId: FORBID_EMPTY_SCOPES_FILTERED_INCOMPATIBLE_PROFILE_ID,
     omittedScopePolicy: 'forbid-empty-omitted-scopes',
+    runtimeIncompatibleOptionalHiddenLockPolicy:
+      'exclude-runtime-incompatible-optionals',
   }),
   '11.18.0': Object.freeze({
     exactNpmVersion: '11.18.0',
-    profileId: FORBID_EMPTY_OMITTED_SCOPES_PROFILE_ID,
+    profileId: FORBID_EMPTY_SCOPES_FILTERED_INCOMPATIBLE_PROFILE_ID,
     omittedScopePolicy: 'forbid-empty-omitted-scopes',
+    runtimeIncompatibleOptionalHiddenLockPolicy:
+      'exclude-runtime-incompatible-optionals',
   }),
 }) satisfies Readonly<Record<ReviewedNpmVersion, ReviewedNpmTopologyProfile>>;
 
@@ -4986,7 +5008,8 @@ function lockPackageName(path: string): string {
 
 function retryableOptionalMaterializationGap(options: {
   readonly actualHiddenLock: JsonValue;
-  readonly expectedPackages: ReadonlyMap<string, Record<string, JsonValue>>;
+  readonly expectedHiddenPackages: ReadonlyMap<string, Record<string, JsonValue>>;
+  readonly expectedInstalledPackages: ReadonlyMap<string, Record<string, JsonValue>>;
   readonly lock: Record<string, JsonValue>;
   readonly lockedPackages: Record<string, JsonValue>;
 }): { readonly missingPaths: readonly string[]; readonly reducedLock: JsonValue } | undefined {
@@ -5006,19 +5029,27 @@ function retryableOptionalMaterializationGap(options: {
   ) return undefined;
 
   const actualPackages = actual.packages;
+  const missingPaths = new Set<string>();
   for (const [path, record] of Object.entries(actualPackages)) {
-    const expected = options.expectedPackages.get(path);
+    const expected = options.expectedHiddenPackages.get(path);
     if (expected === undefined || !exactJsonEqual(record, expected)) return undefined;
   }
-  const missingPaths: string[] = [];
-  for (const [path, record] of options.expectedPackages) {
+  for (const [path, record] of options.expectedHiddenPackages) {
     if (Object.hasOwn(actualPackages, path)) continue;
-    if (record.optional !== true) return undefined;
-    missingPaths.push(path);
+    const installed = options.expectedInstalledPackages.get(path);
+    if (installed === undefined || record.optional !== true) return undefined;
+    missingPaths.add(path);
   }
-  if (missingPaths.length === 0) return undefined;
+  if (missingPaths.size === 0) return undefined;
+  const reducedPackages: Record<string, JsonValue> = {};
+  for (const path of Object.keys(actualPackages)) {
+    if (missingPaths.has(path)) continue;
+    const original = options.lockedPackages[path];
+    if (original === undefined) return undefined;
+    reducedPackages[path] = original;
+  }
   return {
-    missingPaths: Object.freeze(missingPaths.sort()),
+    missingPaths: Object.freeze([...missingPaths].sort()),
     reducedLock: {
       name: options.lock.name,
       version: options.lock.version,
@@ -5026,7 +5057,7 @@ function retryableOptionalMaterializationGap(options: {
       requires: options.lock.requires,
       packages: {
         '': options.lockedPackages['']!,
-        ...actualPackages,
+        ...reducedPackages,
       },
     },
   };
@@ -5146,7 +5177,8 @@ function assertInstalledRecursivePackageClosureWithRetryPolicy(
   const lockedPackages = expectRecord(lock.packages, 'prepared package lock packages');
   expectRecord(lockedPackages[''], 'prepared package lock root');
 
-  const expectedPackages = new Map<string, Record<string, JsonValue>>();
+  const expectedInstalledPackages = new Map<string, Record<string, JsonValue>>();
+  const expectedHiddenPackages = new Map<string, Record<string, JsonValue>>();
   for (const [path, candidate] of Object.entries(lockedPackages)) {
     if (path === '') continue;
     if (!isCanonicalLockPackagePath(path)) fail(`prepared package lock has an unsafe path ${path}`);
@@ -5168,25 +5200,40 @@ function assertInstalledRecursivePackageClosureWithRetryPolicy(
         omitted.has('optional')
       );
     if (omittedByClass) continue;
-    if (!lockPackageSupportsCurrentRuntime(record, path, runtime)) {
+    const supportsCurrentRuntime = lockPackageSupportsCurrentRuntime(record, path, runtime);
+    if (record.ideallyInert !== undefined) {
+      fail(`prepared package lock ${path} has invalid hidden-lock-only ideallyInert metadata`);
+    }
+    if (!supportsCurrentRuntime) {
       if (record.optional !== true) {
         fail(`prepared package lock ${path} is runtime-incompatible but not optional`);
       }
+      if (
+        npmTopologyProfile.runtimeIncompatibleOptionalHiddenLockPolicy ===
+        'retain-runtime-incompatible-optionals-as-ideally-inert'
+      ) {
+        expectedHiddenPackages.set(path, { ...record, ideallyInert: true });
+      }
       continue;
     }
-    expectedPackages.set(path, record);
+    expectedInstalledPackages.set(path, record);
+    expectedHiddenPackages.set(path, record);
   }
-  if (expectedPackages.size === 0 || expectedPackages.size > 10_000) {
+  if (
+    expectedInstalledPackages.size === 0 ||
+    expectedInstalledPackages.size > 10_000 ||
+    expectedHiddenPackages.size > 10_000
+  ) {
     fail('prepared package lock selected package count is outside its bound');
   }
 
   const containerPackages = new Map<string, Set<string>>();
   const containerBins = new Map<string, Map<string, InstalledBinExpectation>>();
-  for (const [path, record] of expectedPackages) {
+  for (const [path, record] of expectedInstalledPackages) {
     const container = lockPackageContainer(path);
     if (container !== 'node_modules') {
       const parent = container.slice(0, -'/node_modules'.length);
-      if (!expectedPackages.has(parent)) {
+      if (!expectedInstalledPackages.has(parent)) {
         fail(`prepared package lock includes ${path} beneath an omitted or absent parent`);
       }
     }
@@ -5227,15 +5274,15 @@ function assertInstalledRecursivePackageClosureWithRetryPolicy(
     fail('installed node_modules root is not a canonical real directory');
   }
 
-  const expectedHiddenPackages = Object.fromEntries(
-    expectedPackages,
+  const expectedHiddenPackageRecords = Object.fromEntries(
+    expectedHiddenPackages,
   );
   const expectedHiddenLock = {
     name: lock.name,
     version: lock.version,
     lockfileVersion: lock.lockfileVersion,
     requires: lock.requires,
-    packages: expectedHiddenPackages,
+    packages: expectedHiddenPackageRecords,
   };
   const hiddenLockPath = join(nodeModules, '.package-lock.json');
   const actualHiddenLock = readStrictJson(hiddenLockPath, 'installed hidden package lock');
@@ -5243,7 +5290,8 @@ function assertInstalledRecursivePackageClosureWithRetryPolicy(
     if (omitPolicy === '' && retryClassificationEnabled) {
       const retryableGap = retryableOptionalMaterializationGap({
         actualHiddenLock,
-        expectedPackages,
+        expectedHiddenPackages,
+        expectedInstalledPackages,
         lock,
         lockedPackages,
       });
@@ -5271,7 +5319,7 @@ function assertInstalledRecursivePackageClosureWithRetryPolicy(
     const consumerName = jsonDiagnosticString(basename(consumer), 256);
     const difference = firstJsonDifferencePath(expectedHiddenLock, actualHiddenLock) ?? '$';
     fail(
-      'installed hidden package lock differs from the exact filtered prepared lock for ' +
+      'installed hidden package lock differs from the exact profile-derived prepared lock for ' +
       `consumer ${consumerName.encoded}${consumerName.truncated ? ' (truncated)' : ''}, ` +
       `omit=${omitPolicy || 'none'}, first difference ${difference}`,
     );
@@ -5282,7 +5330,7 @@ function assertInstalledRecursivePackageClosureWithRetryPolicy(
   const derivedEmptyOmittedScopes = new Map<string, Set<string>>();
   if (npmTopologyProfile.omittedScopePolicy === 'exact-derived-empty-omitted-scopes') {
     for (const path of Object.keys(lockedPackages)) {
-      if (path === '' || expectedPackages.has(path)) continue;
+      if (path === '' || expectedInstalledPackages.has(path)) continue;
       const container = lockPackageContainer(path);
       if (!containerPackages.has(container)) continue;
       const packageName = lockPackageName(path);
@@ -5375,7 +5423,7 @@ function assertInstalledRecursivePackageClosureWithRetryPolicy(
       ) {
         fail(`installed package is not a canonical real directory: ${packagePath}`);
       }
-      const packageRecord = expectedPackages.get(packagePath);
+      const packageRecord = expectedInstalledPackages.get(packagePath);
       if (packageRecord === undefined) fail(`missing prepared package record for ${packagePath}`);
       const packageManifest = expectRecord(
         readStrictJson(join(packageRoot, 'package.json'), `installed ${packagePath} manifest`),

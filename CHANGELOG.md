@@ -13,6 +13,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   derived from excluded scoped lock records beneath live package containers; npm `11.12.1`,
   `11.16.0`, `11.17.0`, and `11.18.0` forbid every such residue. Unknown versions,
   prereleases, build spellings, and future releases now reject before materialization.
+  npm `11.3.0` additionally requires the hidden lock to retain every non-omitted,
+  runtime-incompatible `optional: true` record with exactly the added
+  `ideallyInert: true` member while forbidding its package directory. The other six
+  reviewed versions exclude those metadata-only records. Hidden-lock records and
+  installed filesystem packages are therefore derived as separate exact closures
+  instead of treating npm's legacy inert metadata as a materialized dependency.
   [`@npmcli/arborist` 9.1.5](https://github.com/npm/cli/releases/tag/arborist-v9.1.5)
   first contains npm CLI
   [f6c868d](https://github.com/npm/cli/commit/f6c868d8a2df4d2961983d4e52095d6e7551e9cb),

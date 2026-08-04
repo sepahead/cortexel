@@ -755,7 +755,12 @@ The machine-readable state of every release gate is in
   closure is not exact; a fresh prepare is required. The residue profile requires the
   complete derived empty-scope set for `10.9.0`, `10.9.8`, and `11.3.0`; the
   no-residue profile applies to `11.12.1`,
-  `11.16.0`, `11.17.0`, and `11.18.0`. `@npmcli/arborist` 9.1.5 first contains the
+  `11.16.0`, `11.17.0`, and `11.18.0`. npm `11.3.0` also retains the exact
+  non-omitted runtime-incompatible optional records in its hidden lock with the
+  hidden-lock-only marker `ideallyInert: true`; their filesystem package paths must
+  remain absent. Every other reviewed version excludes those records. This exact
+  metadata exception neither installs those packages nor authorizes any other hidden
+  lock member. `@npmcli/arborist` 9.1.5 first contains the
   sparse-tree change and npm 11.6.1 first bundles it; npm 11.6.0 bundles Arborist
   9.1.4. That is explanatory source history, not a `>=11.6.1` admission rule, and
   both exact 11.6.x versions remain rejected. All npm invocations use exact

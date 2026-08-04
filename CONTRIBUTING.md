@@ -558,6 +558,13 @@ contain exactly the empty scope directories derived from excluded scoped lock en
 beneath otherwise-live package containers. Versions `11.12.1`, `11.16.0`, `11.17.0`,
 and `11.18.0` admit no such residue. Every other npm version rejects before package
 materialization; neither a major version nor a SemVer range selects a profile.
+npm `11.3.0` also retains every non-omitted runtime-incompatible optional record in
+the top-level hidden lock with the one exact additional member `ideallyInert: true`.
+Those records are metadata-only: their package paths remain absent, and materializing
+one fails the independent filesystem closure. The other reviewed versions exclude the
+records. Cortexel derives these two exact hidden-lock forms separately from the actual
+installed package/container closure; neither form permits an unrecognized marker,
+missing inert record, extra package directory, or marker on a compatible package.
 `@npmcli/arborist` 9.1.5 first contains the sparse-tree change, and npm 11.6.1 first
 bundles that Arborist release, while npm 11.6.0 bundles 9.1.4. This explains the
 historical source boundary but is not a `>=11.6.1` rule; both exact 11.6.x versions

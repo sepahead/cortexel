@@ -4289,21 +4289,32 @@ describe('two-phase package smoke contract', () => {
   });
 
   it('derives one immutable topology policy from each exact reviewed npm version', () => {
-    for (const exactNpmVersion of ['10.9.0', '10.9.8', '11.3.0']) {
+    for (const exactNpmVersion of ['10.9.0', '10.9.8']) {
       const profile = reviewedNpmTopologyProfile(exactNpmVersion);
       expect(profile).toEqual({
         exactNpmVersion,
-        profileId: 'npm-derived-empty-omitted-scopes.v1',
+        profileId: 'npm-derived-empty-scopes-filtered-incompatible-optionals.v1',
         omittedScopePolicy: 'exact-derived-empty-omitted-scopes',
+        runtimeIncompatibleOptionalHiddenLockPolicy:
+          'exclude-runtime-incompatible-optionals',
       });
       expect(Object.isFrozen(profile)).toBe(true);
     }
+    expect(reviewedNpmTopologyProfile('11.3.0')).toEqual({
+      exactNpmVersion: '11.3.0',
+      profileId: 'npm-derived-empty-scopes-inert-incompatible-optionals.v1',
+      omittedScopePolicy: 'exact-derived-empty-omitted-scopes',
+      runtimeIncompatibleOptionalHiddenLockPolicy:
+        'retain-runtime-incompatible-optionals-as-ideally-inert',
+    });
     for (const exactNpmVersion of ['11.12.1', '11.16.0', '11.17.0', '11.18.0']) {
       const profile = reviewedNpmTopologyProfile(exactNpmVersion);
       expect(profile).toEqual({
         exactNpmVersion,
-        profileId: 'npm-forbid-empty-omitted-scopes.v1',
+        profileId: 'npm-forbid-empty-scopes-filtered-incompatible-optionals.v1',
         omittedScopePolicy: 'forbid-empty-omitted-scopes',
+        runtimeIncompatibleOptionalHiddenLockPolicy:
+          'exclude-runtime-incompatible-optionals',
       });
       expect(Object.isFrozen(profile)).toBe(true);
     }
@@ -4475,6 +4486,129 @@ describe('two-phase package smoke contract', () => {
     expect(existsSync(admittedWorkspace)).toBe(true);
     expect(existsSync(marker)).toBe(true);
   }, 30_000);
+
+  it('binds npm 11.3 inert hidden-lock metadata without materializing it', () => {
+    if (process.platform === 'win32') return;
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-npm113-inert-')));
+    cleanups.push(workspace);
+    const consumer = join(workspace, 'consumer');
+    const nodeModules = join(consumer, 'node_modules');
+    const cortexelRoot = join(nodeModules, 'cortexel');
+    const cortexelCli = join(cortexelRoot, 'dist', 'cli', 'main.js');
+    mkdirSync(join(cortexelRoot, 'dist', 'cli'), { recursive: true });
+    writeFileSync(
+      join(cortexelRoot, 'package.json'),
+      '{"name":"cortexel","version":"1.0.0"}\n',
+    );
+    writeFileSync(cortexelCli, '#!/usr/bin/env node\n', { mode: 0o755 });
+    chmodSync(cortexelCli, 0o755);
+    mkdirSync(join(nodeModules, '.bin'));
+    symlinkSync('../cortexel/dist/cli/main.js', join(nodeModules, '.bin', 'cortexel'));
+
+    const otherPlatform = process.platform === 'darwin' ? 'linux' : 'darwin';
+    const cortexelRecord = {
+      version: '1.0.0',
+      bin: { cortexel: 'dist/cli/main.js' },
+    };
+    const incompatibleRecord = {
+      version: '2.0.0',
+      optional: true,
+      os: [otherPlatform],
+    };
+    const preparedLock = {
+      name: 'npm113-inert-fixture',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': { name: 'npm113-inert-fixture', version: '1.0.0' },
+        'node_modules/cortexel': cortexelRecord,
+        'node_modules/runtime-incompatible': incompatibleRecord,
+      },
+    };
+    const writeHiddenLock = (
+      runtimeIncompatibleRecord: Record<string, unknown> | undefined,
+      cortexel: Record<string, unknown> = cortexelRecord,
+    ): void => {
+      writeFileSync(join(nodeModules, '.package-lock.json'), `${JSON.stringify({
+        name: preparedLock.name,
+        version: preparedLock.version,
+        lockfileVersion: preparedLock.lockfileVersion,
+        requires: preparedLock.requires,
+        packages: {
+          'node_modules/cortexel': cortexel,
+          ...(runtimeIncompatibleRecord === undefined
+            ? {}
+            : { 'node_modules/runtime-incompatible': runtimeIncompatibleRecord }),
+        },
+      })}\n`);
+    };
+    const assertClosure = (npmVersion: string): void =>
+      assertInstalledRecursivePackageClosure(
+        consumer,
+        preparedLock,
+        [],
+        npmVersion,
+        currentNodeRuntimeIdentity,
+      );
+
+    writeHiddenLock({ ...incompatibleRecord, ideallyInert: true });
+    expect(() => assertClosure('11.3.0')).not.toThrow();
+    expect(existsSync(join(nodeModules, 'runtime-incompatible'))).toBe(false);
+
+    for (const invalidRecord of [
+      incompatibleRecord,
+      { ...incompatibleRecord, ideallyInert: false },
+      { ...incompatibleRecord, ideallyInert: true, unreviewed: true },
+      undefined,
+    ]) {
+      writeHiddenLock(invalidRecord);
+      expect(() => assertClosure('11.3.0')).toThrow(/hidden package lock differs/u);
+    }
+    writeHiddenLock(
+      { ...incompatibleRecord, ideallyInert: true },
+      { ...cortexelRecord, ideallyInert: true },
+    );
+    expect(() => assertClosure('11.3.0')).toThrow(/hidden package lock differs/u);
+
+    writeHiddenLock({ ...incompatibleRecord, ideallyInert: true });
+    const incompatibleRoot = join(nodeModules, 'runtime-incompatible');
+    mkdirSync(incompatibleRoot);
+    writeFileSync(
+      join(incompatibleRoot, 'package.json'),
+      '{"name":"runtime-incompatible","version":"2.0.0"}\n',
+    );
+    expect(() => assertClosure('11.3.0')).toThrow(/package container inventory differs/u);
+    rmSync(incompatibleRoot, { recursive: true });
+
+    writeHiddenLock(undefined);
+    for (const filteredVersion of [
+      '10.9.0',
+      '10.9.8',
+      '11.12.1',
+      '11.16.0',
+      '11.17.0',
+      '11.18.0',
+    ]) {
+      expect(() => assertClosure(filteredVersion), filteredVersion).not.toThrow();
+    }
+    writeHiddenLock({ ...incompatibleRecord, ideallyInert: true });
+    for (const filteredVersion of ['10.9.0', '11.12.1']) {
+      expect(() => assertClosure(filteredVersion), filteredVersion).toThrow(
+        /hidden package lock differs/u,
+      );
+    }
+
+    const invalidPreparedLock = structuredClone(preparedLock) as any;
+    invalidPreparedLock.packages['node_modules/cortexel'].ideallyInert = true;
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      invalidPreparedLock,
+      [],
+      '11.3.0',
+      currentNodeRuntimeIdentity,
+    )).toThrow(/invalid hidden-lock-only ideallyInert metadata/u);
+  });
 
   it('derives and closes every recursive package-management path from the omit-filtered lock', () => {
     const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-recursive-inventory-')));
@@ -4687,7 +4821,7 @@ describe('two-phase package smoke contract', () => {
       ...hiddenLock,
       packages: records,
     })}\n`);
-    expect(assertClosure).toThrow(/exact filtered prepared lock/u);
+    expect(assertClosure).toThrow(/exact profile-derived prepared lock/u);
     writeFileSync(join(nodeModules, '.package-lock.json'), `${JSON.stringify(hiddenLock)}\n`);
 
     writeManifest(
@@ -4749,7 +4883,7 @@ describe('two-phase package smoke contract', () => {
       [],
       '11.16.0',
       currentNodeRuntimeIdentity,
-    )).toThrow(/exact filtered prepared lock/u);
+    )).toThrow(/exact profile-derived prepared lock/u);
     rmSync(join(nodeModules, 'optional-peer'), { recursive: true });
 
     const requiredGapLock = {
@@ -4765,7 +4899,7 @@ describe('two-phase package smoke contract', () => {
       [],
       '11.16.0',
       currentNodeRuntimeIdentity,
-    )).toThrow(/exact filtered prepared lock/u);
+    )).toThrow(/exact profile-derived prepared lock/u);
 
     const devOptionalOnlyLock = {
       ...preparedLock,
@@ -4783,7 +4917,7 @@ describe('two-phase package smoke contract', () => {
       [],
       '11.16.0',
       currentNodeRuntimeIdentity,
-    )).toThrow(/exact filtered prepared lock/u);
+    )).toThrow(/exact profile-derived prepared lock/u);
 
     writeHiddenLock({
       'node_modules/cortexel': { version: '1.0.1' },
@@ -4794,7 +4928,7 @@ describe('two-phase package smoke contract', () => {
       [],
       '11.16.0',
       currentNodeRuntimeIdentity,
-    )).toThrow(/exact filtered prepared lock/u);
+    )).toThrow(/exact profile-derived prepared lock/u);
 
     writeHiddenLock({
       'node_modules/cortexel': requiredRecord,
@@ -4806,7 +4940,7 @@ describe('two-phase package smoke contract', () => {
       [],
       '11.16.0',
       currentNodeRuntimeIdentity,
-    )).toThrow(/exact filtered prepared lock/u);
+    )).toThrow(/exact profile-derived prepared lock/u);
 
     writeFileSync(hiddenLockPath, `${JSON.stringify({
       name: preparedLock.name,
@@ -4821,7 +4955,7 @@ describe('two-phase package smoke contract', () => {
       [],
       '11.16.0',
       currentNodeRuntimeIdentity,
-    )).toThrow(/exact filtered prepared lock/u);
+    )).toThrow(/exact profile-derived prepared lock/u);
 
     writeFileSync(
       hiddenLockPath,
@@ -4853,7 +4987,7 @@ describe('two-phase package smoke contract', () => {
       [],
       '10.9.8',
       currentNodeRuntimeIdentity,
-    )).toThrow(/exact filtered prepared lock/u);
+    )).toThrow(/exact profile-derived prepared lock/u);
     rmSync(join(nodeModules, '@optional'), { recursive: true });
 
     writeHiddenLock({ 'node_modules/cortexel': requiredRecord });
@@ -4936,7 +5070,7 @@ describe('two-phase package smoke contract', () => {
       ['dev', 'optional'],
       '11.16.0',
       currentNodeRuntimeIdentity,
-    )).toThrow(/exact filtered prepared lock|package container inventory differs/u);
+    )).toThrow(/exact profile-derived prepared lock|package container inventory differs/u);
 
     const falseFlag = structuredClone(preparedLock);
     falseFlag.packages['node_modules/shared'].devOptional = false;
