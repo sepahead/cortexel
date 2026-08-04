@@ -1,7 +1,7 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
-const require_authoring = require('./authoring-CicuSscw.cjs');
-const require_knowledgeGraphLimits = require('./knowledgeGraphLimits-C0j05-4h.cjs');
-const require_core = require('./core-BdeDwTLa.cjs');
+const require_authoring = require('./authoring-MTqY6OMZ.cjs');
+const require_knowledgeGraphLimits = require('./knowledgeGraphLimits-BnjbjxkI.cjs');
+const require_core = require('./core-X30y1nvx.cjs');
 
 exports.AXIS_COLORS = require_authoring.AXIS_COLORS;
 exports.AdjacencyMatrixParamsSchema = require_authoring.AdjacencyMatrixParamsSchema;
@@ -158,6 +158,7 @@ exports.spikeRecorderToPopulationRateParams = require_core.spikeRecorderToPopula
 exports.spikeRecorderToSceneData = require_core.spikeRecorderToSceneData;
 exports.spikeTrialsToPsthParams = require_core.spikeTrialsToPsthParams;
 exports.splitMultimeterBySender = require_core.splitMultimeterBySender;
+exports.splitWeightRecorderByRecordedTuple = require_core.splitWeightRecorderByRecordedTuple;
 exports.splitWeightRecorderBySynapse = require_core.splitWeightRecorderBySynapse;
 exports.synapseCollectionToAdjacencyMatrixParams = require_core.synapseCollectionToAdjacencyMatrixParams;
 exports.synapseCollectionToConnectionGraphParams = require_core.synapseCollectionToConnectionGraphParams;

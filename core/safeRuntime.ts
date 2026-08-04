@@ -39,6 +39,19 @@ const TYPED_ARRAY_LENGTH_GETTER = Object.getOwnPropertyDescriptor(
   Object.getPrototypeOf(Uint8Array.prototype),
   'length',
 )?.get;
+const TYPED_ARRAY_BUFFER_GETTER = Object.getOwnPropertyDescriptor(
+  Object.getPrototypeOf(Uint8Array.prototype),
+  'buffer',
+)?.get;
+const ARRAY_BUFFER_BYTE_LENGTH_GETTER = Object.getOwnPropertyDescriptor(
+  ArrayBuffer.prototype,
+  'byteLength',
+)?.get;
+const INTRINSIC_DATA_VIEW = DataView;
+const SHARED_ARRAY_BUFFER_BYTE_LENGTH_GETTER =
+  typeof SharedArrayBuffer === 'function'
+    ? Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, 'byteLength')?.get
+    : undefined;
 
 /** Read a typed array's internal length without consulting an overridable
  * subclass `length` accessor. DataView and non-typed-array inputs return
@@ -56,6 +69,42 @@ export function intrinsicTypedArrayLength(value: unknown): number | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** Identify a typed array's backing-store brand without consulting an
+ * overridable instance/subclass `buffer` accessor. Cross-realm buffers are
+ * recognized by applying the intrinsic byteLength brand checks. */
+export function intrinsicTypedArrayBufferKind(
+  value: unknown,
+): 'array' | 'shared' | undefined {
+  if (!ArrayBuffer.isView(value) || typeof TYPED_ARRAY_BUFFER_GETTER !== 'function') {
+    return undefined;
+  }
+  try {
+    const buffer = Reflect.apply(TYPED_ARRAY_BUFFER_GETTER, value, []);
+    if (typeof SHARED_ARRAY_BUFFER_BYTE_LENGTH_GETTER === 'function') {
+      try {
+        Reflect.apply(SHARED_ARRAY_BUFFER_BYTE_LENGTH_GETTER, buffer, []);
+        return 'shared';
+      } catch {
+        // Continue with the ordinary ArrayBuffer brand check.
+      }
+    }
+    if (
+      typeof ARRAY_BUFFER_BYTE_LENGTH_GETTER === 'function' &&
+      typeof INTRINSIC_DATA_VIEW === 'function'
+    ) {
+      Reflect.apply(ARRAY_BUFFER_BYTE_LENGTH_GETTER, buffer, []);
+      // byteLength is 0 for both a live empty and detached ArrayBuffer. The
+      // captured DataView constructor's internal liveness check succeeds only
+      // for the former and does not consult ArrayBuffer constructor/species.
+      Reflect.construct(INTRINSIC_DATA_VIEW, [buffer, 0, 0]);
+      return 'array';
+    }
+  } catch {
+    // A detached, spoofed, or otherwise uninspectable view fails closed.
+  }
+  return undefined;
 }
 
 export interface ValidationIssueLike {

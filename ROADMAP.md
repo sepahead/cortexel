@@ -188,9 +188,13 @@ mappings and the Neo, Elephant, NWB, and NCP adapters are not implemented.
 
 - Execute the existing narrow spike-recorder adapter and implement/test the remaining
   NEST recorder and connection adapters against **real**, version-pinned NEST output:
-  preserve source/target, synapse model/id, weight, delay, autapses,
-  multapses, snapshot time, the declared node universe, and MPI scope, and never assume
-  chronological recorder order (gates **R049–R051**).
+  preserve the exact recorded `(source,target,port,receptor)` tuple, weight, delay,
+  autapses, multapses, snapshot time, declared node universe, and MPI scope, and never
+  assume chronological recorder order. A weight-recorder mapping must additionally
+  bind the exact same-run post-prepare connection inventory, run/recorder identity,
+  synapse-model and port namespace, rank/process scope, topology lifetime, and
+  model-specific update convention; NEST does not provide one already-authenticated
+  generic synapse id in the recorder rows (gates **R049–R051**).
 - Implement the Neo, Elephant, and NWB adapters with their unit/timestamp/segment and
   object-path/identity semantics preserved (gates **R052–R054**).
 - Publish a support matrix listing the exact tested upstream versions and status —

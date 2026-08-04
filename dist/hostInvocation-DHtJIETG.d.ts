@@ -1,4 +1,4 @@
-import { f as VizSpec } from "./vizSpec-DXKitvuD.cjs";
+import { f as VizSpec } from "./vizSpec-DXKitvuD.js";
 import { z } from "zod";
 //#region core/designLaws.d.ts
 type NeuralSceneMode = 'hero' | 'background' | 'standalone';
@@ -64,10 +64,6 @@ interface SceneData {
   traceSender?: number;
   weightSeries?: Float32Array;
   weightUnits?: string;
-  weightSynapse?: {
-    sender: number;
-    target: number;
-  };
   analogTraces?: {
     values: Float32Array;
     variable: string;

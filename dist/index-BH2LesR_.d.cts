@@ -1,6 +1,6 @@
-import { f as VizSpec } from "./vizSpec-DXKitvuD.js";
-import { U as SceneName, V as SceneData, h as RendererRoute, m as NestSkillId, n as HostRendererInvocationResult, o as SkillInvocationError, p as NestDeviceFamily, s as SkillInvocationResult, t as HostRendererInvocation } from "./hostInvocation-BrzyGZfJ.js";
-import { E as IsiDistributionParams, H as PopulationRateParams, K as PsthParams, M as OutDegreeDistributionParams, O as KnowledgeGraph3DParams, Q as SnapshotScope, W as PositionScope, _ as DelayMatrixParams, c as CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS, d as ConnectionGraphParams, ft as WeightHistogramParams, h as DelayDistributionParams, it as SpatialMap2DParams, mt as WeightMatrixParams, p as CorrelogramParams, s as CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS, t as AdjacencyMatrixParams, w as InDegreeDistributionParams } from "./params-DhLVUphI.js";
+import { f as VizSpec } from "./vizSpec-DXKitvuD.cjs";
+import { U as SceneName, V as SceneData, h as RendererRoute, m as NestSkillId, n as HostRendererInvocationResult, o as SkillInvocationError, p as NestDeviceFamily, s as SkillInvocationResult, t as HostRendererInvocation } from "./hostInvocation-BRS-Pm5a.cjs";
+import { E as IsiDistributionParams, H as PopulationRateParams, K as PsthParams, M as OutDegreeDistributionParams, O as KnowledgeGraph3DParams, Q as SnapshotScope, W as PositionScope, _ as DelayMatrixParams, c as CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS, d as ConnectionGraphParams, ft as WeightHistogramParams, h as DelayDistributionParams, it as SpatialMap2DParams, mt as WeightMatrixParams, p as CorrelogramParams, s as CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS, t as AdjacencyMatrixParams, w as InDegreeDistributionParams } from "./params-DhLVUphI.cjs";
 import { z } from "zod";
 //#region core/skills/provenanceKeys.d.ts
 declare const PROVENANCE_KEYS: readonly ["device_id", "recorded_variable", "units", "sampling_interval", "recorder_id", "sender_ids", "population_labels", "time_units", "source_ids", "target_ids", "synapse_model", "weight_units", "extent", "spatial_units", "mask", "kernel", "projection_sample_policy", "morphology_disclaimer", "frame_rate", "state_variables", "derivation_method", "model_context", "fixed_parameters", "bin_ms", "histogram_normalization", "interval_scope", "event_alignment", "psth_aggregation", "connection_sample_policy", "snapshot_time_ms", "snapshot_scope", "parallel_edge_policy", "matrix_axis_order", "matrix_aggregation", "delay_units", "degree_direction", "degree_counting", "zero_degree_policy", "node_ids", "position_scope", "detector_id", "reference_population", "target_population", "correlation_normalization", "correlation_units", "lag_convention", "binning_policy", "stim_units", "rate_normalization", "graph_source", "graph_snapshot_id", "graph_scope", "identity_advisory"];
@@ -965,14 +965,21 @@ declare const GetPosition3DSchema: z.ZodObject<{
   }[], unknown>>>;
 }, z.core.$strict>;
 type GetPosition3D = z.infer<typeof GetPosition3DSchema>;
-/** weight_recorder events: {times, weights, senders?, targets?}. */
+/**
+ * Exact `record_to=memory,time_in_steps=false` weight_recorder event projection
+ * used by the legacy structural partitioner. All recorded identity-like
+ * channels are mandatory: omitting port or receptor information must never
+ * fall back to pair grouping. Tuple fields must be exactly representable
+ * non-negative safe integers. The strict object rejects the `offsets` channel
+ * emitted for `time_in_steps=true` rather than projecting it away.
+ */
 declare const WeightRecorderEventsSchema: z.ZodObject<{
   times: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
   weights: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
-  senders: z.ZodOptional<z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>>;
-  targets: z.ZodOptional<z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>>;
-  sender: z.ZodOptional<z.ZodNumber>;
-  target: z.ZodOptional<z.ZodNumber>;
+  senders: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
+  targets: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
+  ports: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
+  receptors: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
 }, z.core.$strict>;
 type WeightRecorderEvents = z.infer<typeof WeightRecorderEventsSchema>;
 /**
@@ -1048,26 +1055,54 @@ declare function getPositionToSceneData(positions: unknown, opts: {
   dims?: 2 | 3;
   coordinateUnits: string;
 }): AdapterResult;
-declare function weightRecorderToSceneData(events: unknown, opts?: {
-  weightUnits?: string;
-}): AdapterResult;
-interface WeightSynapseSeries {
-  sender: number;
-  target: number;
-  times: number[];
-  weights: Float32Array;
+interface WeightRecorderRecordedTuple {
+  readonly kind: 'recorded_tuple_only';
+  readonly sender: number;
+  readonly target: number;
+  readonly port: number;
+  readonly receptor: number;
 }
-type WeightRecorderSplitResult = {
-  ok: true;
-  series: WeightSynapseSeries[];
+interface WeightRecorderTupleGroup {
+  readonly weightRecorderTuple: WeightRecorderRecordedTuple;
+  readonly sourceOrdinals: readonly number[];
+  readonly times: readonly number[];
+  readonly weights: readonly number[];
+}
+type WeightRecorderTupleSplitResult = {
+  readonly ok: true;
+  readonly groups: readonly WeightRecorderTupleGroup[];
 } | {
+  readonly ok: false;
+  readonly errors: readonly string[];
+};
+/**
+ * Partition raw weight_recorder rows by equality of every recorded tuple field.
+ *
+ * This is deliberately a structural operation, not a trace adapter. It returns
+ * a deeply frozen, detached snapshot retaining source order and every accepted
+ * finite binary64 value. It makes no claim that a tuple is a stable NEST
+ * connection identity or that repeated rows form one continuous trajectory.
+ */
+declare function splitWeightRecorderByRecordedTuple(events: unknown): WeightRecorderTupleSplitResult;
+/**
+ * @deprecated This name promised a synapse identity that recorder rows do not
+ * establish. It always fails; use splitWeightRecorderByRecordedTuple for a
+ * structural partition and bind separate same-run authority before rendering.
+ */
+declare function splitWeightRecorderBySynapse(_events: unknown): {
   ok: false;
   errors: string[];
 };
-/** Split a multi-synapse weight_recorder dump into one honest trace per
- *  (sender,target) pair. The single-trace adapter deliberately refuses to merge
- *  these series because doing so invents discontinuous plasticity dynamics. */
-declare function splitWeightRecorderBySynapse(events: unknown): WeightRecorderSplitResult;
+/**
+ * @deprecated Raw weight_recorder rows do not establish one identified,
+ * continuous trace. This fail-closed tombstone always returns `ok: false`.
+ */
+declare function weightRecorderToSceneData(_events: unknown, _opts?: {
+  weightUnits?: string;
+}): {
+  ok: false;
+  errors: string[];
+};
 //#endregion
 //#region core/nest/analysis.d.ts
 type NestAnalysisResult<T> = {
@@ -1252,4 +1287,4 @@ declare function synapseCollectionToWeightHistogramParams(input: unknown, option
 declare function getPositionToSpatialMap2DParams(input: unknown, options: SpatialMap2DOptions): NestTopologyResult<SpatialMap2DParams>;
 declare function getPositionToSpatialMap2DParams(input: unknown, options: unknown): NestTopologyResult<SpatialMap2DParams>;
 //#endregion
-export { GetConnections as $, describeSkill as $t, correlationDetectorToCorrelogramParams as A, provenanceParamConstraintError as An, RouteInput as At, WeightSynapseSeries as B, ExternalProvenanceClaim as Bt, CorrelationDetectorSourceConfiguration as C, ProvenanceParamConstraint as Cn, formatInvocationErrors as Ct, PopulationRateOptions as D, isProvenanceKey as Dn, GetPositionDataKind as Dt, NestAnalysisResult as E, declaredProvenanceValueError as En, GetConnectionsDataKind as Et, GetConnectionsSceneOptions as F, SKILL_EXAMPLE_PAYLOADS as Ft, splitMultimeterBySender as G, ProvenanceVerification as Gt, getPositionToSceneData as H, PARAM_CONSTRAINT_LANGUAGE as Ht, MultimeterSenderSeries as I, getExamplePayload as It, SYNAPSE_MEASUREMENT_FIELD_SEMANTICS as J, SKILL_REGISTRY as Jt, splitWeightRecorderBySynapse as K, ProvenanceVerificationKind as Kt, MultimeterSplitResult as L, getHostRendererExamplePayload as Lt, spikeRecorderToPopulationRateParams as M, SpikeDataKind as Mt, spikeTrialsToPsthParams as N, routeToScene as Nt, PopulationRatePopulation as O, normalizeDeclaredProvenanceInputs as On, ROUTING_DISCRIMINATORS as Ot, AdapterResult as P, HOST_RENDERER_EXAMPLE_PAYLOADS as Pt, CorrelationDetectorStatusSchema as Q, SkillExample as Qt, NEST_ADAPTER_LIMITS as R, getInvocationExamplePayload as Rt, CorrelationDetectorOptions as S, ProvenanceKeyEnum as Sn, conservativeProvenance as St, NEST_ANALYSIS_LIMITS as T, STRICT_PROVENANCE_POLICY as Tn, Disambiguator as Tt, multimeterToSceneData as U, PARAM_VALIDATION_CONSTRAINTS as Ut, getConnectionsToSceneData as V, NEST_SKILL_REGISTRY as Vt, spikeRecorderToSceneData as W, ParamValidationConstraint as Wt, SynapseModelMeasurementSemantics as X, SkillContract as Xt, SynapseMeasurementFieldSemantics as Y, STRICT_INVOCATION_POLICY as Yt, CorrelationDetectorStatus as Z, SkillDescriptor as Zt, synapseCollectionToDelayMatrixParams as _, PROVENANCE_KEYS as _n, BuildVizSpecInput as _t, DelayMatrixOptions as a, skillParamsJsonSchema as an, MultimeterEvents as at, synapseCollectionToWeightHistogramParams as b, PROVENANCE_VALUE_CONSTRAINTS as bn, buildHostRendererInvocation as bt, NormalizedSynapseCollectionSnapshot as c, AdaptEngramCorpusEntityGraphResult as cn, MultimeterMultiSenderSchema as ct, WeightMatrixOptions as d, EngramCorpusEntityGraphResponse as dn, SpikeRecorderEventsSchema as dt, describeSkills as en, GetConnectionsSchema as et, getPositionToSpatialMap2DParams as f, EngramCorpusEntityNode as fn, WeightRecorderEvents as ft, synapseCollectionToDelayDistributionParams as g, KNOWLEDGE_GRAPH_LIMITS as gn, BuildHostRendererInvocationInput as gt, synapseCollectionToConnectionGraphParams as h, adaptEngramCorpusEntityGraph as hn, detectEmptyScene as ht, DelayDistributionOptions as i, provenanceVerificationForContract as in, GetPosition3DSchema as it, spikeRecorderToIsiParams as j, RouteResult as jt, PsthAnalysisOptions as k, normalizeDeclaredProvenanceValue as kn, RouteDataKind as kt, SpatialMap2DOptions as l, EngramCorpusEntityEdge as ln, NEST_INPUT_LIMITS as lt, synapseCollectionToAdjacencyMatrixParams as m, EngramCorpusEvidenceReference as mn, EmptySceneResult as mt, ConnectionSnapshotOptions as n, getSkill as nn, GetPosition2DSchema as nt, NEST_TOPOLOGY_LIMITS as o, toPortableJsonSchema as on, MultimeterEventsSchema as ot, normalizeSynapseCollectionSnapshot as p, EngramCorpusEntityNodeKind as pn, WeightRecorderEventsSchema as pt, weightRecorderToSceneData as q, RequiredProvenanceFlags as qt, DegreeDistributionOptions as r, listSkills as rn, GetPosition3D as rt, NestTopologyResult as s, AdaptEngramCorpusEntityGraphOptions as sn, MultimeterMultiSender as st, ConnectionGraphOptions as t, externalProvenanceDisclosure as tn, GetPosition2D as tt, WeightHistogramOptions as u, EngramCorpusEntityEdgeKind as un, SpikeRecorderEvents as ut, synapseCollectionToInDegreeDistributionParams as v, PROVENANCE_KEY_LABELS as vn, DeclaredInputs as vt, IsiAnalysisOptions as w, ProvenanceValueConstraint as wn, validateSpec as wt, synapseCollectionToWeightMatrixParams as x, ProvenanceKey as xn, buildVizSpec as xt, synapseCollectionToOutDegreeDistributionParams as y, PROVENANCE_PARAM_CONSTRAINT_LANGUAGE as yn, ProvenanceOverrides as yt, WeightRecorderSplitResult as z, CORTEXEL_SKILL_VERSION as zt };
+export { CorrelationDetectorStatus as $, SkillDescriptor as $t, correlationDetectorToCorrelogramParams as A, normalizeDeclaredProvenanceInputs as An, ROUTING_DISCRIMINATORS as At, WeightRecorderTupleGroup as B, getInvocationExamplePayload as Bt, CorrelationDetectorSourceConfiguration as C, ProvenanceKey as Cn, buildVizSpec as Ct, PopulationRateOptions as D, STRICT_PROVENANCE_POLICY as Dn, Disambiguator as Dt, NestAnalysisResult as E, ProvenanceValueConstraint as En, validateSpec as Et, GetConnectionsSceneOptions as F, routeToScene as Ft, spikeRecorderToSceneData as G, PARAM_VALIDATION_CONSTRAINTS as Gt, getConnectionsToSceneData as H, ExternalProvenanceClaim as Ht, MultimeterSenderSeries as I, HOST_RENDERER_EXAMPLE_PAYLOADS as It, splitWeightRecorderBySynapse as J, ProvenanceVerificationKind as Jt, splitMultimeterBySender as K, ParamValidationConstraint as Kt, MultimeterSplitResult as L, SKILL_EXAMPLE_PAYLOADS as Lt, spikeRecorderToPopulationRateParams as M, provenanceParamConstraintError as Mn, RouteInput as Mt, spikeTrialsToPsthParams as N, RouteResult as Nt, PopulationRatePopulation as O, declaredProvenanceValueError as On, GetConnectionsDataKind as Ot, AdapterResult as P, SpikeDataKind as Pt, SynapseModelMeasurementSemantics as Q, SkillContract as Qt, NEST_ADAPTER_LIMITS as R, getExamplePayload as Rt, CorrelationDetectorOptions as S, PROVENANCE_VALUE_CONSTRAINTS as Sn, buildHostRendererInvocation as St, NEST_ANALYSIS_LIMITS as T, ProvenanceParamConstraint as Tn, formatInvocationErrors as Tt, getPositionToSceneData as U, NEST_SKILL_REGISTRY as Ut, WeightRecorderTupleSplitResult as V, CORTEXEL_SKILL_VERSION as Vt, multimeterToSceneData as W, PARAM_CONSTRAINT_LANGUAGE as Wt, SYNAPSE_MEASUREMENT_FIELD_SEMANTICS as X, SKILL_REGISTRY as Xt, weightRecorderToSceneData as Y, RequiredProvenanceFlags as Yt, SynapseMeasurementFieldSemantics as Z, STRICT_INVOCATION_POLICY as Zt, synapseCollectionToDelayMatrixParams as _, adaptEngramCorpusEntityGraph as _n, detectEmptyScene as _t, DelayMatrixOptions as a, listSkills as an, GetPosition3D as at, synapseCollectionToWeightHistogramParams as b, PROVENANCE_KEY_LABELS as bn, DeclaredInputs as bt, NormalizedSynapseCollectionSnapshot as c, toPortableJsonSchema as cn, MultimeterEventsSchema as ct, WeightMatrixOptions as d, EngramCorpusEntityEdge as dn, NEST_INPUT_LIMITS as dt, SkillExample as en, CorrelationDetectorStatusSchema as et, getPositionToSpatialMap2DParams as f, EngramCorpusEntityEdgeKind as fn, SpikeRecorderEvents as ft, synapseCollectionToDelayDistributionParams as g, EngramCorpusEvidenceReference as gn, EmptySceneResult as gt, synapseCollectionToConnectionGraphParams as h, EngramCorpusEntityNodeKind as hn, WeightRecorderEventsSchema as ht, DelayDistributionOptions as i, getSkill as in, GetPosition2DSchema as it, spikeRecorderToIsiParams as j, normalizeDeclaredProvenanceValue as jn, RouteDataKind as jt, PsthAnalysisOptions as k, isProvenanceKey as kn, GetPositionDataKind as kt, SpatialMap2DOptions as l, AdaptEngramCorpusEntityGraphOptions as ln, MultimeterMultiSender as lt, synapseCollectionToAdjacencyMatrixParams as m, EngramCorpusEntityNode as mn, WeightRecorderEvents as mt, ConnectionSnapshotOptions as n, describeSkills as nn, GetConnectionsSchema as nt, NEST_TOPOLOGY_LIMITS as o, provenanceVerificationForContract as on, GetPosition3DSchema as ot, normalizeSynapseCollectionSnapshot as p, EngramCorpusEntityGraphResponse as pn, SpikeRecorderEventsSchema as pt, splitWeightRecorderByRecordedTuple as q, ProvenanceVerification as qt, DegreeDistributionOptions as r, externalProvenanceDisclosure as rn, GetPosition2D as rt, NestTopologyResult as s, skillParamsJsonSchema as sn, MultimeterEvents as st, ConnectionGraphOptions as t, describeSkill as tn, GetConnections as tt, WeightHistogramOptions as u, AdaptEngramCorpusEntityGraphResult as un, MultimeterMultiSenderSchema as ut, synapseCollectionToInDegreeDistributionParams as v, KNOWLEDGE_GRAPH_LIMITS as vn, BuildHostRendererInvocationInput as vt, IsiAnalysisOptions as w, ProvenanceKeyEnum as wn, conservativeProvenance as wt, synapseCollectionToWeightMatrixParams as x, PROVENANCE_PARAM_CONSTRAINT_LANGUAGE as xn, ProvenanceOverrides as xt, synapseCollectionToOutDegreeDistributionParams as y, PROVENANCE_KEYS as yn, BuildVizSpecInput as yt, WeightRecorderRecordedTuple as z, getHostRendererExamplePayload as zt };

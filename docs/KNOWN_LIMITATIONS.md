@@ -429,6 +429,28 @@ The machine-readable state of every release gate is in
   one is introduced, it remains experimental until both real code and certification against
   an immutable NCP release exist — never against moving HEAD.
   *Gates: R049–R059.*
+- **Legacy weight-recorder inspection preserves structure but confers no trace
+  authority.** For caller-verified NEST 3.10 `record_to=memory,time_in_steps=false`
+  output, `splitWeightRecorderByRecordedTuple` requires and preserves all six
+  event channels—times, weights, senders, targets, ports, and receptors—and
+  partitions only by exact recorded `(sender,target,port,receptor)` equality. It accepts
+  finite binary64 time/weight values and exactly represented non-negative safe-integer
+  tuple fields, returning a deeply frozen detached snapshot; other representations fail
+  rather than narrow. It retains source order and duplicate/nonchronological times and
+  no longer labels a sender/target pair as a synapse. The tuple remains unauthenticated,
+  namespace-local structural metadata: it does not bind the run, recorder,
+  synapse-model/port namespace, topology lifetime, completeness, update convention, or
+  custody. An accepted empty capture proves only zero captured rows, not network or
+  recorder-scope completeness. `time_in_steps=true` output carries `offsets` and is
+  rejected rather than projected; SharedArrayBuffer-backed typed arrays are also
+  rejected because a concurrent writer could make a sequential copy incoherent, and
+  detached typed arrays are not reclassified as empty captures.
+  Caller-declared status and ordinary-input quiescence are not authenticated. The old
+  pair splitter and raw SceneData weight-trace adapter are fail-closed tombstones.
+  Stable `nest-weight-recorder` remains `feasibilityStatus: not_assessed`,
+  `definitionStatus: not_specified`, and
+  `implementationAvailability: not_implemented`; it has no source-catalog entry or
+  inherited release-gate evidence.
 - **No Engram integration is accepted yet.** Cortexel has not received a durable
   cross-repository receipt binding an Engram commit, Cortexel package bytes, a closed
   evidence-graph snapshot, prepare/inspect/execute state, Python wheelhouse authority,

@@ -284,6 +284,17 @@ Mirrored in [CONTRIBUTING.md](./CONTRIBUTING.md); laws 3–5 have executable gua
   semantics plus binary64 tolerance in transform/schema/manifest parity. Boundary
   repair must be bounded to plausible arithmetic roundoff; never scale a snapping
   tolerance with the bin index, because that moves real sub-boundary samples.
+- **Weight-recorder tuples are structural metadata, not connection identity.** Preserve
+  all recorded sender, target, port, and receptor fields and partition only by the
+  complete tuple, retaining exact source order and every accepted finite binary64
+  value. An exact empty capture is a valid zero-row structural snapshot, never a
+  completeness claim. Reject SharedArrayBuffer-backed typed arrays rather than call a
+  concurrently mutable sequential copy a coherent snapshot, and reject detached views
+  rather than reclassify them as empty. Never name that partition a synapse or promote
+  it to a continuous weight trace. Stable connection
+  identity requires the exact same-run post-prepare connection inventory plus bound
+  runtime, recorder, model/port namespace, topology-lifetime, and update-semantics
+  authority; raw recorder rows alone cannot supply it.
 - **Connection snapshots carry scope.** SynapseCollection transforms accept the
   official singular/scalar form or canonical plural arrays, never both, never
   broadcast an optional scalar across rows, and never deduplicate multapses. A

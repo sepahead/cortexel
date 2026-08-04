@@ -1,4 +1,4 @@
-const require_knowledgeGraphLimits = require('./knowledgeGraphLimits-C0j05-4h.cjs');
+const require_knowledgeGraphLimits = require('./knowledgeGraphLimits-BnjbjxkI.cjs');
 const require_canonicalize = require('./canonicalize-CM-RPRQS.cjs');
 let zod = require("zod");
 
@@ -6590,9 +6590,11 @@ const NEST_SKILL_REGISTRY = {
 		id: "nest.plasticity_dynamics",
 		version: CORTEXEL_SKILL_VERSION,
 		title: "NEST plasticity dynamics renderer",
-		description: "Render recorded synaptic-weight samples over time.",
+		description: "Render caller-attributed synaptic-weight samples over time.",
 		deviceFamily: "weight_recorder",
 		scene: "stdp",
+		weak: true,
+		weakDisclosure: "Caller-attributed weight trace — Cortexel renders supplied samples; connection identity, cross-row continuity and topology lifetime, producing run/recorder scope, and pre/post-update semantics are not established.",
 		requiredInputKeys: [
 			"times_ms",
 			"weights",
@@ -6600,7 +6602,7 @@ const NEST_SKILL_REGISTRY = {
 		],
 		paramsSchema: PlasticityParamsSchema,
 		requiredProvenanceKeys: ["synapse_model", "weight_units"],
-		externalProvenanceClaims: externalClaims({ synapse_model: { reason: "Weight traces do not retain the recorded synapse/model identity." } }),
+		externalProvenanceClaims: externalClaims({ synapse_model: { reason: "Legacy weight-trace params do not retain or authenticate connection identity, continuity/topology lifetime, producing run/recorder scope, or update semantics." } }),
 		provenanceParamConstraints: [{
 			kind: "equals_param",
 			provenanceKey: "weight_units",
@@ -6612,8 +6614,8 @@ const NEST_SKILL_REGISTRY = {
 			nestExample: "Urbanczik-Senn / Clopath / Tsodyks short-term plasticity",
 			sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/urbanczik_synapse_example.html",
 			dataShape: "weight-recorder times_ms and weights in one declared unit",
-			output: "Measured synaptic-weight trace over time",
-			note: "This contract does not contain an STDP window or pre/post spike protocol; do not invent either."
+			output: "Caller-attributed synaptic-weight samples over time",
+			note: "Connection identity, continuity/topology lifetime, producing run/recorder scope, and update semantics remain external. This contract contains no STDP window or pre/post spike protocol; do not invent one."
 		}]
 	},
 	"nest.phase_plane": {
@@ -10436,4 +10438,4 @@ Object.defineProperty(exports, 'validateVizSpec', {
     return validateVizSpec;
   }
 });
-//# sourceMappingURL=authoring-CicuSscw.cjs.map
+//# sourceMappingURL=authoring-MTqY6OMZ.cjs.map

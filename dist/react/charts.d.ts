@@ -1,6 +1,6 @@
 import { k as ReadonlySemanticPalette } from "../vizSpec-DXKitvuD.js";
-import { o as SkillInvocationError } from "../hostInvocation-BrzyGZfJ.js";
-import { n as RenderSceneArgs } from "../VizSpecRenderer-QFr-uskU.js";
+import { o as SkillInvocationError } from "../hostInvocation-DHtJIETG.js";
+import { n as RenderSceneArgs } from "../VizSpecRenderer-DzsieJlY.js";
 //#region react/charts/chartGeometry.d.ts
 interface ChartDomain {
   min: number;

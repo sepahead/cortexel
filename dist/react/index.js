@@ -1,5 +1,5 @@
-import { l as safeDiagnosticText } from "../knowledgeGraphLimits-ClAubHp3.js";
-import { t as VizSpecRenderer } from "../VizSpecRenderer-CBvR5isH.js";
+import { u as safeDiagnosticText } from "../knowledgeGraphLimits-Du09-etI.js";
+import { t as VizSpecRenderer } from "../VizSpecRenderer-BLGU6OQa.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";

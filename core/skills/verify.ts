@@ -25,7 +25,7 @@ type DataRead = { present: false } | { present: true; value: unknown } | { inval
 const FLOAT32_MAX = 3.4028234663852886e38;
 const SCENE_DATA_FIELDS = new Set([
   'spikeTimes', 'spikeSenders', 'timeUnits', 'voltageTraces', 'voltageUnits',
-  'traceTimes', 'traceSender', 'weightSeries', 'weightUnits', 'weightSynapse',
+  'traceTimes', 'traceSender', 'weightSeries', 'weightUnits',
   'analogTraces', 'networkNodes', 'networkEdges', 'networkWeightUnits',
   'networkDelayUnits', 'networkCoordinateUnits', 'networkLayout', 'vectorField',
 ]);
@@ -224,19 +224,6 @@ export function detectEmptyScene(data: unknown): EmptySceneResult {
           (!numericLengths.has('voltageTraces') && !analog.present))) {
       return invalid('traceSender requires a voltage or analog trace and a safe sender id');
     }
-    const weightSynapse = readData(record, 'weightSynapse');
-    if ('invalid' in weightSynapse) return invalid('weightSynapse must be an enumerable data property');
-    if (weightSynapse.present) {
-      const pair = exactDataRecord(weightSynapse.value, new Set(['sender', 'target']));
-      const sender = pair ? readData(pair, 'sender') : { invalid: true } as const;
-      const target = pair ? readData(pair, 'target') : { invalid: true } as const;
-      if (!numericLengths.has('weightSeries') ||
-          'invalid' in sender || !sender.present || !safeId(sender.value) ||
-          'invalid' in target || !target.present || !safeId(target.value)) {
-        return invalid('weightSynapse requires weightSeries plus safe sender/target ids');
-      }
-    }
-
     const nodesField = readData(record, 'networkNodes');
     if ('invalid' in nodesField) return invalid('networkNodes must be an enumerable data property');
     const nodeIds = new Set<number>();

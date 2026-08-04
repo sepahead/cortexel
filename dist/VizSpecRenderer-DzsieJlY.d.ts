@@ -1,5 +1,5 @@
 import { k as ReadonlySemanticPalette } from "./vizSpec-DXKitvuD.js";
-import { T as ProvenanceMetadata, U as SceneName, o as SkillInvocationError } from "./hostInvocation-BrzyGZfJ.js";
+import { T as ProvenanceMetadata, U as SceneName, o as SkillInvocationError } from "./hostInvocation-DHtJIETG.js";
 import { ReactNode } from "react";
 //#region react/VizSpecRenderer.d.ts
 type CameraHint = 'default' | 'top' | 'side' | 'close' | 'cinematic';

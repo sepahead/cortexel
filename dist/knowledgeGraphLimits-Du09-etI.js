@@ -27,6 +27,10 @@ const PUBLIC_DIAGNOSTIC_LIMITS = Object.freeze({
 * bidi-override characters that can visually spoof axes, nodes, or captions. */
 const SAFE_DISPLAY_STRING_PATTERN = /^[^\u0000-\u001f\u061c\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]*$/u;
 const TYPED_ARRAY_LENGTH_GETTER = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), "length")?.get;
+const TYPED_ARRAY_BUFFER_GETTER = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), "buffer")?.get;
+const ARRAY_BUFFER_BYTE_LENGTH_GETTER = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength")?.get;
+const INTRINSIC_DATA_VIEW = DataView;
+const SHARED_ARRAY_BUFFER_BYTE_LENGTH_GETTER = typeof SharedArrayBuffer === "function" ? Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, "byteLength")?.get : void 0;
 /** Read a typed array's internal length without consulting an overridable
 * subclass `length` accessor. DataView and non-typed-array inputs return
 * undefined. This is the single length primitive for hostile-input boundaries
@@ -39,6 +43,28 @@ function intrinsicTypedArrayLength(value) {
 	} catch {
 		return;
 	}
+}
+/** Identify a typed array's backing-store brand without consulting an
+* overridable instance/subclass `buffer` accessor. Cross-realm buffers are
+* recognized by applying the intrinsic byteLength brand checks. */
+function intrinsicTypedArrayBufferKind(value) {
+	if (!ArrayBuffer.isView(value) || typeof TYPED_ARRAY_BUFFER_GETTER !== "function") return;
+	try {
+		const buffer = Reflect.apply(TYPED_ARRAY_BUFFER_GETTER, value, []);
+		if (typeof SHARED_ARRAY_BUFFER_BYTE_LENGTH_GETTER === "function") try {
+			Reflect.apply(SHARED_ARRAY_BUFFER_BYTE_LENGTH_GETTER, buffer, []);
+			return "shared";
+		} catch {}
+		if (typeof ARRAY_BUFFER_BYTE_LENGTH_GETTER === "function" && typeof INTRINSIC_DATA_VIEW === "function") {
+			Reflect.apply(ARRAY_BUFFER_BYTE_LENGTH_GETTER, buffer, []);
+			Reflect.construct(INTRINSIC_DATA_VIEW, [
+				buffer,
+				0,
+				0
+			]);
+			return "array";
+		}
+	} catch {}
 }
 function clipText(value, max) {
 	return value.length <= max ? value : `${value.slice(0, Math.max(0, max - 1))}…`;
@@ -199,70 +225,5 @@ const KNOWLEDGE_GRAPH_JSON_PARSE_LIMITS = Object.freeze({
 });
 
 //#endregion
-Object.defineProperty(exports, 'KNOWLEDGE_GRAPH_JSON_PARSE_LIMITS', {
-  enumerable: true,
-  get: function () {
-    return KNOWLEDGE_GRAPH_JSON_PARSE_LIMITS;
-  }
-});
-Object.defineProperty(exports, 'KNOWLEDGE_GRAPH_LIMITS', {
-  enumerable: true,
-  get: function () {
-    return KNOWLEDGE_GRAPH_LIMITS;
-  }
-});
-Object.defineProperty(exports, 'PUBLIC_DIAGNOSTIC_LIMITS', {
-  enumerable: true,
-  get: function () {
-    return PUBLIC_DIAGNOSTIC_LIMITS;
-  }
-});
-Object.defineProperty(exports, 'SAFE_DISPLAY_STRING_PATTERN', {
-  enumerable: true,
-  get: function () {
-    return SAFE_DISPLAY_STRING_PATTERN;
-  }
-});
-Object.defineProperty(exports, 'boundValidationIssue', {
-  enumerable: true,
-  get: function () {
-    return boundValidationIssue;
-  }
-});
-Object.defineProperty(exports, 'formatValidationIssues', {
-  enumerable: true,
-  get: function () {
-    return formatValidationIssues;
-  }
-});
-Object.defineProperty(exports, 'intrinsicTypedArrayLength', {
-  enumerable: true,
-  get: function () {
-    return intrinsicTypedArrayLength;
-  }
-});
-Object.defineProperty(exports, 'readOwnEnumerableDataProperty', {
-  enumerable: true,
-  get: function () {
-    return readOwnEnumerableDataProperty;
-  }
-});
-Object.defineProperty(exports, 'safeDiagnosticText', {
-  enumerable: true,
-  get: function () {
-    return safeDiagnosticText;
-  }
-});
-Object.defineProperty(exports, 'safeErrorMessage', {
-  enumerable: true,
-  get: function () {
-    return safeErrorMessage;
-  }
-});
-Object.defineProperty(exports, 'safePrimitiveDiagnostic', {
-  enumerable: true,
-  get: function () {
-    return safePrimitiveDiagnostic;
-  }
-});
-//# sourceMappingURL=knowledgeGraphLimits-C0j05-4h.cjs.map
+export { boundValidationIssue as a, intrinsicTypedArrayLength as c, safeErrorMessage as d, safePrimitiveDiagnostic as f, SAFE_DISPLAY_STRING_PATTERN as i, readOwnEnumerableDataProperty as l, KNOWLEDGE_GRAPH_LIMITS as n, formatValidationIssues as o, PUBLIC_DIAGNOSTIC_LIMITS as r, intrinsicTypedArrayBufferKind as s, KNOWLEDGE_GRAPH_JSON_PARSE_LIMITS as t, safeDiagnosticText as u };
+//# sourceMappingURL=knowledgeGraphLimits-Du09-etI.js.map

@@ -1,4 +1,4 @@
-import { a as boundValidationIssue, c as readOwnEnumerableDataProperty, d as safePrimitiveDiagnostic, i as SAFE_DISPLAY_STRING_PATTERN, l as safeDiagnosticText, n as KNOWLEDGE_GRAPH_LIMITS, o as formatValidationIssues, r as PUBLIC_DIAGNOSTIC_LIMITS, u as safeErrorMessage } from "./knowledgeGraphLimits-ClAubHp3.js";
+import { a as boundValidationIssue, d as safeErrorMessage, f as safePrimitiveDiagnostic, i as SAFE_DISPLAY_STRING_PATTERN, l as readOwnEnumerableDataProperty, n as KNOWLEDGE_GRAPH_LIMITS, o as formatValidationIssues, r as PUBLIC_DIAGNOSTIC_LIMITS, u as safeDiagnosticText } from "./knowledgeGraphLimits-Du09-etI.js";
 import { i as canonicalize, n as canonicalDigest } from "./canonicalize-F75Ifelv.js";
 import { z } from "zod";
 
@@ -6590,9 +6590,11 @@ const NEST_SKILL_REGISTRY = {
 		id: "nest.plasticity_dynamics",
 		version: CORTEXEL_SKILL_VERSION,
 		title: "NEST plasticity dynamics renderer",
-		description: "Render recorded synaptic-weight samples over time.",
+		description: "Render caller-attributed synaptic-weight samples over time.",
 		deviceFamily: "weight_recorder",
 		scene: "stdp",
+		weak: true,
+		weakDisclosure: "Caller-attributed weight trace — Cortexel renders supplied samples; connection identity, cross-row continuity and topology lifetime, producing run/recorder scope, and pre/post-update semantics are not established.",
 		requiredInputKeys: [
 			"times_ms",
 			"weights",
@@ -6600,7 +6602,7 @@ const NEST_SKILL_REGISTRY = {
 		],
 		paramsSchema: PlasticityParamsSchema,
 		requiredProvenanceKeys: ["synapse_model", "weight_units"],
-		externalProvenanceClaims: externalClaims({ synapse_model: { reason: "Weight traces do not retain the recorded synapse/model identity." } }),
+		externalProvenanceClaims: externalClaims({ synapse_model: { reason: "Legacy weight-trace params do not retain or authenticate connection identity, continuity/topology lifetime, producing run/recorder scope, or update semantics." } }),
 		provenanceParamConstraints: [{
 			kind: "equals_param",
 			provenanceKey: "weight_units",
@@ -6612,8 +6614,8 @@ const NEST_SKILL_REGISTRY = {
 			nestExample: "Urbanczik-Senn / Clopath / Tsodyks short-term plasticity",
 			sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/urbanczik_synapse_example.html",
 			dataShape: "weight-recorder times_ms and weights in one declared unit",
-			output: "Measured synaptic-weight trace over time",
-			note: "This contract does not contain an STDP window or pre/post spike protocol; do not invent either."
+			output: "Caller-attributed synaptic-weight samples over time",
+			note: "Connection identity, continuity/topology lifetime, producing run/recorder scope, and update semantics remain external. This contract contains no STDP window or pre/post spike protocol; do not invent one."
 		}]
 	},
 	"nest.phase_plane": {
@@ -9633,4 +9635,4 @@ function formatInvocationErrors(errors) {
 
 //#endregion
 export { PSTH_DERIVED_COUNT_ABSOLUTE_TOLERANCE as $, validateVizSpec as $t, AdjacencyMatrixParamsSchema as A, SKILL_IDS as At, GEOMETRY_MAX_ROUNDOFF_FRACTION as B, requiresHonestyCaption as Bt, skillParamsJsonSchema as C, listPalettes as Cn, declaredProvenanceValueError as Ct, getExamplePayload as D, provenanceParamConstraintError as Dt, SKILL_EXAMPLE_PAYLOADS as E, validatePalette as En, normalizeDeclaredProvenanceValue as Et, CompartmentalParamsSchema as F, CONSERVATIVE_PROVENANCE as Ft, InDegreeDistributionParamsSchema as G, ENVELOPE_NORMALIZATION_POLICY as Gt, HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE as H, CORTEXEL_JSON_POLICY as Ht, ConnectionGraphParamsSchema as I, HONESTY_POLICY as It, NetworkParamsSchema as J, JsonParamsSchema as Jt, IsiDistributionParamsSchema as K, JSON_BUDGET_SEMANTICS as Kt, CorrelogramParamsSchema as L, composeHonestyCaption as Lt, AstrocyteParamsSchema as M, VIZ_ROUTER_ID as Mt, CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS as N, isNestSkillId as Nt, getHostRendererExamplePayload as O, NEST_DEVICE_FAMILIES as Ot, CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS as P, isSkillId as Pt, POPULATION_RATE_RELATIVE_TOLERANCE as Q, VizSpecSchema as Qt, DelayDistributionParamsSchema as R, defaultHonestyCaption as Rt, provenanceVerificationForContract as S, isRegisteredPalette as Sn, STRICT_PROVENANCE_POLICY as St, HOST_RENDERER_EXAMPLE_PAYLOADS as T, sampleColormap as Tn, normalizeDeclaredProvenanceInputs as Tt, HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS as U, CORTEXEL_SPEC_VERSION as Ut, HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE as V, CORTEXEL_JSON_LIMITS as Vt, HISTOGRAM_MASS_TOLERANCE as W, DECLARED_INPUTS_PORTABLE_SCHEMA as Wt, PARAM_LIMITS as X, ProvenanceSchema as Xt, OutDegreeDistributionParamsSchema as Y, NUMERIC_MODEL_POLICY as Yt, POPULATION_RATE_ABSOLUTE_TOLERANCE as Z, STRING_NORMALIZATION_POLICY as Zt, describeSkill as _, colormapHex as _n, PROVENANCE_KEYS as _t, validateSpec as a, CATEGORICAL as an, RateResponseParamsSchema as at, getSkill as b, getPalette as bn, PROVENANCE_VALUE_CONSTRAINTS as bt, validateHostRendererSpec as c, OKABE_ITO as cn, SnapshotScopeSchema as ct, CORTEXEL_SKILL_VERSION as d, SYNAPSE_COLORS as dn, SpatialMap2DParamsSchema as dt, CAMERA_PRESETS as en, PhasePlaneParamsSchema as et, NEST_SKILL_REGISTRY as f, TURBO_GLSL as fn, SpikeRasterParamsSchema as ft, STRICT_INVOCATION_POLICY as g, colormapGradient as gn, WeightMatrixParamsSchema as gt, SKILL_REGISTRY as h, categorical as hn, WeightHistogramParamsSchema as ht, formatInvocationErrors as i, BATLOW_GLSL as in, PsthParamsSchema as it, AnimationReplayParamsSchema as j, VALID_RENDERER_ROUTES as jt, getInvocationExamplePayload as k, NEST_SKILL_IDS as kt, validateSkillInvocation as l, PALETTE_REGISTRY_POLICY as ln, Spatial2DParamsSchema as lt, PARAM_VALIDATION_CONSTRAINTS as m, VIRIDIS_GLSL as mn, VoltageTraceParamsSchema as mt, buildVizSpec as n, SCENE_NAMES as nn, PopulationRateParamsSchema as nt, HostRendererInvocationSchema as o, CORTEXEL_PALETTE as on, Rfc3339TimestampSchema as ot, PARAM_CONSTRAINT_LANGUAGE as p, VIK_GLSL as pn, StimulusResponseParamsSchema as pt, KnowledgeGraph3DParamsSchema as q, JSON_PARAMS_PORTABLE_SCHEMA as qt, conservativeProvenance as r, AXIS_COLORS as rn, PositionScopeSchema as rt, validateHostRendererInvocation as s, CORTICAL_LAYER_COLORS as sn, SPATIAL_BOUNDS_ROUNDOFF_ULPS as st, buildHostRendererInvocation as t, SCENE_FRAMING as tn, PlasticityParamsSchema as tt, validateSkillParams as u, SEMANTIC_PALETTE_KEYS as un, Spatial3DParamsSchema as ut, describeSkills as v, colormapRgba as vn, PROVENANCE_KEY_LABELS as vt, toPortableJsonSchema as w, registerPalette as wn, isProvenanceKey as wt, listSkills as x, getPaletteEntry as xn, ProvenanceKeyEnum as xt, externalProvenanceDisclosure as y, colormapSvgStops as yn, PROVENANCE_PARAM_CONSTRAINT_LANGUAGE as yt, DelayMatrixParamsSchema as z, mandatoryDisclosure as zt };
-//# sourceMappingURL=authoring-DVGK95mU.js.map
+//# sourceMappingURL=authoring-C_HlbARb.js.map

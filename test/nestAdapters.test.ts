@@ -4,8 +4,7 @@ import {
   multimeterToSceneData,
   getConnectionsToSceneData,
   getPositionToSceneData,
-  weightRecorderToSceneData,
-  splitWeightRecorderBySynapse,
+  splitWeightRecorderByRecordedTuple,
   splitMultimeterBySender,
 } from '../core/nest/adapters';
 import { MultimeterEventsSchema } from '../core/nest/shapes';
@@ -36,19 +35,6 @@ describe('NEST adapters', () => {
   it('rejects mismatched-length spike arrays (unusable evidence)', () => {
     const r = spikeRecorderToSceneData({ senders: [1, 2], times: [1] });
     expect(r.ok).toBe(false);
-  });
-
-  it('keeps weight series distinct from voltage traces', () => {
-    const r = weightRecorderToSceneData(
-      { times: [1, 2], weights: [0.5, 0.6] },
-      { weightUnits: 'nS' },
-    );
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      expect(r.data.weightSeries).toBeInstanceOf(Float32Array);
-      expect(r.data.weightUnits).toBe('nS');
-      expect(r.data.voltageTraces).toBeUndefined();
-    }
   });
 
   it('multimeter values become Float32Array while times retain Float64 precision', () => {
@@ -177,10 +163,6 @@ describe('NEST adapters', () => {
       ).ok).toBe(false);
     }
     expect(multimeterToSceneData({ times: [0], values: [1], sender: -0 }).ok).toBe(false);
-    expect(weightRecorderToSceneData(
-      { times: [0], weights: [1], sender: -0, target: 1 },
-      { weightUnits: 'nS' },
-    ).ok).toBe(false);
     expect(getPositionToSceneData({
       positions: [[0, 0, 0]],
       edges: [{ source: -0, target: 0 }],
@@ -380,7 +362,7 @@ describe('NEST adapters', () => {
 });
 
 describe('routeToScene', () => {
-  it('routes a single-member family (weight_recorder) unambiguously', () => {
+  it('selects the sole legacy weight-recorder scene candidate without adapter authority', () => {
     expect(routeToScene({ deviceFamily: 'weight_recorder' })).toEqual({
       ok: true,
       skill: 'nest.plasticity_dynamics',
@@ -562,8 +544,7 @@ describe('NEST input hardening', () => {
       () => splitMultimeterBySender(hostile),
       () => getConnectionsToSceneData(hostile, staticConnectionOptions),
       () => getPositionToSceneData(hostile, { coordinateUnits: 'mm' }),
-      () => weightRecorderToSceneData(hostile, { weightUnits: 'nS' }),
-      () => splitWeightRecorderBySynapse(hostile),
+      () => splitWeightRecorderByRecordedTuple(hostile),
     ];
     for (const call of calls) {
       expect(call).not.toThrow();
@@ -589,10 +570,6 @@ describe('NEST input hardening', () => {
       ),
       () => getPositionToSceneData(
         { positions: [[0, 0, 0]] },
-        hostileOptions as never,
-      ),
-      () => weightRecorderToSceneData(
-        { times: [0], weights: [1] },
         hostileOptions as never,
       ),
       () => multimeterToSceneData(
@@ -622,12 +599,17 @@ describe('NEST input hardening', () => {
     expect(reads).toBe(0);
   });
 
-  it('reads typed-array lengths intrinsically without invoking subclass getters', () => {
+  it('reads typed-array internals without invoking subclass length/buffer getters', () => {
     let lengthReads = 0;
+    let bufferReads = 0;
     class HostileFloat64Array extends Float64Array {
       override get length(): number {
         lengthReads += 1;
         throw new Error('subclass length getter must not execute');
+      }
+      override get buffer(): ArrayBuffer {
+        bufferReads += 1;
+        throw new Error('subclass buffer getter must not execute');
       }
     }
     class HostileUint32Array extends Uint32Array {
@@ -646,6 +628,7 @@ describe('NEST input hardening', () => {
       targets: new HostileUint32Array([2]),
     }).ok).toBe(true);
     expect(lengthReads).toBe(0);
+    expect(bufferReads).toBe(0);
   });
 
   it('bounds split-helper errors by the public adapter budget', () => {
@@ -711,17 +694,19 @@ describe('NEST input hardening', () => {
     expect(calls.get('sources')).toBeGreaterThanOrEqual(2);
   });
 
-  it('caps split-helper fan-out before constructing thousands of output buffers', () => {
+  it('caps split-helper fan-out before admitting a group beyond the budget', () => {
     const count = 4_097;
     const times = new Array(count).fill(0);
     const values = new Array(count).fill(1);
     const senders = Array.from({ length: count }, (_, index) => index);
     expect(splitMultimeterBySender({ times, values, senders }).ok).toBe(false);
-    expect(splitWeightRecorderBySynapse({
+    expect(splitWeightRecorderByRecordedTuple({
       times,
       weights: values,
-      senders,
-      targets: senders.map((sender) => sender + count),
+      senders: new Array(count).fill(1),
+      targets: new Array(count).fill(2),
+      ports: senders,
+      receptors: new Array(count).fill(0),
     }).ok).toBe(false);
   });
 
@@ -789,12 +774,6 @@ describe('NEST input hardening', () => {
       multimeterToSceneData(
         { times: [0], values: [1e300] },
         { variable: 'V_m' },
-      ).ok,
-    ).toBe(false);
-    expect(
-      weightRecorderToSceneData(
-        { times: [0], weights: [1e300] },
-        { weightUnits: 'nS' },
       ).ok,
     ).toBe(false);
     expect(
@@ -921,118 +900,5 @@ describe('getPositionToSceneData', () => {
         { dims: 3, coordinateUnits: 'mm' },
       ).ok,
     ).toBe(false);
-  });
-});
-
-describe('weight recorder identity', () => {
-  const multi = {
-    times: [0, 0, 1, 1],
-    weights: [0.5, 0.8, 0.6, 0.9],
-    senders: [1, 2, 1, 2],
-    targets: [3, 4, 3, 4],
-  };
-
-  it('refuses to merge multiple synapses into one weight trace', () => {
-    expect(weightRecorderToSceneData(multi, { weightUnits: 'nS' }).ok).toBe(false);
-  });
-
-  it('preserves a unique parallel sender/target pair on the adapted trace', () => {
-    const result = weightRecorderToSceneData(
-      {
-        times: [0, 1],
-        weights: [0.2, 0.3],
-        senders: [10, 10],
-        targets: [20, 20],
-      },
-      { weightUnits: 'nS' },
-    );
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.data.weightSynapse).toEqual({ sender: 10, target: 20 });
-  });
-
-  it('splits multi-synapse samples into one trace per sender/target pair', () => {
-    const result = splitWeightRecorderBySynapse(multi);
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.series).toHaveLength(2);
-      expect(result.series[0]).toMatchObject({ sender: 1, target: 3, times: [0, 1] });
-      expect(Array.from(result.series[0].weights)).toEqual([0.5, 0.6000000238418579]);
-    }
-  });
-
-  it('accepts a globally-reset time axis when each synapse remains monotonic', () => {
-    const result = splitWeightRecorderBySynapse({
-      times: [0, 1, 0, 1],
-      weights: [0.5, 0.6, 0.8, 0.9],
-      senders: [1, 1, 2, 2],
-      targets: [3, 3, 4, 4],
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.series.map((series) => series.times)).toEqual([[0, 1], [0, 1]]);
-    }
-  });
-
-  it('rejects a non-monotonic axis within an individual synapse', () => {
-    expect(
-      splitWeightRecorderBySynapse({
-        times: [1, 0],
-        weights: [0.5, 0.6],
-        senders: [1, 1],
-        targets: [3, 3],
-      }).ok,
-    ).toBe(false);
-    expect(
-      weightRecorderToSceneData(
-        { times: [1, 0], weights: [0.5, 0.6] },
-        { weightUnits: 'nS' },
-      ).ok,
-    ).toBe(false);
-  });
-
-  it('requires strictly increasing shared and per-synapse weight time axes', () => {
-    expect(
-      weightRecorderToSceneData(
-        { times: [0, 0], weights: [0.5, 0.6] },
-        { weightUnits: 'nS' },
-      ).ok,
-    ).toBe(false);
-    expect(
-      splitWeightRecorderBySynapse({
-        times: [0, 0],
-        weights: [0.5, 0.6],
-        senders: [1, 1],
-        targets: [3, 3],
-      }).ok,
-    ).toBe(false);
-
-    expect(
-      weightRecorderToSceneData(
-        { times: [0, 1], weights: [0.5, 0.6] },
-        { weightUnits: 'nS' },
-      ).ok,
-    ).toBe(true);
-    expect(
-      splitWeightRecorderBySynapse({
-        times: [0, 0, 1, 1],
-        weights: [0.5, 0.8, 0.6, 0.9],
-        senders: [1, 2, 1, 2],
-        targets: [3, 4, 3, 4],
-      }).ok,
-    ).toBe(true);
-  });
-
-  it('feeds split helper output directly into the single-series adapters', () => {
-    const weights = splitWeightRecorderBySynapse(multi);
-    expect(weights.ok).toBe(true);
-    if (weights.ok) {
-      const adapted = weightRecorderToSceneData(weights.series[0], {
-        weightUnits: 'nS',
-      });
-      expect(adapted.ok).toBe(true);
-      if (adapted.ok) {
-        expect(adapted.data.weightSynapse).toEqual({ sender: 1, target: 3 });
-      }
-    }
   });
 });

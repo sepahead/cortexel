@@ -1,8 +1,8 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
 const require_rolldown_runtime = require('../rolldown-runtime-C24Yb2bl.cjs');
-const require_knowledgeGraphLimits = require('../knowledgeGraphLimits-C0j05-4h.cjs');
+const require_knowledgeGraphLimits = require('../knowledgeGraphLimits-BnjbjxkI.cjs');
 const require_knowledgeGraphVisualEncoding_internal = require('../knowledgeGraphVisualEncoding.internal-COtu0qU6.cjs');
-const require_knowledgeGraphFigure = require('../knowledgeGraphFigure-DdhGiw-O.cjs');
+const require_knowledgeGraphFigure = require('../knowledgeGraphFigure-BsHVmAuv.cjs');
 let _cortexel_knowledge_graph_presentation_capability = require("#cortexel-knowledge-graph-presentation-capability");
 let react = require("react");
 let _react_three_fiber = require("@react-three/fiber");

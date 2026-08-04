@@ -1,6 +1,7 @@
 import type { ZodType } from 'zod';
 import {
   formatValidationIssues,
+  intrinsicTypedArrayBufferKind,
   intrinsicTypedArrayLength,
   safeDiagnosticText,
 } from '../safeRuntime';
@@ -68,6 +69,13 @@ function snapshotNestInput(input: unknown): SnapshotResult {
       }
       try {
         const typed = value as unknown as ArrayLike<unknown>;
+        const bufferKind = intrinsicTypedArrayBufferKind(value);
+        if (bufferKind === 'shared') {
+          return fail(path, 'SharedArrayBuffer-backed typed arrays are not snapshot-safe');
+        }
+        if (bufferKind !== 'array') {
+          return fail(path, 'typed-array backing storage could not be safely inspected');
+        }
         const length = intrinsicTypedArrayLength(value);
         if (length === undefined) {
           return fail(path, 'typed array could not be safely inspected');

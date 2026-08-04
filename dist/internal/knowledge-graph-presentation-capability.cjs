@@ -1,5 +1,5 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
-const require_knowledgeGraphLimits = require('../knowledgeGraphLimits-C0j05-4h.cjs');
+const require_knowledgeGraphLimits = require('../knowledgeGraphLimits-BnjbjxkI.cjs');
 const require_canonicalize = require('../canonicalize-CM-RPRQS.cjs');
 const require_deep_freeze = require('../deep-freeze-CX4sIEIO.cjs');
 const require_parse_json = require('../parse-json-fREYzpvz.cjs');

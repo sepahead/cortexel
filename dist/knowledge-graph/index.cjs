@@ -1,5 +1,5 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
-const require_knowledgeGraphFigure = require('../knowledgeGraphFigure-DdhGiw-O.cjs');
+const require_knowledgeGraphFigure = require('../knowledgeGraphFigure-BsHVmAuv.cjs');
 let _cortexel_knowledge_graph_presentation_capability = require("#cortexel-knowledge-graph-presentation-capability");
 
 exports.CORPUS_GRAPH_RADIUS_MEANING = require_knowledgeGraphFigure.CORPUS_GRAPH_RADIUS_MEANING;

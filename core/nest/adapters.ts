@@ -1,10 +1,9 @@
-// Host-agnostic NEST device-dict → SceneData adapters.
+// Host-agnostic NEST device-dict boundaries.
 //
-// This is the glue that was missing: an agent (or host) holds a plain NEST
-// output dict and gets back the typed SceneData the renderer consumes, with
-// names normalized (times→traceTimes, global senders→0..N + a label map), axis
-// invariants enforced, and value arrays narrowed to Float32Array for the GPU
-// while time axes stay float64. No host/NEST import — plain dicts only.
+// Rendering adapters return typed SceneData with normalized names, axis
+// invariants, Float32 GPU value buffers, and float64 time axes. Structural
+// utilities instead retain their documented source precision and do not confer
+// render authority. No host/NEST import — plain data only.
 
 import type { SceneData } from '../designLaws';
 import { z } from 'zod';
@@ -71,10 +70,6 @@ const PositionOptionsSchema = z.object({
   dims: z.union([z.literal(2), z.literal(3)]).default(3),
   coordinateUnits: z.string().trim().min(1).max(80).regex(SAFE_DISPLAY_STRING_PATTERN),
 }).strict();
-const WeightOptionsSchema = z.object({
-  weightUnits: z.string().max(80).regex(SAFE_DISPLAY_STRING_PATTERN).optional(),
-}).strict();
-
 function preflightArrayFields(
   input: unknown,
   fields: readonly string[],
@@ -399,129 +394,116 @@ export function getPositionToSceneData(
   };
 }
 
-export function weightRecorderToSceneData(
-  events: unknown,
-  opts: { weightUnits?: string } = {},
-): AdapterResult {
-  const parsedOptions = parseNestInput(WeightOptionsSchema, opts);
-  if (!parsedOptions.ok) return parsedOptions;
-  const weightUnits = parsedOptions.data.weightUnits?.trim();
-  if (!weightUnits) {
-    return {
-      ok: false,
-      errors: ['weightUnits is required so a weight trace is never rendered unitless'],
-    };
-  }
-  const parsed = parseNestInput(WeightRecorderEventsSchema, events);
-  if (!parsed.ok) return parsed;
-  const { times, weights, senders, targets, sender, target } = parsed.data;
-  let pairFromArrays: { sender: number; target: number } | undefined;
-  if (senders && targets) {
-    const pairs = new Set<string>();
-    for (let i = 0; i < senders.length; i++) {
-      pairs.add(`${senders[i]}\u0000${targets[i]}`);
-      if (pairs.size > 1) {
-        return {
-          ok: false,
-          errors: [
-            'weight recorder contains multiple sender/target pairs; call splitWeightRecorderBySynapse before adapting a single trace',
-          ],
-        };
-      }
-    }
-    pairFromArrays = { sender: senders[0], target: targets[0] };
-  }
-  for (let i = 1; i < times.length; i++) {
-    if (times[i] <= times[i - 1]) {
-      return {
-        ok: false,
-        errors: [
-          'weight times must be strictly increasing; split a multi-synapse recorder before adapting a single trace',
-        ],
-      };
-    }
-  }
-  return {
-    ok: true,
-    data: {
-      traceTimes: Float64Array.from(times),
-      weightSeries: Float32Array.from(weights),
-      weightUnits,
-      timeUnits: 'ms',
-      ...(sender !== undefined && target !== undefined
-        ? { weightSynapse: { sender, target } }
-        : pairFromArrays
-          ? { weightSynapse: pairFromArrays }
-        : {}),
-    },
-  };
+export interface WeightRecorderRecordedTuple {
+  readonly kind: 'recorded_tuple_only';
+  readonly sender: number;
+  readonly target: number;
+  readonly port: number;
+  readonly receptor: number;
 }
 
-export interface WeightSynapseSeries {
-  sender: number;
-  target: number;
-  times: number[];
-  weights: Float32Array;
+export interface WeightRecorderTupleGroup {
+  readonly weightRecorderTuple: WeightRecorderRecordedTuple;
+  readonly sourceOrdinals: readonly number[];
+  readonly times: readonly number[];
+  readonly weights: readonly number[];
 }
 
-export type WeightRecorderSplitResult =
-  | { ok: true; series: WeightSynapseSeries[] }
-  | { ok: false; errors: string[] };
+export type WeightRecorderTupleSplitResult =
+  | { readonly ok: true; readonly groups: readonly WeightRecorderTupleGroup[] }
+  | { readonly ok: false; readonly errors: readonly string[] };
 
-/** Split a multi-synapse weight_recorder dump into one honest trace per
- *  (sender,target) pair. The single-trace adapter deliberately refuses to merge
- *  these series because doing so invents discontinuous plasticity dynamics. */
-export function splitWeightRecorderBySynapse(
+/**
+ * Partition raw weight_recorder rows by equality of every recorded tuple field.
+ *
+ * This is deliberately a structural operation, not a trace adapter. It returns
+ * a deeply frozen, detached snapshot retaining source order and every accepted
+ * finite binary64 value. It makes no claim that a tuple is a stable NEST
+ * connection identity or that repeated rows form one continuous trajectory.
+ */
+export function splitWeightRecorderByRecordedTuple(
   events: unknown,
-): WeightRecorderSplitResult {
+): WeightRecorderTupleSplitResult {
   const parsed = parseNestInput(WeightRecorderEventsSchema, events);
   if (!parsed.ok) return parsed;
-  const { times, weights, senders, targets } = parsed.data;
-  if (!senders || !targets) {
-    return {
-      ok: false,
-      errors: ['senders and targets are required to split weight samples by synapse'],
-    };
-  }
+  const { times, weights, senders, targets, ports, receptors } = parsed.data;
 
   const buckets = new Map<
     string,
-    { sender: number; target: number; times: number[]; weights: number[] }
+    {
+      weightRecorderTuple: WeightRecorderRecordedTuple;
+      sourceOrdinals: number[];
+      times: number[];
+      weights: number[];
+    }
   >();
   for (let i = 0; i < times.length; i++) {
-    const key = `${senders[i]}\u0000${targets[i]}`;
+    const key =
+      `${senders[i]}\u0000${targets[i]}\u0000${ports[i]}\u0000${receptors[i]}`;
     let bucket = buckets.get(key);
     if (!bucket) {
       if (buckets.size >= NEST_ADAPTER_LIMITS.maxSplitSeries) {
         return {
           ok: false,
-          errors: [`senders/targets: at most ${NEST_ADAPTER_LIMITS.maxSplitSeries} synapse series can be split inline`],
+          errors: [
+            `recorded tuple fan-out: at most ${NEST_ADAPTER_LIMITS.maxSplitSeries} structural groups can be split inline`,
+          ],
         };
       }
       bucket = {
-        sender: senders[i],
-        target: targets[i],
+        weightRecorderTuple: {
+          kind: 'recorded_tuple_only',
+          sender: senders[i],
+          target: targets[i],
+          port: ports[i],
+          receptor: receptors[i],
+        },
+        sourceOrdinals: [],
         times: [],
         weights: [],
       };
       buckets.set(key, bucket);
-    } else if (times[i] <= bucket.times[bucket.times.length - 1]) {
-      return {
-        ok: false,
-        errors: [
-          `synapse ${senders[i]}→${targets[i]}: times must be strictly increasing after split`,
-        ],
-      };
     }
+    bucket.sourceOrdinals.push(i);
     bucket.times.push(times[i]);
     bucket.weights.push(weights[i]);
   }
 
-  const series = Array.from(buckets.values(), (bucket) => ({
-    sender: bucket.sender,
-    target: bucket.target,
-    times: bucket.times,
-    weights: Float32Array.from(bucket.weights),
+  const groups = Array.from(buckets.values(), (bucket) => Object.freeze({
+    weightRecorderTuple: Object.freeze(bucket.weightRecorderTuple),
+    sourceOrdinals: Object.freeze(bucket.sourceOrdinals),
+    times: Object.freeze(bucket.times),
+    weights: Object.freeze(bucket.weights),
   }));
-  return { ok: true, series };
+  return Object.freeze({ ok: true as const, groups: Object.freeze(groups) });
+}
+
+/**
+ * @deprecated This name promised a synapse identity that recorder rows do not
+ * establish. It always fails; use splitWeightRecorderByRecordedTuple for a
+ * structural partition and bind separate same-run authority before rendering.
+ */
+export function splitWeightRecorderBySynapse(_events: unknown) {
+  return {
+    ok: false as const,
+    errors: [
+      'splitWeightRecorderBySynapse is retired: a recorded (sender,target,port,receptor) tuple is not a self-authenticating synapse identity; use splitWeightRecorderByRecordedTuple for structural inspection',
+    ],
+  };
+}
+
+/**
+ * @deprecated Raw weight_recorder rows do not establish one identified,
+ * continuous trace. This fail-closed tombstone always returns `ok: false`.
+ */
+export function weightRecorderToSceneData(
+  _events: unknown,
+  _opts: { weightUnits?: string } = {},
+) {
+  return {
+    ok: false as const,
+    errors: [
+      'weightRecorderToSceneData is retired: raw weight_recorder rows do not establish a continuous identified weight trace; partition with splitWeightRecorderByRecordedTuple and render only after binding caller-owned identity and update-semantics evidence',
+    ],
+  };
 }

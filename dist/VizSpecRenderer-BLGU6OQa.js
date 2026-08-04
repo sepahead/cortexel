@@ -1,7 +1,7 @@
-const require_authoring = require('./authoring-CicuSscw.cjs');
-const require_knowledgeGraphLimits = require('./knowledgeGraphLimits-C0j05-4h.cjs');
-let react = require("react");
-let react_jsx_runtime = require("react/jsx-runtime");
+import { $t as validateVizSpec, Bt as requiresHonestyCaption, Rt as defaultHonestyCaption, a as validateSpec, bn as getPalette, l as validateSkillInvocation } from "./authoring-C_HlbARb.js";
+import { l as readOwnEnumerableDataProperty } from "./knowledgeGraphLimits-Du09-etI.js";
+import { useEffect, useId, useMemo, useRef } from "react";
+import { jsx, jsxs } from "react/jsx-runtime";
 
 //#region react/VizSpecRenderer.tsx
 function cloneValidatedJson(value) {
@@ -11,22 +11,22 @@ function cloneValidatedJson(value) {
 function VizSpecRenderer({ spec, renderScene, skillId, trustedEnvelope = false, active = true, activePalette, captionPlacement = "overlay", onError, onInvocationError }) {
 	let embeddedSkillProperty;
 	try {
-		embeddedSkillProperty = require_knowledgeGraphLimits.readOwnEnumerableDataProperty(spec, "skill");
+		embeddedSkillProperty = readOwnEnumerableDataProperty(spec, "skill");
 	} catch {
 		embeddedSkillProperty = { kind: "absent" };
 	}
 	const hasEmbeddedSkill = embeddedSkillProperty.kind === "value";
 	const embeddedSkill = embeddedSkillProperty.kind === "value" ? embeddedSkillProperty.value : void 0;
 	const effectiveSkillId = skillId !== void 0 ? skillId : hasEmbeddedSkill ? typeof embeddedSkill === "string" ? embeddedSkill.length <= 80 ? embeddedSkill.trim() : embeddedSkill : embeddedSkill : void 0;
-	const validation = (0, react.useMemo)(() => effectiveSkillId !== void 0 ? {
+	const validation = useMemo(() => effectiveSkillId !== void 0 ? {
 		kind: "strict",
-		result: require_authoring.validateSkillInvocation(effectiveSkillId, spec)
+		result: validateSkillInvocation(effectiveSkillId, spec)
 	} : !trustedEnvelope ? {
 		kind: "strict",
-		result: require_authoring.validateSpec(spec)
+		result: validateSpec(spec)
 	} : {
 		kind: "plain",
-		result: require_authoring.validateVizSpec(spec)
+		result: validateVizSpec(spec)
 	}, [
 		effectiveSkillId,
 		spec,
@@ -36,7 +36,7 @@ function VizSpecRenderer({ spec, renderScene, skillId, trustedEnvelope = false, 
 		const gated = validation.result;
 		if (!gated.ok) {
 			const messages = gated.errors.map((e) => `${e.path}: ${e.message}`);
-			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(ValidationError, {
+			return /* @__PURE__ */ jsx(ValidationError, {
 				title: "Invalid skill invocation",
 				messages,
 				errors: gated.errors,
@@ -44,8 +44,8 @@ function VizSpecRenderer({ spec, renderScene, skillId, trustedEnvelope = false, 
 				onInvocationError
 			});
 		}
-		const palette = gated.spec.palette ? require_authoring.getPalette(gated.spec.palette) : activePalette ?? require_authoring.getPalette("crameri");
-		return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(SceneFrame, {
+		const palette = gated.spec.palette ? getPalette(gated.spec.palette) : activePalette ?? getPalette("crameri");
+		return /* @__PURE__ */ jsx(SceneFrame, {
 			skill: gated.skill,
 			scene: gated.scene,
 			themeMode: gated.spec.themeMode,
@@ -61,15 +61,15 @@ function VizSpecRenderer({ spec, renderScene, skillId, trustedEnvelope = false, 
 		});
 	}
 	const result = validation.result;
-	if (!result.ok) return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(ValidationError, {
+	if (!result.ok) return /* @__PURE__ */ jsx(ValidationError, {
 		title: "Invalid VizSpec",
 		messages: result.errors,
 		onError
 	});
 	const { scene, themeMode, mode, camera, provenance, params, palette: paletteHint } = result.spec;
-	const caption = require_authoring.requiresHonestyCaption(provenance) ? require_authoring.defaultHonestyCaption(provenance) : null;
-	const palette = paletteHint ? require_authoring.getPalette(paletteHint) : activePalette ?? require_authoring.getPalette("crameri");
-	return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(SceneFrame, {
+	const caption = requiresHonestyCaption(provenance) ? defaultHonestyCaption(provenance) : null;
+	const palette = paletteHint ? getPalette(paletteHint) : activePalette ?? getPalette("crameri");
+	return /* @__PURE__ */ jsx(SceneFrame, {
 		skill: result.spec.skill,
 		scene,
 		themeMode,
@@ -86,38 +86,38 @@ function VizSpecRenderer({ spec, renderScene, skillId, trustedEnvelope = false, 
 }
 function ValidationError({ title, messages, errors, onError, onInvocationError }) {
 	const contentKey = errors ? JSON.stringify(errors) : messages.join("\n");
-	const onErrorRef = (0, react.useRef)(onError);
-	const onInvocationErrorRef = (0, react.useRef)(onInvocationError);
-	const reportedKeyRef = (0, react.useRef)(null);
-	(0, react.useEffect)(() => {
+	const onErrorRef = useRef(onError);
+	const onInvocationErrorRef = useRef(onInvocationError);
+	const reportedKeyRef = useRef(null);
+	useEffect(() => {
 		onErrorRef.current = onError;
 		onInvocationErrorRef.current = onInvocationError;
 	}, [onError, onInvocationError]);
-	(0, react.useEffect)(() => {
+	useEffect(() => {
 		if (reportedKeyRef.current === contentKey) return;
 		reportedKeyRef.current = contentKey;
 		onErrorRef.current?.([...messages]);
 		if (errors) onInvocationErrorRef.current?.(errors);
 	}, [contentKey]);
-	return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+	return /* @__PURE__ */ jsxs("div", {
 		role: "alert",
 		"aria-live": "assertive",
 		className: "cortexel-vizspec-error",
 		children: [
-			/* @__PURE__ */ (0, react_jsx_runtime.jsx)("strong", { children: title }),
-			/* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", { children: "Fix the fields below and validate the visualization again." }),
-			/* @__PURE__ */ (0, react_jsx_runtime.jsx)("ul", { children: messages.map((message, index) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("li", { children: message }, `${index}-${message}`)) })
+			/* @__PURE__ */ jsx("strong", { children: title }),
+			/* @__PURE__ */ jsx("p", { children: "Fix the fields below and validate the visualization again." }),
+			/* @__PURE__ */ jsx("ul", { children: messages.map((message, index) => /* @__PURE__ */ jsx("li", { children: message }, `${index}-${message}`)) })
 		]
 	});
 }
 function SceneFrame({ skill, scene, themeMode, mode, camera, palette, params, provenance, caption, captionPlacement, active, renderScene }) {
-	const captionId = `cortexel-honesty-caption-${(0, react.useId)().replace(/[^a-zA-Z0-9_-]/g, "")}`;
-	if (mode === "export") return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+	const captionId = `cortexel-honesty-caption-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+	if (mode === "export") return /* @__PURE__ */ jsx("div", {
 		role: "status",
 		className: "cortexel-vizspec-export-unsupported",
 		children: "Headless export rendering is not available in this build. Request an interactive render, or use the backend render endpoint once enabled."
 	});
-	return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+	return /* @__PURE__ */ jsxs("div", {
 		className: "cortexel-vizspec",
 		role: caption ? "group" : void 0,
 		"aria-describedby": caption ? captionId : void 0,
@@ -135,7 +135,7 @@ function SceneFrame({ skill, scene, themeMode, mode, camera, palette, params, pr
 			palette,
 			params: cloneValidatedJson(params),
 			provenance: cloneValidatedJson(provenance)
-		}), caption && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+		}), caption && /* @__PURE__ */ jsx("div", {
 			id: captionId,
 			className: "cortexel-honesty-caption",
 			role: "note",
@@ -157,7 +157,7 @@ function SceneFrame({ skill, scene, themeMode, mode, camera, palette, params, pr
 				lineHeight: 1.4,
 				pointerEvents: "none"
 			},
-			children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("bdi", {
+			children: /* @__PURE__ */ jsx("bdi", {
 				dir: "auto",
 				style: { unicodeBidi: "isolate" },
 				children: caption
@@ -167,10 +167,5 @@ function SceneFrame({ skill, scene, themeMode, mode, camera, palette, params, pr
 }
 
 //#endregion
-Object.defineProperty(exports, 'VizSpecRenderer', {
-  enumerable: true,
-  get: function () {
-    return VizSpecRenderer;
-  }
-});
-//# sourceMappingURL=VizSpecRenderer-Duhebof_.cjs.map
+export { VizSpecRenderer as t };
+//# sourceMappingURL=VizSpecRenderer-BLGU6OQa.js.map

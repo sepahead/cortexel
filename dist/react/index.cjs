@@ -1,7 +1,7 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
 const require_rolldown_runtime = require('../rolldown-runtime-C24Yb2bl.cjs');
-const require_knowledgeGraphLimits = require('../knowledgeGraphLimits-C0j05-4h.cjs');
-const require_VizSpecRenderer = require('../VizSpecRenderer-Duhebof_.cjs');
+const require_knowledgeGraphLimits = require('../knowledgeGraphLimits-BnjbjxkI.cjs');
+const require_VizSpecRenderer = require('../VizSpecRenderer-B4Gh9pMQ.cjs');
 let react = require("react");
 let _react_three_fiber = require("@react-three/fiber");
 let three = require("three");

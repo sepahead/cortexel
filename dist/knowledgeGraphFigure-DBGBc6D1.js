@@ -1,8 +1,8 @@
-const require_authoring = require('./authoring-CicuSscw.cjs');
-const require_knowledgeGraphLimits = require('./knowledgeGraphLimits-C0j05-4h.cjs');
-const require_parse_json = require('./parse-json-fREYzpvz.cjs');
-const require_knowledgeGraphVisualEncoding_internal = require('./knowledgeGraphVisualEncoding.internal-COtu0qU6.cjs');
-let _cortexel_knowledge_graph_presentation_capability = require("#cortexel-knowledge-graph-presentation-capability");
+import { En as validatePalette, a as validateSpec, bn as getPalette, q as KnowledgeGraph3DParamsSchema, un as SEMANTIC_PALETTE_KEYS } from "./authoring-C_HlbARb.js";
+import { d as safeErrorMessage, n as KNOWLEDGE_GRAPH_LIMITS, o as formatValidationIssues, t as KNOWLEDGE_GRAPH_JSON_PARSE_LIMITS, u as safeDiagnosticText } from "./knowledgeGraphLimits-Du09-etI.js";
+import { t as parseJsonStrict } from "./parse-json-BkdHHhtc.js";
+import { _ as canonicalGraphNodePair, g as deriveKnowledgeGraphContextIdentity, n as CORPUS_NODE_GLYPH_BY_KIND, r as KNOWLEDGE_GRAPH_BACKGROUND_COLORS, t as CORPUS_EDGE_STROKE_PATTERN_BY_KIND, v as graphEdgeIdentityKey } from "./knowledgeGraphVisualEncoding.internal-Bk0I-Mgt.js";
+import { KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1, prepareCorpusKnowledgeGraphPresentation, prepareKnowledgeGraphView } from "#cortexel-knowledge-graph-presentation-capability";
 
 //#region react/knowledgeGraph.ts
 const MAX_GRAPH_QUERY_LENGTH = 500;
@@ -11,23 +11,23 @@ const DEFAULT_GRAPH_NODE_RADIUS = 4;
 * synchronous force work without adding useful visual resolution. */
 const MAX_GRAPH_NODE_RADIUS = 64;
 /** Accepted presentation/inspection/DOM bounds, in parity with the params gate. */
-const MAX_KNOWLEDGE_GRAPH_PRESENTATION_NODES = require_knowledgeGraphLimits.KNOWLEDGE_GRAPH_LIMITS.maxPresentationNodes;
-const MAX_KNOWLEDGE_GRAPH_PRESENTATION_EDGES = require_knowledgeGraphLimits.KNOWLEDGE_GRAPH_LIMITS.maxPresentationEdges;
+const MAX_KNOWLEDGE_GRAPH_PRESENTATION_NODES = KNOWLEDGE_GRAPH_LIMITS.maxPresentationNodes;
+const MAX_KNOWLEDGE_GRAPH_PRESENTATION_EDGES = KNOWLEDGE_GRAPH_LIMITS.maxPresentationEdges;
 /**
 * Conservative main-thread d3-force ceilings. The exact repository/package-smoke
 * runtime uses d3 3.0.6, whose forces build fresh spatial indexes every tick.
 * The supported peer range has no transitive allocation/performance certificate;
 * these bounds make no browser-, device-, frame-rate-, or latency guarantee.
 */
-const MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES = require_knowledgeGraphLimits.KNOWLEDGE_GRAPH_LIMITS.maxLiveForceNodes;
-const MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES = require_knowledgeGraphLimits.KNOWLEDGE_GRAPH_LIMITS.maxLiveForceEdges;
+const MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES = KNOWLEDGE_GRAPH_LIMITS.maxLiveForceNodes;
+const MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES = KNOWLEDGE_GRAPH_LIMITS.maxLiveForceEdges;
 /** Twelve quadratic chords retain bounded geometry while admitting four closed,
 * color-independent relationship stroke patterns within the live-force ceiling. */
 const GRAPH_EDGE_CURVE_SEGMENTS = 12;
 const GRAPH_EDGE_LANE_SPACING = 6;
 /** Evidence graphs may carry several independent assertions for one entity pair,
 * but an unbounded bundle is neither readable nor cheap to route interactively. */
-const MAX_GRAPH_PARALLEL_EDGES = require_knowledgeGraphLimits.KNOWLEDGE_GRAPH_LIMITS.maxParallelEdgesPerPair;
+const MAX_GRAPH_PARALLEL_EDGES = KNOWLEDGE_GRAPH_LIMITS.maxParallelEdgesPerPair;
 const MAX_GRAPH_EDGE_LANE_OFFSET = (MAX_GRAPH_PARALLEL_EDGES - 1) / 2 * 6;
 const DEFAULT_CORPUS_GRAPH_BASE_RADIUS = 4;
 const DEFAULT_CORPUS_GRAPH_DEGREE_SCALE = 1.4;
@@ -93,13 +93,13 @@ function assertRenderableGraphEdges(nodes, edges) {
 		if (!ids.has(edge.source) || !ids.has(edge.target)) throw new Error(`knowledge graph edge at index ${index} has a missing endpoint`);
 		if (edge.source === edge.target) throw new Error(`knowledge graph edge at index ${index} is a self-loop`);
 		if (edge.directed === false && edge.particles === true) throw new Error(`knowledge graph edge at index ${index} is undirected but carries directional particles`);
-		const key = require_knowledgeGraphVisualEncoding_internal.graphEdgeIdentityKey(edge);
+		const key = graphEdgeIdentityKey(edge);
 		if (relationships.has(key)) {
 			const identity = typeof edge.id === "string" ? "id" : "relationship";
 			throw new Error(`knowledge graph edge ${identity} is duplicated at index ${index}`);
 		}
 		relationships.add(key);
-		const [source, target] = require_knowledgeGraphVisualEncoding_internal.canonicalGraphNodePair(edge.source, edge.target);
+		const [source, target] = canonicalGraphNodePair(edge.source, edge.target);
 		const pairKey = JSON.stringify([source, target]);
 		const pairCount = (pairCounts.get(pairKey) ?? 0) + 1;
 		if (pairCount > MAX_GRAPH_PARALLEL_EDGES) throw new RangeError(`knowledge graph edge bundle exceeds ${MAX_GRAPH_PARALLEL_EDGES} at index ${index}`);
@@ -222,7 +222,7 @@ function filterGraphEdges(ids, edges) {
 	const seen = /* @__PURE__ */ new Set();
 	return edges.filter((edge) => {
 		if (!ids.has(edge.source) || !ids.has(edge.target) || edge.source === edge.target) return false;
-		const key = require_knowledgeGraphVisualEncoding_internal.graphEdgeIdentityKey(edge);
+		const key = graphEdgeIdentityKey(edge);
 		if (seen.has(key)) return false;
 		seen.add(key);
 		return true;
@@ -235,10 +235,10 @@ function assignGraphEdgeLanes(edges) {
 	const bundles = /* @__PURE__ */ new Map();
 	for (let edgeIndex = 0; edgeIndex < edges.length; edgeIndex++) {
 		const edge = edges[edgeIndex];
-		const [source, target] = require_knowledgeGraphVisualEncoding_internal.canonicalGraphNodePair(edge.source, edge.target);
+		const [source, target] = canonicalGraphNodePair(edge.source, edge.target);
 		const pairKey = JSON.stringify([source, target]);
 		const semanticKey = JSON.stringify([
-			require_knowledgeGraphVisualEncoding_internal.graphEdgeIdentityKey(edge),
+			graphEdgeIdentityKey(edge),
 			typeof edge.kind === "string" ? edge.kind : "",
 			edge.source,
 			edge.target
@@ -279,7 +279,7 @@ function uniqueGraphTopologyLinks(edges) {
 	for (let index = 0; index < edges.length; index++) {
 		const edge = edges[index];
 		if (edge.source === edge.target) continue;
-		const [source, target] = require_knowledgeGraphVisualEncoding_internal.canonicalGraphNodePair(edge.source, edge.target);
+		const [source, target] = canonicalGraphNodePair(edge.source, edge.target);
 		const key = JSON.stringify([source, target]);
 		if (seen.has(key)) continue;
 		seen.add(key);
@@ -545,7 +545,7 @@ function colorOverrides(value, label, allowedKeys) {
 * continuity. Filtering one declared snapshot keeps this value. This is neither
 * a graph-content digest nor independent authentication of any context field. */
 function corpusGraphInstanceIdentity(context) {
-	return require_knowledgeGraphVisualEncoding_internal.deriveKnowledgeGraphContextIdentity(context);
+	return deriveKnowledgeGraphContextIdentity(context);
 }
 /**
 * Map validated `corpus.knowledge_graph` params → KnowledgeGraph3DScene props.
@@ -561,8 +561,8 @@ function corpusGraphInstanceIdentity(context) {
 * is enforced upstream at the skill gate, not here.
 */
 function mapCorpusKnowledgeGraph(params, palette, opts = {}) {
-	const validatedParams = require_authoring.KnowledgeGraph3DParamsSchema.safeParse(params);
-	if (!validatedParams.success) throw new TypeError(`mapCorpusKnowledgeGraph requires fully validated corpus.knowledge_graph params: ` + require_knowledgeGraphLimits.formatValidationIssues(validatedParams.error.issues));
+	const validatedParams = KnowledgeGraph3DParamsSchema.safeParse(params);
+	if (!validatedParams.success) throw new TypeError(`mapCorpusKnowledgeGraph requires fully validated corpus.knowledge_graph params: ` + formatValidationIssues(validatedParams.error.issues));
 	const checkedParams = validatedParams.data;
 	assertKnowledgeGraphPresentationBudget(checkedParams.nodes.length, checkedParams.edges.length);
 	assertUniqueGraphNodeIds(checkedParams.nodes);
@@ -589,7 +589,7 @@ function mapCorpusKnowledgeGraph(params, palette, opts = {}) {
 	}
 	const nodes = checkedParams.nodes.map((n) => {
 		const kind = n.kind;
-		const nodeGlyph = require_knowledgeGraphVisualEncoding_internal.CORPUS_NODE_GLYPH_BY_KIND[kind];
+		const nodeGlyph = CORPUS_NODE_GLYPH_BY_KIND[kind];
 		if (nodeGlyph === void 0) throw new TypeError(`corpus knowledge-graph node ${n.id} has an invalid kind`);
 		const d = degree.get(n.id) ?? 0;
 		const radius = baseRadius + Math.min(maxRadiusBump, Math.sqrt(d) * degreeScale);
@@ -610,7 +610,7 @@ function mapCorpusKnowledgeGraph(params, palette, opts = {}) {
 	});
 	const edges = renderableEdges.map((e) => {
 		const kind = e.kind;
-		const edgeStrokePattern = require_knowledgeGraphVisualEncoding_internal.CORPUS_EDGE_STROKE_PATTERN_BY_KIND[kind];
+		const edgeStrokePattern = CORPUS_EDGE_STROKE_PATTERN_BY_KIND[kind];
 		if (edgeStrokePattern === void 0) throw new TypeError(`corpus knowledge-graph edge ${e.source}→${e.target} has an invalid kind`);
 		const style = edgeStyles[kind] ?? {
 			color: palette.inkFaint,
@@ -635,8 +635,8 @@ function mapCorpusKnowledgeGraph(params, palette, opts = {}) {
 		};
 	});
 	assertRenderableGraphEdges(nodes, edges);
-	return (0, _cortexel_knowledge_graph_presentation_capability.prepareCorpusKnowledgeGraphPresentation)({
-		contract: _cortexel_knowledge_graph_presentation_capability.KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
+	return prepareCorpusKnowledgeGraphPresentation({
+		contract: KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
 		profile: "corpus_entity",
 		context: {
 			graph_id: checkedParams.graph_id,
@@ -666,14 +666,14 @@ const RAW_JSON_SOURCE_INPUT_ASSURANCE = Object.freeze({
 	duplicateMembers: "rejected_before_materialization"
 });
 function snapshotHostPalette(value) {
-	require_authoring.validatePalette(value);
+	validatePalette(value);
 	const snapshot = Object.create(null);
-	for (const key of require_authoring.SEMANTIC_PALETTE_KEYS) {
+	for (const key of SEMANTIC_PALETTE_KEYS) {
 		const descriptor = Object.getOwnPropertyDescriptor(value, key);
 		if (descriptor === void 0 || !descriptor.enumerable || !Object.hasOwn(descriptor, "value")) throw new TypeError(`active palette ${key} must remain an enumerable data property`);
 		snapshot[key] = descriptor.value;
 	}
-	require_authoring.validatePalette(snapshot);
+	validatePalette(snapshot);
 	return Object.freeze(snapshot);
 }
 function failure(error, acceptedSource) {
@@ -694,20 +694,20 @@ function failure(error, acceptedSource) {
 * provenance, or scientific claims, and it does not make WebGL deterministic.
 */
 function prepareCorpusKnowledgeGraphFigureWithAssurance(spec, options, sourceInputAssurance) {
-	const gated = require_authoring.validateSpec(spec);
+	const gated = validateSpec(spec);
 	if (!gated.ok) return {
 		ok: false,
 		errors: Object.freeze(gated.errors.slice(0, 16).map((error) => Object.freeze({
 			code: "strict_gate_rejected",
-			path: require_knowledgeGraphLimits.safeDiagnosticText(error.path, 240),
-			message: require_knowledgeGraphLimits.safeDiagnosticText(error.message, 600),
-			gateCode: require_knowledgeGraphLimits.safeDiagnosticText(error.code, 120)
+			path: safeDiagnosticText(error.path, 240),
+			message: safeDiagnosticText(error.message, 600),
+			gateCode: safeDiagnosticText(error.code, 120)
 		})))
 	};
 	if (gated.skill !== "corpus.knowledge_graph") return failure({
 		code: "wrong_skill",
 		path: "skill",
-		message: `requires corpus.knowledge_graph; received ${require_knowledgeGraphLimits.safeDiagnosticText(gated.skill, 80)}`
+		message: `requires corpus.knowledge_graph; received ${safeDiagnosticText(gated.skill, 80)}`
 	});
 	if (gated.spec.mode !== "interactive") return failure({
 		code: "unsupported_mode",
@@ -720,16 +720,16 @@ function prepareCorpusKnowledgeGraphFigureWithAssurance(spec, options, sourceInp
 		message: "the strict gate did not return the required honesty caption"
 	});
 	try {
-		const palette = snapshotHostPalette(gated.spec.palette !== void 0 ? require_authoring.getPalette(gated.spec.palette) : options.activePalette ?? require_authoring.getPalette("crameri"));
+		const palette = snapshotHostPalette(gated.spec.palette !== void 0 ? getPalette(gated.spec.palette) : options.activePalette ?? getPalette("crameri"));
 		const presentation = mapCorpusKnowledgeGraph(gated.spec.params, palette);
 		let view;
 		try {
-			view = options.viewPolicy === void 0 ? void 0 : (0, _cortexel_knowledge_graph_presentation_capability.prepareKnowledgeGraphView)(presentation, options.viewPolicy);
+			view = options.viewPolicy === void 0 ? void 0 : prepareKnowledgeGraphView(presentation, options.viewPolicy);
 		} catch (error) {
 			return failure({
 				code: "view_preparation_failed",
 				path: "viewPolicy",
-				message: `knowledge-graph view preparation failed: ${require_knowledgeGraphLimits.safeErrorMessage(error)}`
+				message: `knowledge-graph view preparation failed: ${safeErrorMessage(error)}`
 			}, {
 				caption: gated.caption,
 				sourceInputAssurance,
@@ -742,7 +742,7 @@ function prepareCorpusKnowledgeGraphFigureWithAssurance(spec, options, sourceInp
 			sourceInputAssurance,
 			palette,
 			themeMode: gated.spec.themeMode,
-			backgroundColor: require_knowledgeGraphVisualEncoding_internal.KNOWLEDGE_GRAPH_BACKGROUND_COLORS[gated.spec.themeMode],
+			backgroundColor: KNOWLEDGE_GRAPH_BACKGROUND_COLORS[gated.spec.themeMode],
 			camera: gated.spec.camera,
 			liveForceAvailability: knowledgeGraphLiveForceAvailability(view?.nodes.length ?? presentation.nodes.length, view?.edges.length ?? presentation.edges.length)
 		});
@@ -758,7 +758,7 @@ function prepareCorpusKnowledgeGraphFigureWithAssurance(spec, options, sourceInp
 		return failure({
 			code: "presentation_preparation_failed",
 			path: "params",
-			message: `knowledge-graph presentation preparation failed: ${require_knowledgeGraphLimits.safeErrorMessage(error)}`
+			message: `knowledge-graph presentation preparation failed: ${safeErrorMessage(error)}`
 		});
 	}
 }
@@ -778,300 +778,19 @@ function prepareCorpusKnowledgeGraphFigure(spec, options = {}) {
 * materialized-value entry. Ordinary rejection is returned and never thrown.
 */
 function prepareCorpusKnowledgeGraphFigureJson(text, options = {}) {
-	const parsed = require_parse_json.parseJsonStrict(text, { limits: require_knowledgeGraphLimits.KNOWLEDGE_GRAPH_JSON_PARSE_LIMITS });
+	const parsed = parseJsonStrict(text, { limits: KNOWLEDGE_GRAPH_JSON_PARSE_LIMITS });
 	if (!parsed.ok) return Object.freeze({
 		ok: false,
 		errors: Object.freeze(parsed.errors.slice(0, 16).map((error) => Object.freeze({
 			code: "raw_json_rejected",
-			path: require_knowledgeGraphLimits.safeDiagnosticText(error.instancePath || "(input)", 240),
-			message: require_knowledgeGraphLimits.safeDiagnosticText(error.message, 600),
-			gateCode: require_knowledgeGraphLimits.safeDiagnosticText(error.code, 120)
+			path: safeDiagnosticText(error.instancePath || "(input)", 240),
+			message: safeDiagnosticText(error.message, 600),
+			gateCode: safeDiagnosticText(error.code, 120)
 		})))
 	});
 	return prepareCorpusKnowledgeGraphFigureWithAssurance(parsed.value, options, RAW_JSON_SOURCE_INPUT_ASSURANCE);
 }
 
 //#endregion
-Object.defineProperty(exports, 'CORPUS_GRAPH_RADIUS_MEANING', {
-  enumerable: true,
-  get: function () {
-    return CORPUS_GRAPH_RADIUS_MEANING;
-  }
-});
-Object.defineProperty(exports, 'DEFAULT_GRAPH_NODE_RADIUS', {
-  enumerable: true,
-  get: function () {
-    return DEFAULT_GRAPH_NODE_RADIUS;
-  }
-});
-Object.defineProperty(exports, 'GRAPH_EDGE_CURVE_SEGMENTS', {
-  enumerable: true,
-  get: function () {
-    return GRAPH_EDGE_CURVE_SEGMENTS;
-  }
-});
-Object.defineProperty(exports, 'GRAPH_EDGE_LANE_SPACING', {
-  enumerable: true,
-  get: function () {
-    return GRAPH_EDGE_LANE_SPACING;
-  }
-});
-Object.defineProperty(exports, 'GRAPH_EDGE_TARGET_BOUNDARY_SOLVE_ITERATIONS', {
-  enumerable: true,
-  get: function () {
-    return GRAPH_EDGE_TARGET_BOUNDARY_SOLVE_ITERATIONS;
-  }
-});
-Object.defineProperty(exports, 'GRAPH_LAYOUT_TICK_SECONDS', {
-  enumerable: true,
-  get: function () {
-    return GRAPH_LAYOUT_TICK_SECONDS;
-  }
-});
-Object.defineProperty(exports, 'MAX_GRAPH_EDGE_LANE_OFFSET', {
-  enumerable: true,
-  get: function () {
-    return MAX_GRAPH_EDGE_LANE_OFFSET;
-  }
-});
-Object.defineProperty(exports, 'MAX_GRAPH_LAYOUT_TICKS_PER_FRAME', {
-  enumerable: true,
-  get: function () {
-    return MAX_GRAPH_LAYOUT_TICKS_PER_FRAME;
-  }
-});
-Object.defineProperty(exports, 'MAX_GRAPH_NODE_RADIUS', {
-  enumerable: true,
-  get: function () {
-    return MAX_GRAPH_NODE_RADIUS;
-  }
-});
-Object.defineProperty(exports, 'MAX_GRAPH_PARALLEL_EDGES', {
-  enumerable: true,
-  get: function () {
-    return MAX_GRAPH_PARALLEL_EDGES;
-  }
-});
-Object.defineProperty(exports, 'MAX_GRAPH_QUERY_LENGTH', {
-  enumerable: true,
-  get: function () {
-    return MAX_GRAPH_QUERY_LENGTH;
-  }
-});
-Object.defineProperty(exports, 'MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES', {
-  enumerable: true,
-  get: function () {
-    return MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES;
-  }
-});
-Object.defineProperty(exports, 'MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES', {
-  enumerable: true,
-  get: function () {
-    return MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES;
-  }
-});
-Object.defineProperty(exports, 'MAX_KNOWLEDGE_GRAPH_PRESENTATION_EDGES', {
-  enumerable: true,
-  get: function () {
-    return MAX_KNOWLEDGE_GRAPH_PRESENTATION_EDGES;
-  }
-});
-Object.defineProperty(exports, 'MAX_KNOWLEDGE_GRAPH_PRESENTATION_NODES', {
-  enumerable: true,
-  get: function () {
-    return MAX_KNOWLEDGE_GRAPH_PRESENTATION_NODES;
-  }
-});
-Object.defineProperty(exports, 'advanceGraphLayoutClock', {
-  enumerable: true,
-  get: function () {
-    return advanceGraphLayoutClock;
-  }
-});
-Object.defineProperty(exports, 'advanceGraphLayoutClockInto', {
-  enumerable: true,
-  get: function () {
-    return advanceGraphLayoutClockInto;
-  }
-});
-Object.defineProperty(exports, 'assertKnowledgeGraphIdentity', {
-  enumerable: true,
-  get: function () {
-    return assertKnowledgeGraphIdentity;
-  }
-});
-Object.defineProperty(exports, 'assertKnowledgeGraphLiveForceBudget', {
-  enumerable: true,
-  get: function () {
-    return assertKnowledgeGraphLiveForceBudget;
-  }
-});
-Object.defineProperty(exports, 'assertKnowledgeGraphPresentationBudget', {
-  enumerable: true,
-  get: function () {
-    return assertKnowledgeGraphPresentationBudget;
-  }
-});
-Object.defineProperty(exports, 'assertRenderableGraphEdges', {
-  enumerable: true,
-  get: function () {
-    return assertRenderableGraphEdges;
-  }
-});
-Object.defineProperty(exports, 'assertUniqueGraphNodeIds', {
-  enumerable: true,
-  get: function () {
-    return assertUniqueGraphNodeIds;
-  }
-});
-Object.defineProperty(exports, 'assignGraphEdgeLanes', {
-  enumerable: true,
-  get: function () {
-    return assignGraphEdgeLanes;
-  }
-});
-Object.defineProperty(exports, 'buildAdjacency', {
-  enumerable: true,
-  get: function () {
-    return buildAdjacency;
-  }
-});
-Object.defineProperty(exports, 'corpusGraphInstanceIdentity', {
-  enumerable: true,
-  get: function () {
-    return corpusGraphInstanceIdentity;
-  }
-});
-Object.defineProperty(exports, 'corpusGraphRadiusMeaning', {
-  enumerable: true,
-  get: function () {
-    return corpusGraphRadiusMeaning;
-  }
-});
-Object.defineProperty(exports, 'defaultEdgeStyles', {
-  enumerable: true,
-  get: function () {
-    return defaultEdgeStyles;
-  }
-});
-Object.defineProperty(exports, 'defaultNodeColors', {
-  enumerable: true,
-  get: function () {
-    return defaultNodeColors;
-  }
-});
-Object.defineProperty(exports, 'filterGraphEdges', {
-  enumerable: true,
-  get: function () {
-    return filterGraphEdges;
-  }
-});
-Object.defineProperty(exports, 'flowParticleCount', {
-  enumerable: true,
-  get: function () {
-    return flowParticleCount;
-  }
-});
-Object.defineProperty(exports, 'graphCameraTargetDamping', {
-  enumerable: true,
-  get: function () {
-    return graphCameraTargetDamping;
-  }
-});
-Object.defineProperty(exports, 'graphEdgeControlPointInto', {
-  enumerable: true,
-  get: function () {
-    return graphEdgeControlPointInto;
-  }
-});
-Object.defineProperty(exports, 'graphEdgeCurvePointInto', {
-  enumerable: true,
-  get: function () {
-    return graphEdgeCurvePointInto;
-  }
-});
-Object.defineProperty(exports, 'graphEdgeMatchesQuery', {
-  enumerable: true,
-  get: function () {
-    return graphEdgeMatchesQuery;
-  }
-});
-Object.defineProperty(exports, 'graphEdgeTargetBoundaryInto', {
-  enumerable: true,
-  get: function () {
-    return graphEdgeTargetBoundaryInto;
-  }
-});
-Object.defineProperty(exports, 'graphLayoutSignature', {
-  enumerable: true,
-  get: function () {
-    return graphLayoutSignature;
-  }
-});
-Object.defineProperty(exports, 'graphQueryMatchIds', {
-  enumerable: true,
-  get: function () {
-    return graphQueryMatchIds;
-  }
-});
-Object.defineProperty(exports, 'graphSignature', {
-  enumerable: true,
-  get: function () {
-    return graphSignature;
-  }
-});
-Object.defineProperty(exports, 'isKnowledgeGraphLiveForceWithinBudget', {
-  enumerable: true,
-  get: function () {
-    return isKnowledgeGraphLiveForceWithinBudget;
-  }
-});
-Object.defineProperty(exports, 'knowledgeGraphLiveForceAvailability', {
-  enumerable: true,
-  get: function () {
-    return knowledgeGraphLiveForceAvailability;
-  }
-});
-Object.defineProperty(exports, 'matchesGraphQuery', {
-  enumerable: true,
-  get: function () {
-    return matchesGraphQuery;
-  }
-});
-Object.defineProperty(exports, 'normalizeGraphNodeRadius', {
-  enumerable: true,
-  get: function () {
-    return normalizeGraphNodeRadius;
-  }
-});
-Object.defineProperty(exports, 'normalizeGraphQuery', {
-  enumerable: true,
-  get: function () {
-    return normalizeGraphQuery;
-  }
-});
-Object.defineProperty(exports, 'prepareCorpusKnowledgeGraphFigure', {
-  enumerable: true,
-  get: function () {
-    return prepareCorpusKnowledgeGraphFigure;
-  }
-});
-Object.defineProperty(exports, 'prepareCorpusKnowledgeGraphFigureJson', {
-  enumerable: true,
-  get: function () {
-    return prepareCorpusKnowledgeGraphFigureJson;
-  }
-});
-Object.defineProperty(exports, 'reducedMotionLayoutTickBudget', {
-  enumerable: true,
-  get: function () {
-    return reducedMotionLayoutTickBudget;
-  }
-});
-Object.defineProperty(exports, 'uniqueGraphTopologyLinks', {
-  enumerable: true,
-  get: function () {
-    return uniqueGraphTopologyLinks;
-  }
-});
-//# sourceMappingURL=knowledgeGraphFigure-DdhGiw-O.cjs.map
+export { defaultNodeColors as A, graphSignature as B, assertRenderableGraphEdges as C, corpusGraphInstanceIdentity as D, buildAdjacency as E, graphEdgeCurvePointInto as F, normalizeGraphQuery as G, knowledgeGraphLiveForceAvailability as H, graphEdgeMatchesQuery as I, reducedMotionLayoutTickBudget as K, graphEdgeTargetBoundaryInto as L, flowParticleCount as M, graphCameraTargetDamping as N, corpusGraphRadiusMeaning as O, graphEdgeControlPointInto as P, graphLayoutSignature as R, assertKnowledgeGraphPresentationBudget as S, assignGraphEdgeLanes as T, matchesGraphQuery as U, isKnowledgeGraphLiveForceWithinBudget as V, normalizeGraphNodeRadius as W, MAX_KNOWLEDGE_GRAPH_PRESENTATION_NODES as _, GRAPH_EDGE_CURVE_SEGMENTS as a, assertKnowledgeGraphIdentity as b, GRAPH_LAYOUT_TICK_SECONDS as c, MAX_GRAPH_NODE_RADIUS as d, MAX_GRAPH_PARALLEL_EDGES as f, MAX_KNOWLEDGE_GRAPH_PRESENTATION_EDGES as g, MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES as h, DEFAULT_GRAPH_NODE_RADIUS as i, filterGraphEdges as j, defaultEdgeStyles as k, MAX_GRAPH_EDGE_LANE_OFFSET as l, MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES as m, prepareCorpusKnowledgeGraphFigureJson as n, GRAPH_EDGE_LANE_SPACING as o, MAX_GRAPH_QUERY_LENGTH as p, uniqueGraphTopologyLinks as q, CORPUS_GRAPH_RADIUS_MEANING as r, GRAPH_EDGE_TARGET_BOUNDARY_SOLVE_ITERATIONS as s, prepareCorpusKnowledgeGraphFigure as t, MAX_GRAPH_LAYOUT_TICKS_PER_FRAME as u, advanceGraphLayoutClock as v, assertUniqueGraphNodeIds as w, assertKnowledgeGraphLiveForceBudget as x, advanceGraphLayoutClockInto as y, graphQueryMatchIds as z };
+//# sourceMappingURL=knowledgeGraphFigure-DBGBc6D1.js.map

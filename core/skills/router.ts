@@ -1,7 +1,8 @@
-// routeToScene — the executable replacement for the nest.viz_router stub.
-// An agent holding a NEST output dict asks "which skill/scene renders this?" and
-// gets a concrete answer, fail-closed for unknown families, for skills whose
-// scene is null, AND for any device family that maps to more than one skill.
+// routeToScene — the registry-derived replacement for the nest.viz_router stub.
+// It selects a legacy skill/scene candidate from caller-classified NEST metadata;
+// it does not inspect or adapt a raw output dict, validate an invocation, establish
+// source identity, or confer stable implementation authority. Selection fails
+// closed for unknown families, scene-less skills, and ambiguous families.
 //
 // The family→skill index is DERIVED from NEST_SKILL_REGISTRY (not hand-written),
 // so it can never drift from the registry. Several families are many-to-one —

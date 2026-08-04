@@ -6788,6 +6788,39 @@ const runtimeTopologyProbe = `
   const emptyMeasuredVerification = emptyMeasuredScene.ok
     ? core.detectEmptyScene(emptyMeasuredScene.data)
     : null;
+  const weightTupleSplit = core.splitWeightRecorderByRecordedTuple({
+    times: [3, 2, 1, 0, -1, 3],
+    weights: [0.1, Number.MAX_VALUE, 0.3, 0.4, 0.45, 0.5],
+    senders: [7, 8, 7, 7, 7, 7],
+    targets: [9, 9, 10, 9, 9, 9],
+    ports: [3, 3, 3, 3, 4, 3],
+    receptors: [1, 1, 1, 2, 1, 1],
+  });
+  const emptyWeightTupleSplit = core.splitWeightRecorderByRecordedTuple({
+    times: [], weights: [], senders: [], targets: [], ports: [], receptors: [],
+  });
+  const offsetWeightTupleSplit = core.splitWeightRecorderByRecordedTuple({
+    times: [1], offsets: [0], weights: [1], senders: [1], targets: [2],
+    ports: [3], receptors: [4],
+  });
+  const sharedWeightTupleSplit = typeof SharedArrayBuffer === 'function'
+    ? core.splitWeightRecorderByRecordedTuple({
+        times: new Float64Array(new SharedArrayBuffer(8)),
+        weights: [1], senders: [1], targets: [2], ports: [3], receptors: [4],
+      })
+    : { ok: false };
+  const detachedWeightTimes = new Float64Array([1]);
+  structuredClone(detachedWeightTimes.buffer, {
+    transfer: [detachedWeightTimes.buffer],
+  });
+  const detachedWeightTupleSplit = core.splitWeightRecorderByRecordedTuple({
+    times: detachedWeightTimes,
+    weights: [1], senders: [1], targets: [2], ports: [3], receptors: [4],
+  });
+  const retiredWeightSplit = core.splitWeightRecorderBySynapse({});
+  const retiredWeightAdapter = core.weightRecorderToSceneData({}, {
+    weightUnits: 'nS',
+  });
   const unusedMeasurementAuthority = core.getConnectionsToSceneData({
     sources: [1],
     targets: [2],
@@ -6920,6 +6953,30 @@ const runtimeTopologyProbe = `
       Object.hasOwn(emptyMeasuredScene.data, 'networkWeightUnits') ||
       Object.hasOwn(emptyMeasuredScene.data, 'networkDelayUnits') ||
       !emptyMeasuredVerification?.valid || !emptyMeasuredVerification.empty ||
+      !weightTupleSplit.ok || weightTupleSplit.groups.length !== 5 ||
+      JSON.stringify(weightTupleSplit.groups.map((group) => group.weightRecorderTuple)) !==
+        JSON.stringify([
+          { kind: 'recorded_tuple_only', sender: 7, target: 9, port: 3, receptor: 1 },
+          { kind: 'recorded_tuple_only', sender: 8, target: 9, port: 3, receptor: 1 },
+          { kind: 'recorded_tuple_only', sender: 7, target: 10, port: 3, receptor: 1 },
+          { kind: 'recorded_tuple_only', sender: 7, target: 9, port: 3, receptor: 2 },
+          { kind: 'recorded_tuple_only', sender: 7, target: 9, port: 4, receptor: 1 },
+        ]) ||
+      weightTupleSplit.groups[0].sourceOrdinals.join(',') !== '0,5' ||
+      weightTupleSplit.groups[0].times.join(',') !== '3,3' ||
+      weightTupleSplit.groups[0].weights[0] !== 0.1 ||
+      weightTupleSplit.groups[1].weights[0] !== Number.MAX_VALUE ||
+      !Object.isFrozen(weightTupleSplit) || !Object.isFrozen(weightTupleSplit.groups) ||
+      !Object.isFrozen(weightTupleSplit.groups[0]) ||
+      !Object.isFrozen(weightTupleSplit.groups[0].weightRecorderTuple) ||
+      !Object.isFrozen(weightTupleSplit.groups[0].sourceOrdinals) ||
+      !Object.isFrozen(weightTupleSplit.groups[0].times) ||
+      !Object.isFrozen(weightTupleSplit.groups[0].weights) ||
+      !emptyWeightTupleSplit.ok || emptyWeightTupleSplit.groups.length !== 0 ||
+      offsetWeightTupleSplit.ok ||
+      sharedWeightTupleSplit.ok ||
+      detachedWeightTupleSplit.ok ||
+      retiredWeightSplit.ok || retiredWeightAdapter.ok ||
       !adjacency.ok || adjacency.params.connection_count !== 3 ||
       adjacency.params.cells[0].connection_count !== 2 ||
       !graph.ok || graph.params.edges.length !== 3 ||
@@ -9660,6 +9717,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         ROUTING_DISCRIMINATORS,
         getPositionToSpatialMap2DParams,
         normalizeSynapseCollectionSnapshot,
+        splitWeightRecorderByRecordedTuple,
         spikeRecorderToIsiParams,
         spikeRecorderToPopulationRateParams,
         spikeTrialsToPsthParams,
@@ -9677,6 +9735,9 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         type NestTopologyResult,
         type SpatialMap2DOptions,
         type SynapseModelMeasurementSemantics,
+        type WeightRecorderRecordedTuple,
+        type WeightRecorderTupleGroup,
+        type WeightRecorderTupleSplitResult,
         type WeightMatrixParams,
       } from 'cortexel/core';
       import * as coreSurface from 'cortexel/core';
@@ -9726,6 +9787,17 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       const modelSemantics = {} as SynapseModelMeasurementSemantics;
       const spatialOptions = {} as SpatialMap2DOptions;
       const topologyResult = {} as NestTopologyResult<WeightMatrixParams>;
+      const weightRecorderTuple = {} as WeightRecorderRecordedTuple;
+      const weightRecorderTupleGroup = {} as WeightRecorderTupleGroup;
+      const weightRecorderTupleResult: WeightRecorderTupleSplitResult =
+        splitWeightRecorderByRecordedTuple({
+          times: [0], weights: [1], senders: [1], targets: [2],
+          ports: [3], receptors: [4],
+        });
+      const retiredWeightSplitOk: false =
+        coreSurface.splitWeightRecorderBySynapse({}).ok;
+      const retiredWeightAdapterOk: false =
+        coreSurface.weightRecorderToSceneData({}, { weightUnits: 'nS' }).ok;
       const assurance = {} as InputAssurance;
       const validatedRequest = {} as ValidatedRequest;
       const authoringSkillId: StableSkillId = 'neuro.spike_raster';
@@ -9903,6 +9975,18 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         modelSemantics,
         spatialOptions,
         topologyResult,
+        weightRecorderTuple.kind,
+        weightRecorderTuple.sender,
+        weightRecorderTuple.target,
+        weightRecorderTuple.port,
+        weightRecorderTuple.receptor,
+        weightRecorderTupleGroup.weightRecorderTuple,
+        weightRecorderTupleGroup.sourceOrdinals,
+        weightRecorderTupleGroup.times,
+        weightRecorderTupleGroup.weights,
+        weightRecorderTupleResult.ok,
+        retiredWeightSplitOk,
+        retiredWeightAdapterOk,
         normalizeSynapseCollectionSnapshot,
         synapseCollectionToConnectionGraphParams,
         synapseCollectionToAdjacencyMatrixParams,
@@ -9962,6 +10046,17 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       const modelSemantics = {} as core.SynapseModelMeasurementSemantics;
       const spatialOptions = {} as core.SpatialMap2DOptions;
       const topologyResult = {} as core.NestTopologyResult<core.WeightMatrixParams>;
+      const weightRecorderTuple = {} as core.WeightRecorderRecordedTuple;
+      const weightRecorderTupleGroup = {} as core.WeightRecorderTupleGroup;
+      const weightRecorderTupleResult: core.WeightRecorderTupleSplitResult =
+        core.splitWeightRecorderByRecordedTuple({
+          times: [0], weights: [1], senders: [1], targets: [2],
+          ports: [3], receptors: [4],
+        });
+      const retiredWeightSplitOk: false =
+        core.splitWeightRecorderBySynapse({}).ok;
+      const retiredWeightAdapterOk: false =
+        core.weightRecorderToSceneData({}, { weightUnits: 'nS' }).ok;
       const assurance = {} as figure.InputAssurance;
       const validatedRequest = {} as figure.ValidatedRequest;
       const authoringSkillId: authoring.StableSkillId = 'neuro.spike_raster';
@@ -10136,6 +10231,18 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         modelSemantics,
         spatialOptions,
         topologyResult,
+        weightRecorderTuple.kind,
+        weightRecorderTuple.sender,
+        weightRecorderTuple.target,
+        weightRecorderTuple.port,
+        weightRecorderTuple.receptor,
+        weightRecorderTupleGroup.weightRecorderTuple,
+        weightRecorderTupleGroup.sourceOrdinals,
+        weightRecorderTupleGroup.times,
+        weightRecorderTupleGroup.weights,
+        weightRecorderTupleResult.ok,
+        retiredWeightSplitOk,
+        retiredWeightAdapterOk,
         core.spikeRecorderToIsiParams,
         core.spikeTrialsToPsthParams,
         core.spikeRecorderToPopulationRateParams,

@@ -99,12 +99,12 @@ export interface SceneData {
   voltageUnits?: string;
   traceTimes?: Float64Array;
   traceSender?: number;
-  // Synaptic weight time-series (plasticity / weight_recorder). Kept distinct
-  // from voltageTraces so a renderer never mislabels weights as membrane voltage
-  // and weight_units provenance is not lost at the SceneData boundary.
+  // Caller-established synaptic weight time-series. Kept distinct from
+  // voltageTraces so a renderer never mislabels weights as membrane voltage and
+  // weight_units provenance is not lost. Raw weight_recorder rows are not
+  // promoted into this channel by the structural tuple partitioner.
   weightSeries?: Float32Array;
   weightUnits?: string;
-  weightSynapse?: { sender: number; target: number };
   // Non-voltage analog recordings (e.g. astrocyte Ca²⁺/IP₃) that share the
   // analog-trace scene but are NOT membrane voltage. Self-labeling so the
   // renderer never presents Ca/IP3 as mV — the same separation as weightSeries.

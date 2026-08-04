@@ -99,7 +99,7 @@ function numberArray(options: {
             code: z.ZodIssueCode.custom,
             path: [index],
             message: options.integerId
-              ? 'node/sender ids must be non-negative safe integers'
+              ? 'identifier values must be non-negative safe integers'
               : 'counts must be non-negative safe integers',
           });
           return;
@@ -436,60 +436,46 @@ export const GetPosition3DSchema = z.object({
 });
 export type GetPosition3D = z.infer<typeof GetPosition3DSchema>;
 
-/** weight_recorder events: {times, weights, senders?, targets?}. */
+/**
+ * Exact `record_to=memory,time_in_steps=false` weight_recorder event projection
+ * used by the legacy structural partitioner. All recorded identity-like
+ * channels are mandatory: omitting port or receptor information must never
+ * fall back to pair grouping. Tuple fields must be exactly representable
+ * non-negative safe integers. The strict object rejects the `offsets` channel
+ * emitted for `time_in_steps=true` rather than projecting it away.
+ */
 export const WeightRecorderEventsSchema = z
   .object({
-    times: nonEmptyFinite,
-    weights: nonEmptyFloat32Input,
-    senders: finiteIntegerArray.optional(),
-    targets: finiteIntegerArray.optional(),
-    /** Present on a single series returned by splitWeightRecorderBySynapse. */
-    sender: finiteInteger.optional(),
-    target: finiteInteger.optional(),
+    times: finiteNumberArray,
+    // Structural inspection preserves every accepted finite source binary64
+    // value. Presentation adapters own any later, explicitly disclosed Float32
+    // conversion; nonfinite values fail rather than being transformed.
+    weights: finiteNumberArray,
+    senders: finiteIntegerArray,
+    targets: finiteIntegerArray,
+    ports: finiteIntegerArray,
+    receptors: finiteIntegerArray,
   })
   .strict()
   .superRefine((v, ctx) => {
-    if (v.times.length !== v.weights.length) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `times (${v.times.length}) and weights (${v.weights.length}) length mismatch`,
-      });
+    for (const field of [
+      'weights',
+      'senders',
+      'targets',
+      'ports',
+      'receptors',
+    ] as const) {
+      if (v[field].length !== v.times.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message:
+            `${field} (${v[field].length}) and times (${v.times.length}) length mismatch`,
+        });
+      }
     }
-    if ((v.senders === undefined) !== (v.targets === undefined)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'senders and targets must either both be present or both be omitted',
-      });
-    }
-    if ((v.sender === undefined) !== (v.target === undefined)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'sender and target must either both be present or both be omitted',
-      });
-    }
-    if (v.sender !== undefined && v.senders !== undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'use singular sender/target or parallel senders/targets, not both',
-      });
-    }
-    if (v.senders && v.senders.length !== v.times.length) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['senders'],
-        message: 'senders length does not match weight sample count',
-      });
-    }
-    if (v.targets && v.targets.length !== v.times.length) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['targets'],
-        message: 'targets length does not match weight sample count',
-      });
-    }
-    // Do not impose global monotonicity here: a multi-synapse recorder may
-    // interleave individually-monotonic series whose combined time axis resets.
-    // The single-trace adapter and split helper validate the appropriate axis.
+    // NEST explicitly does not promise chronological recorder output. Preserve
+    // capture order, duplicate times, and nonchronological rows exactly.
   });
 export type WeightRecorderEvents = z.infer<typeof WeightRecorderEventsSchema>;
 

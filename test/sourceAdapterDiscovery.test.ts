@@ -130,7 +130,13 @@ describe('executable source-adapter discovery', () => {
         SOURCE_ADAPTER_CATALOG.adapters[id],
       );
     }
-    for (const id of ['', 'nest-multimeter', '__proto__', 'constructor']) {
+    for (const id of [
+      '',
+      'nest-multimeter',
+      'nest-weight-recorder',
+      '__proto__',
+      'constructor',
+    ]) {
       expect(isSourceAdapterId(id), id).toBe(false);
       expect(lookupSourceAdapter(id), id).toBeUndefined();
     }

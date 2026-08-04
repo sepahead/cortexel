@@ -6,6 +6,38 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — legacy NEST weight-recorder identity boundary
+
+- Replaced the legacy sender/target pair splitter with
+  `splitWeightRecorderByRecordedTuple` for caller-verified NEST 3.10
+  `record_to=memory,time_in_steps=false` output. It requires the complete parallel
+  `times`, `weights`, `senders`, `targets`, `ports`, and `receptors` channels and
+  partitions rows only by exact `(sender,target,port,receptor)` equality. It preserves
+  source ordinals, first-seen group order, nonchronological/duplicate times, and
+  every accepted finite binary64 weight without sorting, deduplication, interpolation,
+  or Float32 narrowing. Success returns a deeply frozen detached snapshot. An exact
+  empty six-channel capture returns no groups and makes no completeness claim.
+  `time_in_steps=true` output carries `offsets` and is rejected rather than projected;
+  SharedArrayBuffer-backed typed arrays are rejected rather than copied incoherently
+  under a possible concurrent writer, and detached typed arrays cannot masquerade as
+  valid empty captures.
+  The old `splitWeightRecorderBySynapse` and `weightRecorderToSceneData` names now
+  always fail with migration guidance, and pair-only `weightSynapse` SceneData metadata
+  is rejected. The separately caller-authored legacy `nest.plasticity_dynamics` skill
+  now carries an unsuppressible disclosure that connection identity, continuity,
+  topology lifetime, run/recorder scope, and update semantics remain unestablished.
+  A recorded tuple remains structural recorder metadata—not an
+  authenticated connection id or continuous trace—and creates no stable adapter or
+  gate evidence. This corrects the historical pair-as-synapse claim without rewriting
+  released changelog/audit records. The boundary follows the pinned NEST 3.10
+  [recorded channel registration](https://github.com/nest/nest-simulator/blob/acca9704da248750219a027db99fec6cd1f9052a/models/weight_recorder.cpp#L103-L106),
+  [event write path](https://github.com/nest/nest-simulator/blob/acca9704da248750219a027db99fec6cd1f9052a/models/weight_recorder.cpp#L171-L175),
+  [memory time encoding](https://github.com/nest/nest-simulator/blob/acca9704da248750219a027db99fec6cd1f9052a/nestkernel/recording_backend_memory.cpp#L194-L241),
+  [same-pair multapse test](https://github.com/nest/nest-simulator/blob/acca9704da248750219a027db99fec6cd1f9052a/testsuite/pytests/recording/test_weight_recorder.py#L240-L281),
+  [receptor test](https://github.com/nest/nest-simulator/blob/acca9704da248750219a027db99fec6cd1f9052a/testsuite/pytests/recording/test_weight_recorder.py#L284-L329),
+  and official warning that
+  [recorder events need not be chronological](https://nest-simulator.readthedocs.io/en/v3.10/devices/record_from_simulations.html).
+
 ### Changed — repository hygiene and CI substrate
 
 - Root-anchored the `.superstack` ignore rule as `/.superstack`, covering a root file,

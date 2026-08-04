@@ -6961,10 +6961,11 @@
       "id": "nest.plasticity_dynamics",
       "version": "1.8.0",
       "title": "NEST plasticity dynamics renderer",
-      "description": "Render recorded synaptic-weight samples over time.",
+      "description": "Render caller-attributed synaptic-weight samples over time.",
       "deviceFamily": "weight_recorder",
       "scene": "stdp",
-      "weak": false,
+      "weak": true,
+      "weakDisclosure": "Caller-attributed weight trace — Cortexel renders supplied samples; connection identity, cross-row continuity and topology lifetime, producing run/recorder scope, and pre/post-update semantics are not established.",
       "routerEligibility": {
         "bareFamilyCandidate": true
       },
@@ -6982,7 +6983,7 @@
       "provenanceVerification": {
         "synapse_model": {
           "kind": "external_claim",
-          "reason": "Weight traces do not retain the recorded synapse/model identity."
+          "reason": "Legacy weight-trace params do not retain or authenticate connection identity, continuity/topology lifetime, producing run/recorder scope, or update semantics."
         },
         "weight_units": {
           "kind": "param_bound"
@@ -7092,8 +7093,8 @@
           "nestExample": "Urbanczik-Senn / Clopath / Tsodyks short-term plasticity",
           "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/urbanczik_synapse_example.html",
           "dataShape": "weight-recorder times_ms and weights in one declared unit",
-          "output": "Measured synaptic-weight trace over time",
-          "note": "This contract does not contain an STDP window or pre/post spike protocol; do not invent either."
+          "output": "Caller-attributed synaptic-weight samples over time",
+          "note": "Connection identity, continuity/topology lifetime, producing run/recorder scope, and update semantics remain external. This contract contains no STDP window or pre/post spike protocol; do not invent one."
         }
       ]
     },

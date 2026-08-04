@@ -103,7 +103,7 @@ Summary:
 | `nest.delay_distribution` | report-only target skeleton | `network.delay_distribution` |
 | `nest.weight_histogram` | report-only target skeleton | `network.weight_distribution` |
 | `nest.spatial_map_2d` | report-only target skeleton | `network.spatial_map_2d` |
-| `nest.plasticity_dynamics` | report-only target skeleton | `network.synaptic_weight_trace` (observation kind required) |
+| `nest.plasticity_dynamics` | report-only target skeleton | `network.synaptic_weight_trace` (observation kind and stable connection identity required; report-only migration copies neither, and a legacy recorded tuple cannot satisfy identity without a bound same-run post-prepare inventory and receipt) |
 | `nest.spatial_3d` | experimental legacy-only | no FigureRequestV1 target; the pre-1.0 WebGL surface is not silently aliased |
 | `corpus.knowledge_graph` | experimental legacy-only | no FigureRequestV1 target; the packaged `cortexel/react/knowledge-graph` export remains a legacy surface |
 | `nest.animation_replay` | experimental legacy-only | no FigureRequestV1 target or deterministic renderer |

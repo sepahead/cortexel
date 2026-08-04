@@ -186,7 +186,7 @@ if your agent also owns the render surface.
 ## The mental model
 
 ```
-your data → routeToScene → Cortexel scene → buildVizSpec → validated VizSpec
+classified data → routeToScene → legacy scene candidate → buildVizSpec → validated VizSpec
                               └ host route → buildHostRendererInvocation → validated host envelope
                                                         ↓
                                               render + returned honesty caption
@@ -210,7 +210,7 @@ your data → routeToScene → Cortexel scene → buildVizSpec → validated Viz
 
 An autonomous agent runs four steps. Steps 2–3 form a self-repair cycle.
 
-### 1. Discover — what can I render, and which skill fits my data?
+### 1. Discover — which legacy skill/scene candidate fits my classified data?
 
 ```ts
 import { describeSkills, routeToScene } from 'cortexel/core';
@@ -218,12 +218,18 @@ import { describeSkills, routeToScene } from 'cortexel/core';
 // Full catalog: scene, required params (as JSON Schema), provenance keys, example.
 const skills = describeSkills(); // SkillDescriptor[]
 
-// Or route from a NEST device family straight to a skill/scene:
+// Or select a legacy skill/scene candidate from caller-classified metadata:
 routeToScene({ deviceFamily: 'spike_recorder', dataShape: { kind: 'events' } });
 // → { ok: true, skill: 'nest.spike_raster', scene: 'spike-raster' }
 ```
 
-`routeToScene` is fail-closed: an unknown family, a scene-less skill, or an
+`routeToScene` is a registry candidate selector, not a raw-data adapter or render
+authority. It does not inspect a device dictionary, validate params/provenance,
+authenticate a producing simulation, establish a connection identity, or imply stable
+`implementationAvailability`. The legacy descriptor field `renderable` means only that
+a Cortexel scene exists for already-authored checked params. Stable executable support
+comes exclusively from `source catalog`; invocation authority comes only from the
+strict gate. Candidate selection is fail-closed for an unknown family, a scene-less skill, or an
 **ambiguous** family (e.g. `spike_recorder` → raster / population-rate / F-I /
 ISI / PSTH) comes
 back with `ok: false` and the exact field + value→skill map you need to retry in
@@ -646,7 +652,7 @@ JSON Schema per skill); the table is a quick reference.
 | `nest.weight_histogram` | get_connections | weight-histogram | `bin_centers, weight_counts, values, bin_width, window_start, window_stop, weight_units, normalization, value_units, aggregation, binning, sample_policy, connection_count, snapshot_time_ms, snapshot_scope` | source_ids, target_ids, synapse_model, weight_units, connection_sample_policy, histogram_normalization, snapshot_time_ms, snapshot_scope, parallel_edge_policy |
 | `nest.spatial_map_2d` | get_position | spatial-map-2d | `nodes, coordinate_units, extent, center, edge_wrap, position_scope, marker_size` | node_ids, spatial_units, extent, position_scope |
 | `nest.spatial_3d` | get_position | network-topology | `objects, coordinate_units` | extent, spatial_units, projection_sample_policy |
-| `nest.plasticity_dynamics` | weight_recorder | stdp | `times_ms, weights, weight_units` | synapse_model, weight_units |
+| `nest.plasticity_dynamics` ⚠ | weight_recorder | stdp | `times_ms, weights, weight_units` | synapse_model, weight_units |
 | `nest.phase_plane` | computed | phase-plane | `grid, derivatives, axis_units, derivative_units, derivative_time_unit, axis_order, flattening` | state_variables, derivation_method, model_context, fixed_parameters |
 | `nest.correlogram` | correlation_detector | correlogram | `lags_ms, values, bin_width_ms, tau_max_ms, counting_start_ms, counting_stop_ms, pair, lag_convention, binning, zero_lag_policy, statistic` | detector_id, reference_population, target_population, bin_ms, correlation_normalization, correlation_units, lag_convention, binning_policy |
 | `nest.astrocyte_dynamics` ⚠ | multimeter | voltage-trace | `times_ms, ca_trace, units` | recorded_variable, units, time_units, sampling_interval |
@@ -657,6 +663,10 @@ JSON Schema per skill); the table is a quick reference.
 | `nest.animation_replay` | computed | — *(manim)* | `frames` | frame_rate |
 
 ⚠ = weak (carries a mandatory derived-view disclosure).
+
+The `weight_recorder` row is legacy routing/schema metadata only. It is not a stable
+source mapping, and the sole legacy scene candidate does not make a raw recorder dump
+an identified synaptic-weight trace.
 
 `corpus.knowledge_graph` is an evidence-shaped advisory multigraph in a
 caller-declared snapshot namespace, not a bare topology list. Every node has
@@ -836,15 +846,14 @@ if (verification && !verification.valid) {
 
 Available: `spikeRecorderToSceneData`, `multimeterToSceneData`,
 `splitMultimeterBySender`, `getConnectionsToSceneData`, `getPositionToSceneData`,
-`weightRecorderToSceneData`, `splitWeightRecorderBySynapse`, and
+`splitWeightRecorderByRecordedTuple`, and
 `detectEmptyScene` (the no-throw valid/empty/invalid guard). Adapter fan-out,
 network-object, and split-series budgets reject pathological object amplification.
 `getPositionToSceneData` requires `{ coordinateUnits }` (plus optional `dims`) and
 preserves it as `networkCoordinateUnits`; never guess spatial units. For example:
 `getPositionToSceneData(raw, { dims: 3, coordinateUnits: 'µm' })`.
-A single-series adapter never
-guesses an unlabeled analog variable is voltage or merges multiple synapses.
-`weightRecorderToSceneData` requires `weightUnits`; `getConnectionsToSceneData`
+A single-series adapter never guesses an unlabeled analog variable is voltage.
+`getConnectionsToSceneData`
 retains its model-free, options-free endpoint-only path. If a `weights` or
 `delays` property is present (including an empty measurement array), it instead
 requires a complete parallel `synapse_models` channel plus one exact
@@ -864,6 +873,46 @@ its semantics explicitly and remains responsible for that truth claim.
 GetConnections data remains explicitly `unpositioned` and never receives invented
 ring coordinates or weights.
 Pass `node_ids` with GetPosition data when it must join global connection ids.
+
+For caller-verified NEST 3.10 `record_to: 'memory'`, `time_in_steps: false`
+`weight_recorder` rows, structural inspection is one call:
+
+```ts
+import { splitWeightRecorderByRecordedTuple } from 'cortexel/core';
+
+const status = await acquireCallerOwnedWeightRecorderStatus();
+if (status.record_to !== 'memory' || status.time_in_steps !== false) {
+  throw new Error('unsupported weight_recorder time/backend profile');
+}
+// Pass the complete events object. Do not project selected fields: the strict
+// boundary must see and reject an `offsets` channel or any other shape drift.
+const partition = splitWeightRecorderByRecordedTuple(status.events);
+```
+
+All six parallel arrays are required. Accepted time/weight values must be finite
+binary64 numbers, and tuple values must be exactly representable non-negative safe
+integers; unsupported values fail rather than narrow. The helper returns a deeply
+frozen detached snapshot preserving every accepted source ordinal/value, duplicate or
+nonchronological row, and first-seen group order. An exact six-channel empty capture
+returns `groups: []`; that establishes zero captured rows only, not an empty network or
+the absence of events outside the declared recorder scope. SharedArrayBuffer-backed
+typed arrays are rejected because a concurrent writer could make a sequential copy
+incoherent, and detached typed arrays are rejected rather than reclassified as empty;
+ordinary arrays/typed arrays must still be quiescent during the synchronous call. It
+groups only by equality
+of the recorded
+`(sender,target,port,receptor)` tuple. That tuple is recorder-local structural metadata,
+not an authenticated connection id: it does not establish completeness, continuity,
+the producing run/model/port namespace, topology lifetime, update convention, or export
+custody.
+
+`time_in_steps: true` memory output carries a separate `offsets` time component and is
+unsupported here; the strict input rejects it instead of silently discarding precision.
+The status check remains a caller assertion, not runtime authentication. The retired
+names `splitWeightRecorderBySynapse` and `weightRecorderToSceneData` remain as
+fail-closed tombstones that always return `ok: false` with migration guidance; they
+never silently reinterpret old pair-only input. No stable
+`nest-weight-recorder` source adapter exists in this revision.
 
 For deterministic derived analyses, use `spikeRecorderToIsiParams`,
 `spikeTrialsToPsthParams`, `spikeRecorderToPopulationRateParams`, and

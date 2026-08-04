@@ -172,7 +172,10 @@ is the part callers most often assume they are getting and are not.
 - **Does not establish:** that a concentration trace *is* a membrane voltage, that two
   different-dimension signals belong on one axis, or that the recorded variable is
   biologically meaningful. A compartment trace is not a morphology; a synaptic-weight
-  trace is not a plasticity-rule proof.
+  trace is not a plasticity-rule proof. Stable validation checks the structure and
+  uniqueness of caller-declared series identity; it does not authenticate that identity
+  against NEST. A recorder-local `(sender,target,port,receptor)` tuple is neither an
+  executable stable adapter nor a self-authenticating connection id.
 
 ### 4.2 Spike-event timing & rate — `neuro.spike_raster`, `neuro.population_rate`, `neuro.psth`, `neuro.isi_distribution`, `neuro.correlogram`
 
