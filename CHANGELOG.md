@@ -6,6 +6,20 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — deterministic stable-figure layout
+
+- Stable SVG legends now use deterministic, host-font-independent wrapping,
+  retain two columns only when every exact label fits, and reserve a protected
+  legend band. Long scientific qualifiers no longer overprint adjacent legend
+  entries, axes, or data at the default output size.
+- Shortened repeated compartment, PSTH, and response-curve axis labels and
+  matrix legend keys to their quantitative meaning while retaining complete
+  pooling, exposure, event-scope, missing-state, aggregation, and
+  rate-normalization qualifiers in the accessible summary, contract table,
+  derivation receipt, and mandatory disclosures. This keeps titles, legends,
+  axes, and disclosures independently legible without weakening the scientific
+  record.
+
 ### Fixed — browser-safe legacy Engram capture boundary
 
 - Exported `canonicalDigest`, `getBudgetLimits`, and `snapshotValue` from the

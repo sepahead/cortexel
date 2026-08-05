@@ -110,6 +110,18 @@ describe('trace render completeness', () => {
       (row) => row[column(opaqueResult, 'displayValue')],
     )).toEqual([1, 2, 3, 4]);
   });
+
+  it('keeps repeated compartment axes concise while retaining panel identities', () => {
+    const result = buildFigure(contract('neuro.compartment_trace').examples.valid[0]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.plan.panels.length).toBeGreaterThan(1);
+    for (const panel of result.plan.panels) {
+      expect(panel.axes.find((axis) => axis.orientation === 'left')?.label).toBe('value (mV)');
+      expect(panel.label).toBeTruthy();
+    }
+  });
 });
 
 describe('trace duplicate-time authority', () => {

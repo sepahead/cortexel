@@ -274,15 +274,6 @@ function responseRateAuthorityText(authority: Extract<RateAuthorityResult, { ok:
   return `mean_rate_per_recorded_sender (pooled total divided by ${recordedSenderCount} recorded sender${recordedSenderCount === 1 ? '' : 's'})`;
 }
 
-function responseRateAxisQualifier(authority: Extract<RateAuthorityResult, { ok: true }>): string {
-  if (authority.normalization === 'single_train_rate') return 'single train';
-  const recordedSenderCount = authority.eventScope.recordedSenderCount as number;
-  if (authority.normalization === 'total_event_rate') {
-    return `pooled total, ${recordedSenderCount} sender${recordedSenderCount === 1 ? '' : 's'}`;
-  }
-  return `mean per sender, ${recordedSenderCount} sender${recordedSenderCount === 1 ? '' : 's'}`;
-}
-
 function responseEventMembershipText(
   authority: ResponseEventScopeAuthority,
 ): string {
@@ -300,26 +291,6 @@ function responseEventMembershipText(
     return `canonical_sender_ids_digest (${String(binding?.canonicalization)}; ${String(binding?.digest)}; preimage unavailable)`;
   }
   return 'cardinality_only (member identities not bound)';
-}
-
-function responseEventAxisQualifier(
-  method: string,
-  authority: ResponseEventScopeAuthority,
-): string {
-  const selection = `declared selection ${authority.selectionId}`;
-  if (authority.kind === 'single_train') {
-    if (method === 'first_spike_latency') return `${selection}; first event in one selected train`;
-    if (method === 'event_count') return `${selection}; count in one selected train`;
-    return `${selection}; one selected event train`;
-  }
-  const count = authority.recordedSenderCount as number;
-  if (method === 'first_spike_latency') {
-    return `${selection}; minimum first-event latency over pooled union of ${count} declared sender trains`;
-  }
-  if (method === 'event_count') {
-    return `${selection}; pooled total count over ${count} declared sender trains`;
-  }
-  return `${selection}; pooled union of ${count} declared sender trains`;
 }
 
 function responseEventScopeText(
@@ -6472,8 +6443,10 @@ function compile(
       uncertaintyUpper: entry.uncertaintyUpper,
       uncertainty: entry.uncertainty,
     });
-    const valueKind = String(firstValues.kind);
-    const yLabel = `${valueKind.replaceAll('_', ' ')} (${unitLabel(targetValueUnit)})`;
+    // Each small-multiple panel already names the compartment and signal. Keep
+    // the repeated quantitative axis concise so three vertical copies remain
+    // legible instead of overprinting one another in the bounded SVG viewport.
+    const yLabel = `value (${unitLabel(targetValueUnit)})`;
     const layout = String(parameters.layout);
     let plan: RenderPlanV1;
     const tableRows = compartmentTraceTableRows(data, entries);
@@ -9733,8 +9706,8 @@ function compile(
             ? { numericScale: parameters.multiplicityScale === 'log' ? 'log' as const : 'linear' as const }
             : {}),
           valueLabel: cellMode === 'binary_presence'
-            ? 'Foreground cell means at least one retained connection row'
-            : 'Foreground colour encodes exact complete-cell connection multiplicity',
+            ? 'Connection present'
+            : 'Connection multiplicity',
           summary,
         }, skillId), compileContext, skillId, tableRows), [operation], derivedFacts);
       }
@@ -9875,7 +9848,7 @@ function compile(
           colorScale: colorScale.class === 'diverging'
             ? { class: 'diverging', center: Number(colorScale.center) }
             : { class: 'sequential' },
-          valueLabel: `Foreground colour encodes complete ${aggregation} weight aggregate (${unitLabel(weightUnit)})`,
+          valueLabel: `${aggregation} weight (${unitLabel(weightUnit)})`,
           summary,
         }, skillId), compileContext, skillId, tableRows), [operation], derivedFacts);
       }
@@ -9999,7 +9972,7 @@ function compile(
         observedRows,
         valueSemantics: 'delay',
         numericScale: parameters.scale === 'log' ? 'log' : 'linear',
-        valueLabel: `Foreground colour encodes complete ${delayAggregation} delay aggregate (${unitLabel(displayUnit)})`,
+        valueLabel: `${delayAggregation} delay (${unitLabel(displayUnit)})`,
         summary,
       }, skillId), compileContext, skillId, tableRows), [operation], derivedFacts);
     } catch (error) {
@@ -11083,14 +11056,12 @@ function compile(
     const rateAuthorityText = verifiedRateAuthority
       ? responseRateAuthorityText(verifiedRateAuthority)
       : null;
-    const rateAxisQualifier = verifiedRateAuthority
-      ? responseRateAxisQualifier(verifiedRateAuthority)
-      : null;
-    const eventAxisQualifier = responseEventAxisQualifier(responseMethod, eventScopeAuthority);
-    const qualifiedResponseLabel = `${responseLabel} [${eventAxisQualifier}${rateAxisQualifier ? `; ${rateAxisQualifier}` : ''}]`;
+    // The complete pooling/event/rate qualifier remains in responseBasis, the
+    // summary, derivation receipt, and contract table. Repeating it as one
+    // rotated axis label made the title and mandatory footer unreadable.
     const yLabel = responseUnitLabel
-      ? `${qualifiedResponseLabel} (${responseUnitLabel})`
-      : qualifiedResponseLabel;
+      ? `${responseLabel} (${responseUnitLabel})`
+      : responseLabel;
     const curveLabel = (parameters.curveLabel as string) ?? (parameters.curveId as string) ?? responseLabel;
     const window = rec(data.measurementWindow) ?? {};
     const windowBoundary = (window.boundary as string) ?? '[start,stop)';

@@ -39,7 +39,7 @@ import {
   LEGEND_ROW_HEIGHT,
   disclosureLineCount,
   disclosureRenderedTextLength,
-  legendColumnCount,
+  legendTextLayout,
   legendStartY,
   wrapDisclosureText,
 } from './layout.js';
@@ -626,7 +626,12 @@ export function countPlanResources(plan: RenderPlanV1): {
     markCount += counts.marks;
     textCount += counts.texts;
   }
-  textCount += plan.legend?.length ?? 0;
+  if (plan.legend && plan.legend.length > 0) {
+    textCount += legendTextLayout(
+      plan.width,
+      plan.legend.map((item) => item.label),
+    ).items.reduce((count, item) => count + item.lines.length, 0);
+  }
 
   return { markCount, textCount };
 }
@@ -823,16 +828,19 @@ function emitFigureTree(
 
   if (plan.legend && plan.legend.length > 0) {
     const startY = legendStartY(plan.subtitle !== undefined);
-    const columns = legendColumnCount(plan.width, plan.legend.length);
-    const itemWidth = (plan.width - 48) / columns;
+    const legendLayout = legendTextLayout(
+      plan.width,
+      plan.legend.map((item) => item.label),
+    );
+    const { columns, itemWidth } = legendLayout;
     writer.open('g', [['data-legend', 'true'], ['aria-hidden', 'true']]);
     for (let index = 0; index < plan.legend.length; index++) {
       const item = plan.legend[index];
       const outlineColor = item.outlineColor ?? item.color;
       const column = index % columns;
-      const row = Math.floor(index / columns);
       const x = 24 + column * itemWidth;
-      const y = startY + row * LEGEND_ROW_HEIGHT;
+      const itemLayout = legendLayout.items[index];
+      const y = startY + itemLayout.yOffset;
       const glyph = item.glyph ?? 'series';
       if (glyph === 'band') {
         writer.leaf('rect', [
@@ -877,16 +885,18 @@ function emitFigureTree(
           ]);
         }
       }
-      emitText(writer, {
-        type: 'text',
-        x: x + 32,
-        y,
-        text: item.label,
-        anchor: 'start',
-        fontSize: 10,
-        fill: colors.text,
-        decorative: true,
-      });
+      for (let lineIndex = 0; lineIndex < itemLayout.lines.length; lineIndex += 1) {
+        emitText(writer, {
+          type: 'text',
+          x: x + 32,
+          y: y + lineIndex * LEGEND_ROW_HEIGHT,
+          text: itemLayout.lines[lineIndex],
+          anchor: 'start',
+          fontSize: 10,
+          fill: colors.text,
+          decorative: true,
+        });
+      }
     }
     writer.close('g');
   }

@@ -311,6 +311,8 @@ describe('PSTH exact exposure, baseline, and missing-bin rendering', () => {
         glyph: 'rule',
       }),
     ]));
+    expect(result.plan.panels[0].axes.find((axis) => axis.orientation === 'left')?.label)
+      .toBe('group event rate (Hz) minus baseline');
     expect(panelSummary(result)).toContain(
       '1 bin has no covering trial and remains a missing gap, not a measured zero.',
     );

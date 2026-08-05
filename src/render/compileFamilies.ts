@@ -629,11 +629,19 @@ export function compileTraceFigure(
   }
   const legendEntries = [...legendById.values()].filter((entry) => entry.includeInLegend !== false);
   const uncertaintyLegendEntries = legendEntries.filter((entry) => entry.uncertainty !== undefined);
+  const legendLabels = [
+    ...legendEntries.map((entry) => entry.series.label || entry.series.id),
+    ...uncertaintyLegendEntries.map(
+      (entry) => `${entry.series.label || entry.series.id}: ${entry.uncertainty!.label}`,
+    ),
+    ...panels.flatMap((panel) => (panel.referenceLines ?? []).map((reference) => reference.label)),
+  ];
   const base = panelBox(context);
   const legendInset = legendPlotInset(
     context.width,
-    legendEntries.length + uncertaintyLegendEntries.length,
+    legendLabels.length,
     context.subtitle !== undefined,
+    legendLabels,
   );
   const panelGap = panels.length > 1 ? (options.sharedXAxis ? 22 : 50) : 0;
   const availableHeight = base.height - legendInset - panelGap * Math.max(0, panels.length - 1);
@@ -1091,7 +1099,22 @@ export function compilePsthFigure(
   },
   skillId: string,
 ): RenderPlanV1 {
-  const box = panelBox(context);
+  const baseBox = panelBox(context);
+  const legendLabels = [
+    options.seriesLabel,
+    ...(psth.missingBinCount > 0 ? ['No included trial covered this bin'] : []),
+  ];
+  const legendInset = legendPlotInset(
+    context.width,
+    legendLabels.length,
+    context.subtitle !== undefined,
+    legendLabels,
+  );
+  const box = {
+    ...baseBox,
+    y: baseBox.y + legendInset,
+    height: baseBox.height - legendInset,
+  };
   const rowsTotal = psth.counts.length;
   const rows = Array.from({ length: rowsTotal }, (_unused, index) => [
     options.seriesId,
@@ -1150,10 +1173,10 @@ export function compilePsthFigure(
   const normalizationLabel = options.normalization === 'count'
     ? 'event count'
     : options.normalization === 'count_per_trial'
-      ? 'events / covering trial'
+      ? 'events per trial'
       : options.normalization === 'total_event_rate_per_trial'
-        ? `selected-group event rate / covering trial (${psth.valueUnit})`
-        : `mean event rate / selected sender / covering trial (${psth.valueUnit})`;
+        ? `group event rate (${psth.valueUnit})`
+        : `mean event rate (${psth.valueUnit})`;
   const yLabel = psth.baselineRate === null
     ? normalizationLabel
     : `${normalizationLabel} minus baseline`;
@@ -1723,7 +1746,7 @@ export function compileMatrixFigure(
     },
     ...(spec.observedRows.some(Boolean)
       ? [{
-        label: 'Observed empty cell: measured absence inside a complete target row; it is not a measured numeric zero',
+        label: 'Observed empty (measured absence, not zero)',
         color: gridColor(context.themeId),
         outlineColor: uncertaintyStroke(context.themeId),
         glyph: 'band' as const,
@@ -1731,7 +1754,7 @@ export function compileMatrixFigure(
       : []),
     ...(spec.observedRows.some((observed) => !observed)
       ? [{
-        label: 'not_observed: this scope cannot establish presence or absence for the target row',
+        label: 'Not observed (presence and absence unknown)',
         color: withOpacity(missingColor(context.themeId), 0.24),
         outlineColor: missingColor(context.themeId),
         glyph: 'band' as const,
@@ -1739,7 +1762,7 @@ export function compileMatrixFigure(
       : []),
     ...(missingPartial.length > 0
       ? [{
-        label: 'Connection present, but at least one contributing weight is missing; no partial aggregate is painted',
+        label: 'Present; incomplete values (not aggregated)',
         color: withOpacity(missingColor(context.themeId), 0.58),
         outlineColor: accent(context.themeId),
         glyph: 'band' as const,
@@ -1747,14 +1770,19 @@ export function compileMatrixFigure(
       : []),
     ...(missingAll.length > 0
       ? [{
-        label: 'Connection present with no measured contributing weight; missing is not zero',
+        label: 'Present; values unmeasured (not zero)',
         color: missingColor(context.themeId),
         outlineColor: uncertaintyStroke(context.themeId),
         glyph: 'band' as const,
       }]
       : []),
   ];
-  const legendInset = legendPlotInset(context.width, legend.length, context.subtitle !== undefined);
+  const legendInset = legendPlotInset(
+    context.width,
+    legend.length,
+    context.subtitle !== undefined,
+    legend.map((entry) => entry.label),
+  );
   const box = {
     ...baseBox,
     y: baseBox.y + legendInset,
@@ -2083,18 +2111,10 @@ export function compileSpatialMapFigure(
   spec: SpatialMapFigureSpec,
   skillId: string,
 ): RenderPlanV1 {
-  const box = panelBox(context);
+  const baseBox = panelBox(context);
   if (spec.nodes.length === 0) {
-    return { ...frame(context, skillId), panels: [emptyPanel(box, 'no positioned nodes')], table: emptyTable(), legend: [] };
+    return { ...frame(context, skillId), panels: [emptyPanel(baseBox, 'no positioned nodes')], table: emptyTable(), legend: [] };
   }
-  const mapper = equalScaleMapper(
-    box,
-    spec.nodes.map((node) => node.x),
-    spec.nodes.map((node) => node.y),
-    spec.domain,
-  );
-  const pageById = new Map(spec.nodes.map((node) => [node.id, mapper.map(node.x, node.y)]));
-  const scientificById = new Map(spec.nodes.map((node) => [node.id, { x: node.x, y: node.y }]));
   const nodeOrdinal = new Map(spec.nodes.map((node, index) => [node.id, index]));
   const canonicalPair = (source: string, target: string): readonly [string, string] =>
     nodeOrdinal.get(source)! <= nodeOrdinal.get(target)!
@@ -2120,6 +2140,52 @@ export function compileSpatialMapFigure(
   const pairMagnitudeExtent = finiteExtent(finitePairValues.map((entry) => Math.abs(entry)));
   const nodeValues = spec.nodes.flatMap((node) => typeof node.value === 'number' ? [node.value] : []);
   const nodeValueExtent = finiteExtent(nodeValues);
+  const legend = [
+    ...(spec.nodeEncoding === 'group'
+      ? [...new Map(spec.nodes.map((node) => [node.groupIndex ?? -1, node])).values()].map((node) => {
+        const style = categoricalStyle(node.groupIndex ?? 0);
+        return {
+          label: node.group ?? 'ungrouped',
+          color: style.color,
+          glyph: 'series' as const,
+          marker: style.marker,
+        };
+      })
+      : []),
+    ...(spec.nodeEncoding === 'value'
+      ? [{
+        label: `Node colour encodes the declared value over ${nodeValueExtent ? `${formatNumber(nodeValueExtent.min)} to ${formatNumber(nodeValueExtent.max)}` : 'no finite range'}${spec.nodeValueScale?.transform === 'symlog' ? ` using symlog with linear threshold ${formatNumber(spec.nodeValueScale.linearThreshold!)}` : ' linearly'}; missing values use the reserved colour`,
+        color: accent(context.themeId),
+        glyph: 'series' as const,
+      }]
+      : []),
+    ...(spec.connectionEncoding
+      ? [{
+        label: `Connection ${spec.connectionEncoding.channel} encodes the declared pair aggregate${spec.connectionEncoding.channel === 'width' || spec.connectionEncoding.channel === 'width_and_color' ? '; the observed |value| range maps to 1 to 5 px' : ''}${pairExtent ? ` (signed range ${formatNumber(pairExtent.min)} to ${formatNumber(pairExtent.max)})` : ''}${spec.multapseAggregation ? `; multapses use ${spec.multapseAggregation}` : ''}`,
+        color: accent(context.themeId),
+        glyph: 'series' as const,
+      }]
+      : []),
+  ];
+  const legendInset = legendPlotInset(
+    context.width,
+    legend.length,
+    context.subtitle !== undefined,
+    legend.map((entry) => entry.label),
+  );
+  const box = {
+    ...baseBox,
+    y: baseBox.y + legendInset,
+    height: baseBox.height - legendInset,
+  };
+  const mapper = equalScaleMapper(
+    box,
+    spec.nodes.map((node) => node.x),
+    spec.nodes.map((node) => node.y),
+    spec.domain,
+  );
+  const pageById = new Map(spec.nodes.map((node) => [node.id, mapper.map(node.x, node.y)]));
+  const scientificById = new Map(spec.nodes.map((node) => [node.id, { x: node.x, y: node.y }]));
   const nodeTransform = (value: number): number => {
     if (spec.nodeValueScale?.transform !== 'symlog') return value;
     const threshold = spec.nodeValueScale.linearThreshold!;
@@ -2345,33 +2411,7 @@ export function compileSpatialMapFigure(
       marks,
     }],
     table: emptyTable(),
-    legend: [
-      ...(spec.nodeEncoding === 'group'
-        ? [...new Map(spec.nodes.map((node) => [node.groupIndex ?? -1, node])).values()].map((node) => {
-          const style = categoricalStyle(node.groupIndex ?? 0);
-          return {
-            label: node.group ?? 'ungrouped',
-            color: style.color,
-            glyph: 'series' as const,
-            marker: style.marker,
-          };
-        })
-        : []),
-      ...(spec.nodeEncoding === 'value'
-        ? [{
-          label: `Node colour encodes the declared value over ${nodeValueExtent ? `${formatNumber(nodeValueExtent.min)} to ${formatNumber(nodeValueExtent.max)}` : 'no finite range'}${spec.nodeValueScale?.transform === 'symlog' ? ` using symlog with linear threshold ${formatNumber(spec.nodeValueScale.linearThreshold!)}` : ' linearly'}; missing values use the reserved colour`,
-          color: accent(context.themeId),
-          glyph: 'series' as const,
-        }]
-        : []),
-      ...(spec.connectionEncoding
-        ? [{
-          label: `Connection ${spec.connectionEncoding.channel} encodes the declared pair aggregate${spec.connectionEncoding.channel === 'width' || spec.connectionEncoding.channel === 'width_and_color' ? '; the observed |value| range maps to 1 to 5 px' : ''}${pairExtent ? ` (signed range ${formatNumber(pairExtent.min)} to ${formatNumber(pairExtent.max)})` : ''}${spec.multapseAggregation ? `; multapses use ${spec.multapseAggregation}` : ''}`,
-          color: accent(context.themeId),
-          glyph: 'series' as const,
-        }]
-        : []),
-    ],
+    legend,
   };
 }
 
@@ -3085,7 +3125,32 @@ export function compilePhasePlaneFigure(
   spec: PhasePlaneFigureSpec,
   skillId: string,
 ): RenderPlanV1 {
-  const box = panelBox(context);
+  const baseBox = panelBox(context);
+  const provisionalLegendLabels = [
+    ...(spec.vectorField
+      ? ['Caller-supplied vector field with declared magnitude scaling and direction']
+      : []),
+    ...(spec.nullclines?.ids ?? []).map(
+      (id, index) => spec.nullclines?.labels[index] ?? id,
+    ),
+    ...(spec.trajectories?.ids ?? []).map(
+      (id, index) => spec.trajectories?.labels[index] ?? id,
+    ),
+    ...(spec.fixedPoints?.ids ?? []).map(
+      (id, index) => `${spec.fixedPoints?.labels[index] ?? id} (convergence status)`,
+    ),
+  ];
+  const legendInset = legendPlotInset(
+    context.width,
+    provisionalLegendLabels.length,
+    context.subtitle !== undefined,
+    provisionalLegendLabels,
+  );
+  const box = {
+    ...baseBox,
+    y: baseBox.y + legendInset,
+    height: baseBox.height - legendInset,
+  };
   const xs = [
     ...(spec.trajectories?.xs ?? []),
     ...(spec.vectorField?.xs ?? []),
@@ -3489,10 +3554,33 @@ export function compileGraphFigure(
   spec: ConnectionGraphFigureSpec,
   skillId: string,
 ): RenderPlanV1 {
-  const box = panelBox(context);
+  const baseBox = panelBox(context);
   if (spec.nodes.length === 0) {
-    return { ...frame(context, skillId), panels: [emptyPanel(box, 'empty node universe')], table: emptyTable(), legend: [] };
+    return { ...frame(context, skillId), panels: [emptyPanel(baseBox, 'empty node universe')], table: emptyTable(), legend: [] };
   }
+  const provisionalLegendLabels = [
+    ...(spec.nodeColorByGroup
+      ? [...new Map(spec.nodes.map((node) => [node.groupIndex ?? -1, node])).values()]
+        .map((node) => node.group ?? 'ungrouped')
+      : []),
+    ...(spec.edgeEncoding
+      ? [`Edge ${spec.edgeEncoding.channel} encodes the declared value and its complete scale authority`]
+      : []),
+    ...(spec.encodeDegreeAsArea
+      ? ['Node marker area above the visibility baseline is proportional to declared degree']
+      : []),
+  ];
+  const legendInset = legendPlotInset(
+    context.width,
+    provisionalLegendLabels.length,
+    context.subtitle !== undefined,
+    provisionalLegendLabels,
+  );
+  const box = {
+    ...baseBox,
+    y: baseBox.y + legendInset,
+    height: baseBox.height - legendInset,
+  };
   const position = new Map<string, { x: number; y: number }>();
   let measuredMapper: ReturnType<typeof equalScaleMapper> | undefined;
   if (spec.layout === 'measured_positions') {

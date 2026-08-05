@@ -14,6 +14,27 @@ export const DISCLOSURE_PLOT_GAP = 10;
 // `textLength`; this advance is a deterministic wrapping unit, not a font measurement.
 const DISCLOSURE_GLYPH_ADVANCE = 6;
 
+function wrapTextToCapacity(text: string, capacity: number): readonly string[] {
+  if (text.length === 0) return [''];
+  const codePoints = Array.from(text);
+  const lines: string[] = [];
+  let start = 0;
+  while (start < codePoints.length) {
+    let end = Math.min(codePoints.length, start + capacity);
+    if (end < codePoints.length) {
+      for (let index = end - 1; index > start; index--) {
+        if (/\s/u.test(codePoints[index])) {
+          end = index;
+          break;
+        }
+      }
+    }
+    lines.push(codePoints.slice(start, end).join(''));
+    start = end;
+  }
+  return lines;
+}
+
 interface DisclosureText {
   readonly text: string;
 }
@@ -30,31 +51,11 @@ export function disclosureAvailableWidth(width: number): number {
  * while an overlong token is split rather than allowed to leave the SVG viewport.
  */
 export function wrapDisclosureText(text: string, width: number): readonly string[] {
-  if (text.length === 0) return [''];
-  const codePoints = Array.from(text);
   const capacity = Math.max(
     1,
     Math.floor(disclosureAvailableWidth(width) / DISCLOSURE_GLYPH_ADVANCE),
   );
-  const lines: string[] = [];
-  let start = 0;
-  while (start < codePoints.length) {
-    let end = Math.min(codePoints.length, start + capacity);
-    if (end < codePoints.length) {
-      for (let index = end - 1; index > start; index--) {
-        if (/\s/u.test(codePoints[index])) {
-          // Keep the whitespace as the first code point of the following substring.
-          // SVG collapses it visually at the line boundary, while DOM textContent and
-          // deterministic extraction still reconstruct the registry text exactly.
-          end = index;
-          break;
-        }
-      }
-    }
-    lines.push(codePoints.slice(start, end).join(''));
-    start = end;
-  }
-  return lines;
+  return wrapTextToCapacity(text, capacity);
 }
 
 export function disclosureRenderedTextLength(text: string, width: number): number {
@@ -85,15 +86,73 @@ export function legendStartY(hasSubtitle: boolean): number {
   return hasSubtitle ? 64 : 48;
 }
 
-export function legendColumnCount(width: number, itemCount: number): number {
+export function legendColumnCount(
+  width: number,
+  itemCount: number,
+  labels: readonly string[] = [],
+): number {
   if (itemCount <= 0) return 0;
-  return Math.min(itemCount, width >= 640 ? 2 : 1);
+  if (width < 640 || itemCount === 1) return 1;
+  // SVG font metrics are host-dependent. Use the same conservative normative
+  // advance as the footer rather than measuring host fonts: two columns are
+  // admitted only when every exact label fits beside its glyph and gutter.
+  const twoColumnTextWidth = (width - 48) / 2 - 40;
+  const labelsFitTwoColumns = labels.length === itemCount && labels.every(
+    (label) => Array.from(label).length * DISCLOSURE_GLYPH_ADVANCE <= twoColumnTextWidth,
+  );
+  return labelsFitTwoColumns ? 2 : 1;
+}
+
+export interface LegendTextLayout {
+  readonly columns: number;
+  readonly itemWidth: number;
+  readonly totalHeight: number;
+  readonly items: readonly {
+    readonly lines: readonly string[];
+    readonly yOffset: number;
+  }[];
+}
+
+/** Deterministic, host-font-independent legend wrapping and row allocation. */
+export function legendTextLayout(
+  width: number,
+  labels: readonly string[],
+): LegendTextLayout {
+  const columns = legendColumnCount(width, labels.length, labels);
+  if (columns === 0) return { columns: 0, itemWidth: 0, totalHeight: 0, items: [] };
+  const itemWidth = (width - 48) / columns;
+  const capacity = Math.max(
+    1,
+    Math.floor((itemWidth - 40) / DISCLOSURE_GLYPH_ADVANCE),
+  );
+  const lines = labels.map((label) => wrapTextToCapacity(label, capacity));
+  const items: { lines: readonly string[]; yOffset: number }[] = [];
+  let yOffset = 0;
+  for (let row = 0; row < Math.ceil(labels.length / columns); row += 1) {
+    let rowLines = 1;
+    for (let column = 0; column < columns; column += 1) {
+      const index = row * columns + column;
+      if (index < lines.length) rowLines = Math.max(rowLines, lines[index].length);
+    }
+    for (let column = 0; column < columns; column += 1) {
+      const index = row * columns + column;
+      if (index < lines.length) items[index] = { lines: lines[index], yOffset };
+    }
+    yOffset += rowLines * LEGEND_ROW_HEIGHT;
+  }
+  return { columns, itemWidth, totalHeight: yOffset, items };
 }
 
 /** Vertical plot inset needed for a one-row-per-series legend above the panels. */
-export function legendPlotInset(width: number, itemCount: number, hasSubtitle: boolean): number {
+export function legendPlotInset(
+  width: number,
+  itemCount: number,
+  hasSubtitle: boolean,
+  labels: readonly string[] = [],
+): number {
   if (itemCount <= 0) return 0;
-  const columns = legendColumnCount(width, itemCount);
-  const rows = Math.ceil(itemCount / columns);
-  return (hasSubtitle ? 16 : 0) + rows * LEGEND_ROW_HEIGHT;
+  const effectiveLabels = labels.length === itemCount
+    ? labels
+    : Array.from({ length: itemCount }, () => '');
+  return (hasSubtitle ? 16 : 0) + legendTextLayout(width, effectiveLabels).totalHeight;
 }

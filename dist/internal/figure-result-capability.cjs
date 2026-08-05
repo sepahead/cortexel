@@ -2032,20 +2032,9 @@ const LEGEND_ROW_HEIGHT = 18;
 const DISCLOSURE_LINE_HEIGHT = 14;
 const DISCLOSURE_PLOT_GAP = 10;
 const DISCLOSURE_GLYPH_ADVANCE = 6;
-function disclosureAvailableWidth(width) {
-	return Math.max(1, width - 48);
-}
-/**
-* Split one disclosure into exact, concatenable substrings.
-*
-* The result never inserts, removes, or rewrites a code point: joining every line with
-* the empty string recovers `text` byte-for-byte. A whitespace boundary is preferred,
-* while an overlong token is split rather than allowed to leave the SVG viewport.
-*/
-function wrapDisclosureText(text, width) {
+function wrapTextToCapacity(text, capacity) {
 	if (text.length === 0) return [""];
 	const codePoints = Array.from(text);
-	const capacity = Math.max(1, Math.floor(disclosureAvailableWidth(width) / DISCLOSURE_GLYPH_ADVANCE));
 	const lines = [];
 	let start = 0;
 	while (start < codePoints.length) {
@@ -2060,6 +2049,19 @@ function wrapDisclosureText(text, width) {
 		start = end;
 	}
 	return lines;
+}
+function disclosureAvailableWidth(width) {
+	return Math.max(1, width - 48);
+}
+/**
+* Split one disclosure into exact, concatenable substrings.
+*
+* The result never inserts, removes, or rewrites a code point: joining every line with
+* the empty string recovers `text` byte-for-byte. A whitespace boundary is preferred,
+* while an overlong token is split rather than allowed to leave the SVG viewport.
+*/
+function wrapDisclosureText(text, width) {
+	return wrapTextToCapacity(text, Math.max(1, Math.floor(disclosureAvailableWidth(width) / DISCLOSURE_GLYPH_ADVANCE)));
 }
 function disclosureRenderedTextLength(text, width) {
 	return Math.min(disclosureAvailableWidth(width), Math.max(1, Array.from(text).length * DISCLOSURE_GLYPH_ADVANCE));
@@ -2076,16 +2078,53 @@ function disclosureFooterHeight(width, disclosures) {
 function legendStartY(hasSubtitle) {
 	return hasSubtitle ? 64 : 48;
 }
-function legendColumnCount(width, itemCount) {
+function legendColumnCount(width, itemCount, labels = []) {
 	if (itemCount <= 0) return 0;
-	return Math.min(itemCount, width >= 640 ? 2 : 1);
+	if (width < 640 || itemCount === 1) return 1;
+	const twoColumnTextWidth = (width - 48) / 2 - 40;
+	return labels.length === itemCount && labels.every((label) => Array.from(label).length * DISCLOSURE_GLYPH_ADVANCE <= twoColumnTextWidth) ? 2 : 1;
+}
+/** Deterministic, host-font-independent legend wrapping and row allocation. */
+function legendTextLayout(width, labels) {
+	const columns = legendColumnCount(width, labels.length, labels);
+	if (columns === 0) return {
+		columns: 0,
+		itemWidth: 0,
+		totalHeight: 0,
+		items: []
+	};
+	const itemWidth = (width - 48) / columns;
+	const capacity = Math.max(1, Math.floor((itemWidth - 40) / DISCLOSURE_GLYPH_ADVANCE));
+	const lines = labels.map((label) => wrapTextToCapacity(label, capacity));
+	const items = [];
+	let yOffset = 0;
+	for (let row = 0; row < Math.ceil(labels.length / columns); row += 1) {
+		let rowLines = 1;
+		for (let column = 0; column < columns; column += 1) {
+			const index = row * columns + column;
+			if (index < lines.length) rowLines = Math.max(rowLines, lines[index].length);
+		}
+		for (let column = 0; column < columns; column += 1) {
+			const index = row * columns + column;
+			if (index < lines.length) items[index] = {
+				lines: lines[index],
+				yOffset
+			};
+		}
+		yOffset += rowLines * 18;
+	}
+	return {
+		columns,
+		itemWidth,
+		totalHeight: yOffset,
+		items
+	};
 }
 /** Vertical plot inset needed for a one-row-per-series legend above the panels. */
-function legendPlotInset(width, itemCount, hasSubtitle) {
+function legendPlotInset(width, itemCount, hasSubtitle, labels = []) {
 	if (itemCount <= 0) return 0;
-	const columns = legendColumnCount(width, itemCount);
-	const rows = Math.ceil(itemCount / columns);
-	return (hasSubtitle ? 16 : 0) + rows * 18;
+	const effectiveLabels = labels.length === itemCount ? labels : Array.from({ length: itemCount }, () => "");
+	return (hasSubtitle ? 16 : 0) + legendTextLayout(width, effectiveLabels).totalHeight;
 }
 
 //#endregion
@@ -2686,7 +2725,7 @@ function countPlanResources(plan) {
 		markCount += counts.marks;
 		textCount += counts.texts;
 	}
-	textCount += plan.legend?.length ?? 0;
+	if (plan.legend && plan.legend.length > 0) textCount += legendTextLayout(plan.width, plan.legend.map((item) => item.label)).items.reduce((count, item) => count + item.lines.length, 0);
 	return {
 		markCount,
 		textCount
@@ -2791,16 +2830,15 @@ function emitFigureTree(plan, digestOf, container) {
 	});
 	if (plan.legend && plan.legend.length > 0) {
 		const startY = legendStartY(plan.subtitle !== void 0);
-		const columns = legendColumnCount(plan.width, plan.legend.length);
-		const itemWidth = (plan.width - 48) / columns;
+		const legendLayout = legendTextLayout(plan.width, plan.legend.map((item) => item.label));
+		const { columns, itemWidth } = legendLayout;
 		writer.open("g", [["data-legend", "true"], ["aria-hidden", "true"]]);
 		for (let index = 0; index < plan.legend.length; index++) {
 			const item = plan.legend[index];
 			const outlineColor = item.outlineColor ?? item.color;
-			const column = index % columns;
-			const row = Math.floor(index / columns);
-			const x = 24 + column * itemWidth;
-			const y = startY + row * 18;
+			const x = 24 + index % columns * itemWidth;
+			const itemLayout = legendLayout.items[index];
+			const y = startY + itemLayout.yOffset;
 			const glyph = item.glyph ?? "series";
 			if (glyph === "band") writer.leaf("rect", [
 				["x", x],
@@ -2850,11 +2888,11 @@ function emitFigureTree(plan, digestOf, container) {
 					]);
 				}
 			}
-			emitText(writer, {
+			for (let lineIndex = 0; lineIndex < itemLayout.lines.length; lineIndex += 1) emitText(writer, {
 				type: "text",
 				x: x + 32,
-				y,
-				text: item.label,
+				y: y + lineIndex * 18,
+				text: itemLayout.lines[lineIndex],
 				anchor: "start",
 				fontSize: 10,
 				fill: colors.text,
@@ -3924,8 +3962,13 @@ function compileTraceFigure(context, panels, options, skillId) {
 	for (const entry of allSeries) if (!legendById.has(entry.series.id)) legendById.set(entry.series.id, entry);
 	const legendEntries = [...legendById.values()].filter((entry) => entry.includeInLegend !== false);
 	const uncertaintyLegendEntries = legendEntries.filter((entry) => entry.uncertainty !== void 0);
+	const legendLabels = [
+		...legendEntries.map((entry) => entry.series.label || entry.series.id),
+		...uncertaintyLegendEntries.map((entry) => `${entry.series.label || entry.series.id}: ${entry.uncertainty.label}`),
+		...panels.flatMap((panel) => (panel.referenceLines ?? []).map((reference) => reference.label))
+	];
 	const base = panelBox(context);
-	const legendInset = legendPlotInset(context.width, legendEntries.length + uncertaintyLegendEntries.length, context.subtitle !== void 0);
+	const legendInset = legendPlotInset(context.width, legendLabels.length, context.subtitle !== void 0, legendLabels);
 	const panelGap = panels.length > 1 ? options.sharedXAxis ? 22 : 50 : 0;
 	const availableHeight = base.height - legendInset - panelGap * Math.max(0, panels.length - 1);
 	const panelHeight = panels.length > 0 ? availableHeight / panels.length : availableHeight;
@@ -4372,7 +4415,14 @@ const PSTH_TABLE_COLUMNS = [
 * generic non-negative histogram scale.
 */
 function compilePsthFigure(context, psth, options, skillId) {
-	const box = panelBox(context);
+	const baseBox = panelBox(context);
+	const legendLabels = [options.seriesLabel, ...psth.missingBinCount > 0 ? ["No included trial covered this bin"] : []];
+	const legendInset = legendPlotInset(context.width, legendLabels.length, context.subtitle !== void 0, legendLabels);
+	const box = {
+		...baseBox,
+		y: baseBox.y + legendInset,
+		height: baseBox.height - legendInset
+	};
 	const rowsTotal = psth.counts.length;
 	const rows = Array.from({ length: rowsTotal }, (_unused, index) => [
 		options.seriesId,
@@ -4417,7 +4467,7 @@ function compilePsthFigure(context, psth, options, skillId) {
 	const plottedExtent = finiteExtent(finiteDisplay);
 	const xScale = linearScale(psth.edges[0], psth.edges[psth.edges.length - 1], box.x, box.x + box.width);
 	const xAxisModel = xAxis(`time from ${options.alignmentLabel} (${psth.binUnit})`, xScale);
-	const normalizationLabel = options.normalization === "count" ? "event count" : options.normalization === "count_per_trial" ? "events / covering trial" : options.normalization === "total_event_rate_per_trial" ? `selected-group event rate / covering trial (${psth.valueUnit})` : `mean event rate / selected sender / covering trial (${psth.valueUnit})`;
+	const normalizationLabel = options.normalization === "count" ? "event count" : options.normalization === "count_per_trial" ? "events per trial" : options.normalization === "total_event_rate_per_trial" ? `group event rate (${psth.valueUnit})` : `mean event rate (${psth.valueUnit})`;
 	const yLabel = psth.baselineRate === null ? normalizationLabel : `${normalizationLabel} minus baseline`;
 	const zeroOnDisplayedAxis = psth.edges[0] <= 0 && 0 <= psth.edges[psth.edges.length - 1];
 	const zeroIncludedByMembership = zeroOnDisplayedAxis && (0 < psth.edges[psth.edges.length - 1] || 0 === psth.edges[psth.edges.length - 1] && psth.finalEdgeInclusive);
@@ -4921,31 +4971,31 @@ function compileMatrixFigure(context, spec, skillId) {
 			glyph: "band"
 		},
 		...spec.observedRows.some(Boolean) ? [{
-			label: "Observed empty cell: measured absence inside a complete target row; it is not a measured numeric zero",
+			label: "Observed empty (measured absence, not zero)",
 			color: gridColor(context.themeId),
 			outlineColor: uncertaintyStroke(context.themeId),
 			glyph: "band"
 		}] : [],
 		...spec.observedRows.some((observed) => !observed) ? [{
-			label: "not_observed: this scope cannot establish presence or absence for the target row",
+			label: "Not observed (presence and absence unknown)",
 			color: withOpacity(missingColor(context.themeId), .24),
 			outlineColor: missingColor(context.themeId),
 			glyph: "band"
 		}] : [],
 		...missingPartial.length > 0 ? [{
-			label: "Connection present, but at least one contributing weight is missing; no partial aggregate is painted",
+			label: "Present; incomplete values (not aggregated)",
 			color: withOpacity(missingColor(context.themeId), .58),
 			outlineColor: accent(context.themeId),
 			glyph: "band"
 		}] : [],
 		...missingAll.length > 0 ? [{
-			label: "Connection present with no measured contributing weight; missing is not zero",
+			label: "Present; values unmeasured (not zero)",
 			color: missingColor(context.themeId),
 			outlineColor: uncertaintyStroke(context.themeId),
 			glyph: "band"
 		}] : []
 	];
-	const legendInset = legendPlotInset(context.width, legend.length, context.subtitle !== void 0);
+	const legendInset = legendPlotInset(context.width, legend.length, context.subtitle !== void 0, legend.map((entry) => entry.label));
 	const box = {
 		...baseBox,
 		y: baseBox.y + legendInset,
@@ -5167,19 +5217,13 @@ function insetArrow(from, target, radius) {
 }
 /** Measured 2-D nodes plus every declared connection, with no invented node geometry. */
 function compileSpatialMapFigure(context, spec, skillId) {
-	const box = panelBox(context);
+	const baseBox = panelBox(context);
 	if (spec.nodes.length === 0) return {
 		...frame(context, skillId),
-		panels: [emptyPanel(box, "no positioned nodes")],
+		panels: [emptyPanel(baseBox, "no positioned nodes")],
 		table: emptyTable(),
 		legend: []
 	};
-	const mapper = equalScaleMapper(box, spec.nodes.map((node) => node.x), spec.nodes.map((node) => node.y), spec.domain);
-	const pageById = new Map(spec.nodes.map((node) => [node.id, mapper.map(node.x, node.y)]));
-	const scientificById = new Map(spec.nodes.map((node) => [node.id, {
-		x: node.x,
-		y: node.y
-	}]));
 	const nodeOrdinal = new Map(spec.nodes.map((node, index) => [node.id, index]));
 	const canonicalPair = (source, target) => nodeOrdinal.get(source) <= nodeOrdinal.get(target) ? [source, target] : [target, source];
 	const pairKey = (source, target) => {
@@ -5199,6 +5243,39 @@ function compileSpatialMapFigure(context, spec, skillId) {
 	const pairMagnitudeExtent = finiteExtent(finitePairValues.map((entry) => Math.abs(entry)));
 	const nodeValues = spec.nodes.flatMap((node) => typeof node.value === "number" ? [node.value] : []);
 	const nodeValueExtent = finiteExtent(nodeValues);
+	const legend = [
+		...spec.nodeEncoding === "group" ? [...new Map(spec.nodes.map((node) => [node.groupIndex ?? -1, node])).values()].map((node) => {
+			const style = categoricalStyle(node.groupIndex ?? 0);
+			return {
+				label: node.group ?? "ungrouped",
+				color: style.color,
+				glyph: "series",
+				marker: style.marker
+			};
+		}) : [],
+		...spec.nodeEncoding === "value" ? [{
+			label: `Node colour encodes the declared value over ${nodeValueExtent ? `${formatNumber(nodeValueExtent.min)} to ${formatNumber(nodeValueExtent.max)}` : "no finite range"}${spec.nodeValueScale?.transform === "symlog" ? ` using symlog with linear threshold ${formatNumber(spec.nodeValueScale.linearThreshold)}` : " linearly"}; missing values use the reserved colour`,
+			color: accent(context.themeId),
+			glyph: "series"
+		}] : [],
+		...spec.connectionEncoding ? [{
+			label: `Connection ${spec.connectionEncoding.channel} encodes the declared pair aggregate${spec.connectionEncoding.channel === "width" || spec.connectionEncoding.channel === "width_and_color" ? "; the observed |value| range maps to 1 to 5 px" : ""}${pairExtent ? ` (signed range ${formatNumber(pairExtent.min)} to ${formatNumber(pairExtent.max)})` : ""}${spec.multapseAggregation ? `; multapses use ${spec.multapseAggregation}` : ""}`,
+			color: accent(context.themeId),
+			glyph: "series"
+		}] : []
+	];
+	const legendInset = legendPlotInset(context.width, legend.length, context.subtitle !== void 0, legend.map((entry) => entry.label));
+	const box = {
+		...baseBox,
+		y: baseBox.y + legendInset,
+		height: baseBox.height - legendInset
+	};
+	const mapper = equalScaleMapper(box, spec.nodes.map((node) => node.x), spec.nodes.map((node) => node.y), spec.domain);
+	const pageById = new Map(spec.nodes.map((node) => [node.id, mapper.map(node.x, node.y)]));
+	const scientificById = new Map(spec.nodes.map((node) => [node.id, {
+		x: node.x,
+		y: node.y
+	}]));
 	const nodeTransform = (value) => {
 		if (spec.nodeValueScale?.transform !== "symlog") return value;
 		const threshold = spec.nodeValueScale.linearThreshold;
@@ -5410,27 +5487,7 @@ function compileSpatialMapFigure(context, spec, skillId) {
 			marks
 		}],
 		table: emptyTable(),
-		legend: [
-			...spec.nodeEncoding === "group" ? [...new Map(spec.nodes.map((node) => [node.groupIndex ?? -1, node])).values()].map((node) => {
-				const style = categoricalStyle(node.groupIndex ?? 0);
-				return {
-					label: node.group ?? "ungrouped",
-					color: style.color,
-					glyph: "series",
-					marker: style.marker
-				};
-			}) : [],
-			...spec.nodeEncoding === "value" ? [{
-				label: `Node colour encodes the declared value over ${nodeValueExtent ? `${formatNumber(nodeValueExtent.min)} to ${formatNumber(nodeValueExtent.max)}` : "no finite range"}${spec.nodeValueScale?.transform === "symlog" ? ` using symlog with linear threshold ${formatNumber(spec.nodeValueScale.linearThreshold)}` : " linearly"}; missing values use the reserved colour`,
-				color: accent(context.themeId),
-				glyph: "series"
-			}] : [],
-			...spec.connectionEncoding ? [{
-				label: `Connection ${spec.connectionEncoding.channel} encodes the declared pair aggregate${spec.connectionEncoding.channel === "width" || spec.connectionEncoding.channel === "width_and_color" ? "; the observed |value| range maps to 1 to 5 px" : ""}${pairExtent ? ` (signed range ${formatNumber(pairExtent.min)} to ${formatNumber(pairExtent.max)})` : ""}${spec.multapseAggregation ? `; multapses use ${spec.multapseAggregation}` : ""}`,
-				color: accent(context.themeId),
-				glyph: "series"
-			}] : []
-		]
+		legend
 	};
 }
 /** One fixed-screen rectangle per accepted sample; missing values remain explicit marks. */
@@ -5908,7 +5965,19 @@ function splitStatePath(xs, ys) {
 }
 /** Every simultaneously supplied phase-plane carrier shares one domain and one panel. */
 function compilePhasePlaneFigure(context, spec, skillId) {
-	const box = panelBox(context);
+	const baseBox = panelBox(context);
+	const provisionalLegendLabels = [
+		...spec.vectorField ? ["Caller-supplied vector field with declared magnitude scaling and direction"] : [],
+		...(spec.nullclines?.ids ?? []).map((id, index) => spec.nullclines?.labels[index] ?? id),
+		...(spec.trajectories?.ids ?? []).map((id, index) => spec.trajectories?.labels[index] ?? id),
+		...(spec.fixedPoints?.ids ?? []).map((id, index) => `${spec.fixedPoints?.labels[index] ?? id} (convergence status)`)
+	];
+	const legendInset = legendPlotInset(context.width, provisionalLegendLabels.length, context.subtitle !== void 0, provisionalLegendLabels);
+	const box = {
+		...baseBox,
+		y: baseBox.y + legendInset,
+		height: baseBox.height - legendInset
+	};
 	const xs = [
 		...spec.trajectories?.xs ?? [],
 		...spec.vectorField?.xs ?? [],
@@ -6283,12 +6352,23 @@ function compilePhasePlaneFigure(context, spec, skillId) {
 }
 /** Deterministic directed multigraph geometry with one auditable group per stroke. */
 function compileGraphFigure(context, spec, skillId) {
-	const box = panelBox(context);
+	const baseBox = panelBox(context);
 	if (spec.nodes.length === 0) return {
 		...frame(context, skillId),
-		panels: [emptyPanel(box, "empty node universe")],
+		panels: [emptyPanel(baseBox, "empty node universe")],
 		table: emptyTable(),
 		legend: []
+	};
+	const provisionalLegendLabels = [
+		...spec.nodeColorByGroup ? [...new Map(spec.nodes.map((node) => [node.groupIndex ?? -1, node])).values()].map((node) => node.group ?? "ungrouped") : [],
+		...spec.edgeEncoding ? [`Edge ${spec.edgeEncoding.channel} encodes the declared value and its complete scale authority`] : [],
+		...spec.encodeDegreeAsArea ? ["Node marker area above the visibility baseline is proportional to declared degree"] : []
+	];
+	const legendInset = legendPlotInset(context.width, provisionalLegendLabels.length, context.subtitle !== void 0, provisionalLegendLabels);
+	const box = {
+		...baseBox,
+		y: baseBox.y + legendInset,
+		height: baseBox.height - legendInset
 	};
 	const position = /* @__PURE__ */ new Map();
 	let measuredMapper;
@@ -13522,12 +13602,6 @@ function responseRateAuthorityText(authority) {
 	if (authority.normalization === "total_event_rate") return `total_event_rate (pooled total over ${recordedSenderCount} recorded sender${recordedSenderCount === 1 ? "" : "s"}; integer divisor 1)`;
 	return `mean_rate_per_recorded_sender (pooled total divided by ${recordedSenderCount} recorded sender${recordedSenderCount === 1 ? "" : "s"})`;
 }
-function responseRateAxisQualifier(authority) {
-	if (authority.normalization === "single_train_rate") return "single train";
-	const recordedSenderCount = authority.eventScope.recordedSenderCount;
-	if (authority.normalization === "total_event_rate") return `pooled total, ${recordedSenderCount} sender${recordedSenderCount === 1 ? "" : "s"}`;
-	return `mean per sender, ${recordedSenderCount} sender${recordedSenderCount === 1 ? "" : "s"}`;
-}
 function responseEventMembershipText(authority) {
 	if (authority.membershipKind === "single_train_selection_rule") return "single_train_selection_rule (source composition not bound)";
 	const binding = rec(authority.normalizedScope.membershipBinding);
@@ -13538,18 +13612,6 @@ function responseEventMembershipText(authority) {
 	}
 	if (authority.membershipKind === "canonical_sender_ids_digest") return `canonical_sender_ids_digest (${String(binding?.canonicalization)}; ${String(binding?.digest)}; preimage unavailable)`;
 	return "cardinality_only (member identities not bound)";
-}
-function responseEventAxisQualifier(method, authority) {
-	const selection = `declared selection ${authority.selectionId}`;
-	if (authority.kind === "single_train") {
-		if (method === "first_spike_latency") return `${selection}; first event in one selected train`;
-		if (method === "event_count") return `${selection}; count in one selected train`;
-		return `${selection}; one selected event train`;
-	}
-	const count = authority.recordedSenderCount;
-	if (method === "first_spike_latency") return `${selection}; minimum first-event latency over pooled union of ${count} declared sender trains`;
-	if (method === "event_count") return `${selection}; pooled total count over ${count} declared sender trains`;
-	return `${selection}; pooled union of ${count} declared sender trains`;
 }
 function responseEventScopeText(authority) {
 	const cardinality = authority.recordedSenderCount === null ? `${authority.selectedEventTrainCount} selected event train; no recorded-sender cardinality declared` : `${authority.selectedEventTrainCount} selected sender event train${authority.selectedEventTrainCount === 1 ? "" : "s"} (including silent senders)`;
@@ -17525,7 +17587,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
 			uncertaintyUpper: entry.uncertaintyUpper,
 			uncertainty: entry.uncertainty
 		});
-		const yLabel = `${String(firstValues.kind).replaceAll("_", " ")} (${require_response_curve_basis.unitLabel(targetValueUnit)})`;
+		const yLabel = `value (${require_response_curve_basis.unitLabel(targetValueUnit)})`;
 		const layout = String(parameters.layout);
 		let plan;
 		const tableRows = compartmentTraceTableRows(data, entries);
@@ -19440,7 +19502,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
 					observedRows,
 					valueSemantics: cellMode,
 					...cellMode === "multiplicity" ? { numericScale: parameters.multiplicityScale === "log" ? "log" : "linear" } : {},
-					valueLabel: cellMode === "binary_presence" ? "Foreground cell means at least one retained connection row" : "Foreground colour encodes exact complete-cell connection multiplicity",
+					valueLabel: cellMode === "binary_presence" ? "Connection present" : "Connection multiplicity",
 					summary
 				}, skillId), compileContext, skillId, tableRows), [operation], derivedFacts);
 			}
@@ -19557,7 +19619,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
 						class: "diverging",
 						center: Number(colorScale.center)
 					} : { class: "sequential" },
-					valueLabel: `Foreground colour encodes complete ${aggregation} weight aggregate (${require_response_curve_basis.unitLabel(weightUnit)})`,
+					valueLabel: `${aggregation} weight (${require_response_curve_basis.unitLabel(weightUnit)})`,
 					summary
 				}, skillId), compileContext, skillId, tableRows), [operation], derivedFacts);
 			}
@@ -19663,7 +19725,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
 				observedRows,
 				valueSemantics: "delay",
 				numericScale: parameters.scale === "log" ? "log" : "linear",
-				valueLabel: `Foreground colour encodes complete ${delayAggregation} delay aggregate (${require_response_curve_basis.unitLabel(displayUnit)})`,
+				valueLabel: `${delayAggregation} delay (${require_response_curve_basis.unitLabel(displayUnit)})`,
 				summary
 			}, skillId), compileContext, skillId, tableRows), [operation], derivedFacts);
 		} catch (error) {
@@ -20194,9 +20256,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
 		const responseUnitLabel = require_response_curve_basis.unitLabel(responseUnit);
 		const verifiedRateAuthority = rateAuthority?.ok === true ? rateAuthority : void 0;
 		const rateAuthorityText = verifiedRateAuthority ? responseRateAuthorityText(verifiedRateAuthority) : null;
-		const rateAxisQualifier = verifiedRateAuthority ? responseRateAxisQualifier(verifiedRateAuthority) : null;
-		const qualifiedResponseLabel = `${responseLabel} [${responseEventAxisQualifier(responseMethod, eventScopeAuthority)}${rateAxisQualifier ? `; ${rateAxisQualifier}` : ""}]`;
-		const yLabel = responseUnitLabel ? `${qualifiedResponseLabel} (${responseUnitLabel})` : qualifiedResponseLabel;
+		const yLabel = responseUnitLabel ? `${responseLabel} (${responseUnitLabel})` : responseLabel;
 		const curveLabel = parameters.curveLabel ?? parameters.curveId ?? responseLabel;
 		const window = rec(data.measurementWindow) ?? {};
 		const windowBoundary = window.boundary ?? "[start,stop)";

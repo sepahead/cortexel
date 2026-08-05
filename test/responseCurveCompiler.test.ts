@@ -185,6 +185,14 @@ describe('response-curve derivation and rendering', () => {
       expect(operation(result).algorithm).toBe(
         'cortexel.response_curve.exact_condition_estimator',
       );
+      const responseAxis = result.plan.panels[0].axes.find(
+        (axis) => axis.orientation === 'left',
+      );
+      expect(responseAxis?.label).not.toContain('caller-declared');
+      expect(responseAxis?.label.length).toBeLessThan(64);
+      expect(result.plan.table.rows.every((row) =>
+        typeof row[14] === 'string' && row[14].includes('caller-declared event scope')
+      )).toBe(true);
     }
 
     expect(aggregateRows(valid[0]).map((row) => row[5])).toEqual([0, 13, 30]);
@@ -451,7 +459,7 @@ describe('response-curve derivation and rendering', () => {
     expect(aggregateRows(perSender).every((row) =>
       row[8] === 'mean_rate_per_recorded_sender' && row[9] === 1
     )).toBe(true);
-    expect(perSender.plan.panels[0].axes[1].label).toContain('mean per sender, 1 sender');
+    expect(String(aggregateRows(perSender)[0][14])).toContain('divided by 1 recorded sender');
     expect(perSender.plan.accessibility.summary).toContain(
       'mean_rate_per_recorded_sender (pooled total divided by 1 recorded sender)',
     );
@@ -468,7 +476,7 @@ describe('response-curve derivation and rendering', () => {
     expect(aggregateRows(single).every((row) =>
       row[8] === 'single_train_rate' && row[9] === null && row[27] === 1
     )).toBe(true);
-    expect(single.plan.panels[0].axes[1].label).toContain('single train');
+    expect(String(aggregateRows(single)[0][14])).toContain('single_train selection test_single_train');
 
     const totalRequest = structuredClone(examples()[0]);
     totalRequest.data.observations.response.rateNormalization = 'total_event_rate';
@@ -477,7 +485,7 @@ describe('response-curve derivation and rendering', () => {
     expect(aggregateRows(total).every((row) =>
       row[8] === 'total_event_rate' && row[9] === 7
     )).toBe(true);
-    expect(total.plan.panels[0].axes[1].label).toContain('pooled total, 7 senders');
+    expect(String(aggregateRows(total)[0][14])).toContain('7 recorded senders');
     expect(operation(total).receipt).toMatchObject({
       eventScopeVariantRecognized: true,
       eventScopeSelectionIdStructurallyValid: true,
@@ -572,11 +580,11 @@ describe('response-curve derivation and rendering', () => {
         'EVENT_SCOPE_EXTERNAL_AUTHORITY_UNVERIFIED',
       );
     }
-    expect(singleCount.plan.panels[0].axes[1].label).toContain(
-      'declared selection shared_numeric_counterexample; count in one selected train',
+    expect(String(aggregateRows(singleCount)[0][14])).toContain(
+      'single_train selection shared_numeric_counterexample; 1 selected event train',
     );
-    expect(pooledCount.plan.panels[0].axes[1].label).toContain(
-      'pooled total count over 7 declared sender trains',
+    expect(String(aggregateRows(pooledCount)[0][14])).toContain(
+      'pooled_recorded_senders selection shared_numeric_counterexample; 7 selected sender event trains',
     );
     expect(pooledCount.plan.accessibility.summary).toContain(
       'cardinality_only (member identities not bound)',
@@ -597,11 +605,11 @@ describe('response-curve derivation and rendering', () => {
       aggregateRows(pooledLatency).map((row) => row[5]),
     );
     expect(operation(singleLatency).outputDigest).not.toBe(operation(pooledLatency).outputDigest);
-    expect(singleLatency.plan.panels[0].axes[1].label).toContain(
-      'first event in one selected train',
+    expect(String(aggregateRows(singleLatency)[0][14])).toContain(
+      'single_train selection shared_latency_counterexample; 1 selected event train',
     );
-    expect(pooledLatency.plan.panels[0].axes[1].label).toContain(
-      'minimum first-event latency over pooled union of 3 declared sender trains',
+    expect(String(aggregateRows(pooledLatency)[0][14])).toContain(
+      'pooled_recorded_senders selection shared_latency_counterexample; 3 selected sender event trains',
     );
     expect(pooledLatency.plan.accessibility.summary).toContain(
       'minimum over the superposed union',
@@ -1993,8 +2001,9 @@ describe('response-curve derivation and rendering', () => {
     };
     request.data.eventScope = singleEventScope();
     const result = built(request);
-    expect(result.plan.panels[0].axes[1].label).toBe(
-      'event count [declared selection test_single_train; count in one selected train]',
+    expect(result.plan.panels[0].axes[1].label).toBe('event count');
+    expect(String(aggregateRows(result)[0][14])).toContain(
+      'single_train selection test_single_train; 1 selected event train',
     );
   });
 
