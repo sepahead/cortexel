@@ -4,6 +4,7 @@
 // validates before it maps a single record.
 
 import { z } from 'zod';
+import { canonicalDigest, canonicalize } from '../../src/core/canonicalize.js';
 import { formatValidationIssues, safeErrorMessage } from '../safeRuntime';
 import { JsonParamsSchema } from '../vizSpec';
 import {
@@ -20,6 +21,10 @@ export type EngramCorpusEntityNodeKind =
   (typeof CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS)[number];
 export type EngramCorpusEntityEdgeKind =
   (typeof CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS)[number];
+export type EngramReceiptBoundCorpusEntityEdgeKind = Exclude<
+  EngramCorpusEntityEdgeKind,
+  'same_as'
+>;
 export type EngramCorpusEvidenceReference =
   KnowledgeGraph3DParams['nodes'][number]['evidence'][number];
 
@@ -70,6 +75,29 @@ export interface EngramCorpusEntityGraphResponse {
   is_paper_local_evidence: false;
 }
 
+/** Current Engram response: one immutable derivation receipt binds the complete
+ * response instead of repeating caller-authored evidence on every record. */
+export interface EngramReceiptBoundCorpusEntityGraphResponse {
+  nodes: readonly Omit<EngramCorpusEntityNode, 'evidence'>[];
+  edges: readonly {
+    source: string;
+    target: string;
+    kind: EngramReceiptBoundCorpusEntityEdgeKind;
+    confidence?: number | null;
+  }[];
+  paper_count: number;
+  model_count: number;
+  family_count: number;
+  edge_counts: Readonly<Record<string, number>>;
+  kinds: readonly string[];
+  generated_at: string;
+  identity_derivation: unknown;
+  derivation_receipt: unknown;
+  advisory_only: true;
+  calibrated_posterior: false;
+  is_paper_local_evidence: false;
+}
+
 export interface AdaptEngramCorpusEntityGraphOptions {
   graphId: string;
   graphSource: string;
@@ -99,22 +127,28 @@ const EngramEvidenceSchema = z
   .min(1)
   .max(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceRefsPerElement);
 
+const EngramNodeBaseShape = {
+  id: boundedSourceText(120),
+  kind: z.enum(CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS),
+  label: boundedSourceText(240),
+  family: z.string().max(200),
+  model_type: nullableAttributeText,
+  reproducibility_class: nullableAttributeText,
+  brain_region: nullableAttributeText,
+  paper_count: safeCount,
+  n_neurons: safeCount,
+  n_synapses: safeCount,
+  pagerank: unitInterval.nullable().optional(),
+} as const;
+
 const EngramNodeSchema = z
   .object({
-    id: boundedSourceText(120),
-    kind: z.enum(CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS),
-    label: boundedSourceText(240),
-    family: z.string().max(200),
-    model_type: nullableAttributeText,
-    reproducibility_class: nullableAttributeText,
-    brain_region: nullableAttributeText,
-    paper_count: safeCount,
-    n_neurons: safeCount,
-    n_synapses: safeCount,
-    pagerank: unitInterval.nullable().optional(),
+    ...EngramNodeBaseShape,
     evidence: EngramEvidenceSchema,
   })
   .strict();
+
+const EngramReceiptNodeSchema = z.object(EngramNodeBaseShape).strict();
 
 const EngramEdgeSchema = z
   .object({
@@ -135,21 +169,153 @@ const EngramEdgeSchema = z
   })
   .strict();
 
+const EngramReceiptEdgeSchema = z
+  .object({
+    source: boundedSourceText(120),
+    target: boundedSourceText(120),
+    kind: z.enum(['cites', 'instantiates', 'variant_of', 'belongs_to_family']),
+    confidence: unitInterval.nullable().optional(),
+  })
+  .strict();
+
+const EngramGraphSummaryShape = {
+  paper_count: safeCount,
+  model_count: safeCount,
+  family_count: safeCount,
+  edge_counts: z.partialRecord(z.enum(CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS), safeCount),
+  kinds: z.array(z.enum(CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS)).max(3),
+  generated_at: Rfc3339TimestampSchema,
+  advisory_only: z.literal(true),
+  calibrated_posterior: z.literal(false),
+  is_paper_local_evidence: z.literal(false),
+} as const;
+
 const EngramGraphSchema = z
   .object({
     nodes: z.array(EngramNodeSchema).max(PARAM_LIMITS.maxGraphNodes),
     edges: z.array(EngramEdgeSchema).max(PARAM_LIMITS.maxGraphEdges),
-    paper_count: safeCount,
-    model_count: safeCount,
-    family_count: safeCount,
-    edge_counts: z.partialRecord(z.enum(CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS), safeCount),
-    kinds: z.array(z.enum(CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS)).max(3),
-    generated_at: Rfc3339TimestampSchema,
-    advisory_only: z.literal(true),
-    calibrated_posterior: z.literal(false),
-    is_paper_local_evidence: z.literal(false),
+    ...EngramGraphSummaryShape,
   })
   .strict();
+
+const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/u);
+const CorpusIdentityDerivationSchema = z
+  .object({
+    schema_version: z.literal('engram.corpus-identity-derivation.v1'),
+    policy_version: z.literal('measured-alpha-exact-block-pair-budget-v1'),
+    signatures_considered: safeCount,
+    identity_block_count: safeCount,
+    largest_identity_block_signatures: safeCount,
+    planned_pair_comparisons: safeCount,
+    max_signatures: z.literal(25_000),
+    max_identity_block_signatures: z.literal(250),
+    max_pair_comparisons: z.literal(31_125),
+    status: z.enum(['completed', 'abstained']),
+    abstention_reason: z
+      .enum([
+        'identity_signature_input_budget_exceeded',
+        'identity_block_signature_budget_exceeded',
+        'identity_pair_comparison_budget_exceeded',
+      ])
+      .nullable(),
+    comparison_mode: z.enum(['exact_exhaustive', 'abstained']),
+    resolver_invoked: z.boolean(),
+    candidate_pair_prefilter: z.literal(false),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const chooseTwo = (count: number): number => count * (count - 1) / 2;
+    const countsAreClosed = value.signatures_considered === 0
+      ? value.identity_block_count === 0
+        && value.largest_identity_block_signatures === 0
+        && value.planned_pair_comparisons === 0
+      : value.identity_block_count >= 1
+        && value.identity_block_count <= value.signatures_considered
+        && value.largest_identity_block_signatures >= 1
+        && value.largest_identity_block_signatures <= value.signatures_considered
+        && value.planned_pair_comparisons
+          >= chooseTwo(value.largest_identity_block_signatures)
+        && value.planned_pair_comparisons <= chooseTwo(value.signatures_considered);
+    if (!countsAreClosed) {
+      context.addIssue({ code: 'custom', message: 'identity derivation counts are inconsistent' });
+      return;
+    }
+    const expectedReason = value.signatures_considered > 25_000
+      ? 'identity_signature_input_budget_exceeded'
+      : value.largest_identity_block_signatures > 250
+        ? 'identity_block_signature_budget_exceeded'
+        : value.planned_pair_comparisons > 31_125
+          ? 'identity_pair_comparison_budget_exceeded'
+          : null;
+    const statusIsClosed = expectedReason === null
+      ? value.status === 'completed'
+        && value.abstention_reason === null
+        && value.comparison_mode === 'exact_exhaustive'
+        && value.resolver_invoked
+      : value.status === 'abstained'
+        && value.abstention_reason === expectedReason
+        && value.comparison_mode === 'abstained'
+        && !value.resolver_invoked;
+    if (!statusIsClosed) {
+      context.addIssue({ code: 'custom', message: 'identity derivation status is inconsistent' });
+    }
+  });
+
+const CorpusDerivationSourceSchema = z
+  .object({
+    paper_id: z.string().regex(/^[a-z0-9][a-z0-9_.:-]{0,179}$/u),
+    component_path: z.string().min(13).max(1_024),
+    component_sha256: sha256Hex,
+    component_bytes: safeCount.min(1).max(268_435_456),
+    pipeline_run_id: boundedSourceText(512),
+    graph_store_binding_id: z.string().regex(/^wiki-v1:[0-9a-f]{32}$/u),
+    knowledge_graph_sha256: sha256Hex,
+    eligibility_schema_version: boundedSourceText(128),
+    eligibility_decision_sha256: sha256Hex,
+    eligibility_receipt_sha256: sha256Hex,
+    eligibility_policy_sha256: sha256Hex,
+    provider_plan_sha256: sha256Hex,
+    provider_execution_receipt_sha256: sha256Hex,
+    evidence_plane_sha256: sha256Hex,
+    qualified_payload_sha256: sha256Hex,
+  })
+  .strict();
+
+const ReceiptSchema = z
+  .object({
+    schema_version: z.literal('engram.corpus-derivation-receipt.v2'),
+    derivation_kind: z.literal('entity_graph'),
+    algorithm_version: boundedSourceText(128),
+    graph_store_binding_id: z.string().regex(/^wiki-v1:[0-9a-f]{32}$/u),
+    source_revision: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+    source_revision_created_at: Rfc3339TimestampSchema,
+    eligibility_decision_set_sha256: sha256Hex,
+    sources: z.array(CorpusDerivationSourceSchema).max(250),
+    eligible_paper_count: safeCount,
+    identity_derivation: CorpusIdentityDerivationSchema,
+    parent_output_sha256: sha256Hex,
+    input_sha256: sha256Hex,
+    output_hash_scope: z.literal('response_without_derivation_receipt'),
+    output_sha256: sha256Hex,
+    receipt_sha256: sha256Hex,
+    advisory_only: z.literal(true),
+    cross_store_evidence_authority: z.literal(false),
+    is_paper_local_evidence: z.literal(false),
+    calibrated_posterior: z.literal(false),
+  })
+  .strict();
+
+const ReceiptBoundEngramGraphSchema = z
+  .object({
+    nodes: z.array(EngramReceiptNodeSchema).max(PARAM_LIMITS.maxGraphNodes),
+    edges: z.array(EngramReceiptEdgeSchema).max(PARAM_LIMITS.maxGraphEdges),
+    ...EngramGraphSummaryShape,
+    identity_derivation: CorpusIdentityDerivationSchema,
+    derivation_receipt: ReceiptSchema,
+  })
+  .strict();
+
+const AnyEngramGraphSchema = z.union([EngramGraphSchema, ReceiptBoundEngramGraphSchema]);
 
 const AdapterOptionsSchema = z
   .object({
@@ -159,7 +325,7 @@ const AdapterOptionsSchema = z
   })
   .strict();
 
-type CheckedEngramGraph = z.infer<typeof EngramGraphSchema>;
+type CheckedEngramGraph = z.infer<typeof AnyEngramGraphSchema>;
 type CheckedEngramNode = CheckedEngramGraph['nodes'][number];
 type CheckedEngramEdge = CheckedEngramGraph['edges'][number];
 
@@ -275,11 +441,116 @@ function summaryErrors(graph: CheckedEngramGraph): string[] {
   return errors;
 }
 
+function isReceiptBoundGraph(
+  graph: CheckedEngramGraph,
+): graph is z.infer<typeof ReceiptBoundEngramGraphSchema> {
+  return 'derivation_receipt' in graph;
+}
+
+function receiptEvidence(
+  graphSnapshotId: string,
+  recordId: string,
+): EngramCorpusEvidenceReference[] {
+  return [{
+    kind: 'graph_snapshot_record',
+    evidence_id: graphSnapshotId,
+    record_id: recordId,
+  }];
+}
+
+function compareTuple(
+  left: readonly string[],
+  right: readonly string[],
+): number {
+  for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
+    if (left[index]! < right[index]!) return -1;
+    if (left[index]! > right[index]!) return 1;
+  }
+  return left.length - right.length;
+}
+
+function receiptGraphErrors(
+  graph: z.infer<typeof ReceiptBoundEngramGraphSchema>,
+  graphSnapshotId: string,
+): string[] {
+  const errors: string[] = [];
+  const receipt = graph.derivation_receipt;
+  if (
+    receipt.source_revision_created_at !== graph.generated_at
+    || receipt.eligible_paper_count !== graph.paper_count
+    || canonicalize(receipt.identity_derivation) !== canonicalize(graph.identity_derivation)
+  ) {
+    errors.push('derivation receipt does not match the graph summary or identity derivation');
+  }
+  if (
+    receipt.sources.length !== graph.paper_count
+    || receipt.sources.some(
+      (source, index, sources) =>
+        source.component_path !== `graphs/${source.paper_id}.json`
+        || source.graph_store_binding_id !== receipt.graph_store_binding_id
+        || (index > 0 && sources[index - 1]!.paper_id >= source.paper_id),
+    )
+  ) {
+    errors.push('derivation receipt source roster is inconsistent');
+  }
+  const nodeIds = graph.nodes.map((node) => node.id);
+  if (
+    nodeIds.some((id, index) => index > 0 && nodeIds[index - 1]! >= id)
+    || new Set(nodeIds).size !== nodeIds.length
+  ) {
+    errors.push('receipt-bound graph nodes must be unique and canonically ordered');
+  }
+  const paperIds = graph.nodes
+    .filter((node) => node.kind === 'paper')
+    .map((node) => node.id)
+    .sort();
+  const sourcePaperIds = receipt.sources.map((source) => `paper:${source.paper_id}`);
+  if (canonicalize(paperIds) !== canonicalize(sourcePaperIds)) {
+    errors.push('receipt source roster does not equal the graph paper-node roster');
+  }
+  const nodeIdSet = new Set(nodeIds);
+  const edgeKeys = graph.edges.map((edge) => [edge.kind, edge.source, edge.target] as const);
+  if (
+    edgeKeys.some((key, index) => index > 0 && compareTuple(edgeKeys[index - 1]!, key) >= 0)
+    || graph.edges.some(
+      (edge) => edge.source === edge.target
+        || !nodeIdSet.has(edge.source)
+        || !nodeIdSet.has(edge.target),
+    )
+  ) {
+    errors.push('receipt-bound graph edges must be unique, canonical, non-self, and non-dangling');
+  }
+  if (
+    graph.identity_derivation.status === 'abstained'
+    && (
+      graph.nodes.some((node) => node.kind !== 'paper')
+      || graph.edges.some((edge) => edge.kind !== 'cites')
+    )
+  ) {
+    errors.push('an abstained identity derivation cannot emit identity entities');
+  }
+  if (
+    graph.edges.some(
+      (edge) => edge.confidence != null
+        && edge.kind !== 'cites'
+        && edge.kind !== 'variant_of',
+    )
+  ) {
+    errors.push('membership edges cannot carry an undeclared confidence meaning');
+  }
+  if (canonicalDigest(graph) !== graphSnapshotId) {
+    errors.push('graphSnapshotId does not bind the complete receipt-bound response');
+  }
+  return errors;
+}
+
 /** Convert an unknown JSON value into strict 1.4 corpus graph params. This
  * function never creates a VizSpec or relaxes provenance; callers still pass
  * the result through buildVizSpec/validateSkillInvocation. */
 export function adaptEngramCorpusEntityGraph(
-  graph: EngramCorpusEntityGraphResponse,
+  graph:
+    | EngramCorpusEntityGraphResponse
+    | EngramReceiptBoundCorpusEntityGraphResponse,
   options: AdaptEngramCorpusEntityGraphOptions,
 ): AdaptEngramCorpusEntityGraphResult;
 export function adaptEngramCorpusEntityGraph(
@@ -323,7 +594,7 @@ export function adaptEngramCorpusEntityGraph(
       return { ok: false, errors: formatValidationIssues(optionsSnapshot.error.issues) };
     }
 
-    const checkedGraph = EngramGraphSchema.safeParse(graphSnapshot.data);
+    const checkedGraph = AnyEngramGraphSchema.safeParse(graphSnapshot.data);
     if (!checkedGraph.success) {
       return { ok: false, errors: formatValidationIssues(checkedGraph.error.issues) };
     }
@@ -335,6 +606,11 @@ export function adaptEngramCorpusEntityGraph(
     const optionValue = checkedOptions.data;
     const summaries = summaryErrors(graphValue);
     if (summaries.length > 0) return { ok: false, errors: summaries };
+    const receiptBound = isReceiptBoundGraph(graphValue);
+    if (receiptBound) {
+      const receiptErrors = receiptGraphErrors(graphValue, optionValue.graphSnapshotId);
+      if (receiptErrors.length > 0) return { ok: false, errors: receiptErrors };
+    }
 
     const params = {
       graph_id: optionValue.graphId,
@@ -360,12 +636,24 @@ export function adaptEngramCorpusEntityGraph(
             pagerank: node.pagerank ?? null,
           },
           epistemic: { ...DERIVED_ADVISORY },
-          evidence: node.evidence,
+          evidence: receiptBound
+            ? receiptEvidence(optionValue.graphSnapshotId, `node:${node.id}`)
+            : 'evidence' in node ? node.evidence : [],
         };
       }),
       edges: graphValue.edges.map((edge) => {
-        const id = edge.id ?? legacyEdgeId(edge);
-        const score = edge.uncalibrated_score;
+        const id = ('id' in edge ? edge.id : undefined) ?? legacyEdgeId(edge);
+        const score = receiptBound
+          ? !('confidence' in edge) || edge.confidence == null
+            ? undefined
+            : {
+                kind: edge.kind === 'cites'
+                  ? 'citation_resolution_confidence' as const
+                  : 'structural_similarity' as const,
+                value: edge.confidence,
+                calibrated_posterior: false as const,
+              }
+          : 'uncalibrated_score' in edge ? edge.uncalibrated_score : undefined;
         return {
           id,
           source: edge.source,
@@ -374,7 +662,9 @@ export function adaptEngramCorpusEntityGraph(
           label: EDGE_LABELS[edge.kind],
           attributes: {},
           epistemic: { ...DERIVED_ADVISORY },
-          evidence: edge.evidence,
+          evidence: receiptBound
+            ? receiptEvidence(optionValue.graphSnapshotId, `edge:${id}`)
+            : 'evidence' in edge ? edge.evidence : [],
           ...(score ? { uncalibrated_score: score } : {}),
         };
       }),

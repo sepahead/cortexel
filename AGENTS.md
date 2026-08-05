@@ -724,20 +724,28 @@ complete descriptor example as the copyable schema guide.
 no top-level evidence-record inventory, so it cannot resolve or prove a supplied
 record, citation, or external-source identifier.
 
-An Engram `CorpusEntityGraphResponse` can be projected without guessing only when
-every upstream node and assertion already carries its typed `evidence` array.
-Cortexel retains and validates those references; it never manufactures a snapshot
-record from an entity id. `graphSnapshotId` is likewise an unauthenticated
-caller-supplied namespace until a future receipt-bearing stable contract exists:
+The Engram adapter has two closed, noninterchangeable input branches. The historical
+branch requires a typed `evidence` array on every node and assertion and retains those
+references exactly. The current receipt-bound branch accepts Engram's exact
+`engram.corpus-derivation-receipt.v2` entity response: it validates the closed identity
+profile, source roster, canonical node/edge order, endpoint membership, redundant
+counts, and receipt/summary equality. For that branch `graphSnapshotId` must equal the
+RFC 8785 SHA-256 digest of the complete response. Cortexel then creates only
+presentation-local `graph_snapshot_record` references into that verified snapshot;
+it does not convert the receipt into paper-local evidence or authenticate Engram's
+upstream digest claims. Compute the snapshot id from the defensively copied raw value:
 
 ```tsx
 import { adaptEngramCorpusEntityGraph, buildVizSpec } from 'cortexel/core';
+import { canonicalDigest, getBudgetLimits, snapshotValue } from 'cortexel/figure';
 import { KnowledgeGraphDomFigure } from 'cortexel/react/knowledge-graph-dom';
 
-const adapted = adaptEngramCorpusEntityGraph(rawResponse, {
+const captured = snapshotValue(rawResponse, getBudgetLimits());
+if (!captured.ok) throw new Error('Engram response is outside exact JSON');
+const adapted = adaptEngramCorpusEntityGraph(captured.value, {
   graphId: 'engram:corpus-entity',
   graphSource: 'engram:/api/knowledge_graph/corpus_entity_graph',
-  graphSnapshotId: immutableDigest,
+  graphSnapshotId: canonicalDigest(captured.value),
 });
 
 if (adapted.ok) {
@@ -762,6 +770,10 @@ if (adapted.ok) {
 This is the lowest-friction React path for Engram agents that need an inspectable
 caption-bound result without Canvas, Three, R3F, or a force solver. Keep the complete
 strict `VizSpec` together; do not extract its arrays or supply a separate caption.
+Use the same complete spec with `KnowledgeGraphAccessibleFigure` when the host wants
+the canonical interactive 3D composition; it automatically retains the caption,
+legend, operable node list, and full source-record browser, and omits only the live
+force visual when its separate 250-node/1,000-relationship ceiling is exceeded.
 
 `nest.psth` fixes `aggregation` to `selected_senders_per_trial`: each bin is the
 aggregate raw spike-event count from all selected senders across the declared

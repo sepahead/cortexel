@@ -1,54 +1,154 @@
-const require_authoring = require('./authoring-MTqY6OMZ.cjs');
-const require_knowledgeGraphLimits = require('./knowledgeGraphLimits-BnjbjxkI.cjs');
-const require_exact_binary64 = require('./exact-binary64-B9QJo1AS.cjs');
-let zod = require("zod");
+import { A as AdjacencyMatrixParamsSchema, B as GEOMETRY_MAX_ROUNDOFF_FRACTION, G as InDegreeDistributionParamsSchema, H as HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE, I as ConnectionGraphParamsSchema, Jt as JsonParamsSchema, K as IsiDistributionParamsSchema, L as CorrelogramParamsSchema, N as CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS, Ot as NEST_DEVICE_FAMILIES, P as CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS, Pt as isSkillId, R as DelayDistributionParamsSchema, V as HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE, X as PARAM_LIMITS, Y as OutDegreeDistributionParamsSchema, ct as SnapshotScopeSchema, dt as SpatialMap2DParamsSchema, f as NEST_SKILL_REGISTRY, gt as WeightMatrixParamsSchema, ht as WeightHistogramParamsSchema, it as PsthParamsSchema, nt as PopulationRateParamsSchema, ot as Rfc3339TimestampSchema, q as KnowledgeGraph3DParamsSchema, rt as PositionScopeSchema, x as listSkills, z as DelayMatrixParamsSchema } from "./authoring-C_HlbARb.js";
+import { c as intrinsicTypedArrayLength, d as safeErrorMessage, f as safePrimitiveDiagnostic, i as SAFE_DISPLAY_STRING_PATTERN, n as KNOWLEDGE_GRAPH_LIMITS, o as formatValidationIssues, r as PUBLIC_DIAGNOSTIC_LIMITS, s as intrinsicTypedArrayBufferKind, u as safeDiagnosticText } from "./knowledgeGraphLimits-Du09-etI.js";
+import { i as canonicalize, n as canonicalDigest } from "./canonicalize-F75Ifelv.js";
+import { o as exactBinary64Mean, u as exactBinary64Sum } from "./exact-binary64-MTF5FhJ9.js";
+import { z } from "zod";
 
 //#region core/skills/corpusKnowledgeGraph.ts
-const safeCount = zod.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "counts must not be negative zero");
-const unitInterval = zod.z.number().min(0).max(1).refine((value) => !Object.is(value, -0), "scores must not be negative zero");
-const boundedSourceText = (max) => zod.z.string().trim().min(1).max(max);
-const nullableAttributeText = zod.z.string().max(200).nullable().optional();
-const EngramEvidenceSchema = zod.z.array(require_authoring.JsonParamsSchema).min(1).max(require_knowledgeGraphLimits.KNOWLEDGE_GRAPH_LIMITS.maxEvidenceRefsPerElement);
-const EngramNodeSchema = zod.z.object({
+const safeCount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "counts must not be negative zero");
+const unitInterval = z.number().min(0).max(1).refine((value) => !Object.is(value, -0), "scores must not be negative zero");
+const boundedSourceText = (max) => z.string().trim().min(1).max(max);
+const nullableAttributeText = z.string().max(200).nullable().optional();
+const EngramEvidenceSchema = z.array(JsonParamsSchema).min(1).max(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceRefsPerElement);
+const EngramNodeBaseShape = {
 	id: boundedSourceText(120),
-	kind: zod.z.enum(require_authoring.CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS),
+	kind: z.enum(CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS),
 	label: boundedSourceText(240),
-	family: zod.z.string().max(200),
+	family: z.string().max(200),
 	model_type: nullableAttributeText,
 	reproducibility_class: nullableAttributeText,
 	brain_region: nullableAttributeText,
 	paper_count: safeCount,
 	n_neurons: safeCount,
 	n_synapses: safeCount,
-	pagerank: unitInterval.nullable().optional(),
+	pagerank: unitInterval.nullable().optional()
+};
+const EngramNodeSchema = z.object({
+	...EngramNodeBaseShape,
 	evidence: EngramEvidenceSchema
 }).strict();
-const EngramEdgeSchema = zod.z.object({
+const EngramReceiptNodeSchema = z.object(EngramNodeBaseShape).strict();
+const EngramEdgeSchema = z.object({
 	id: boundedSourceText(320).optional(),
 	source: boundedSourceText(120),
 	target: boundedSourceText(120),
-	kind: zod.z.enum(require_authoring.CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS),
-	uncalibrated_score: zod.z.object({
-		kind: zod.z.enum(["citation_resolution_confidence", "structural_similarity"]),
+	kind: z.enum(CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS),
+	uncalibrated_score: z.object({
+		kind: z.enum(["citation_resolution_confidence", "structural_similarity"]),
 		value: unitInterval,
-		calibrated_posterior: zod.z.literal(false)
+		calibrated_posterior: z.literal(false)
 	}).strict().nullable().optional(),
 	evidence: EngramEvidenceSchema
 }).strict();
-const EngramGraphSchema = zod.z.object({
-	nodes: zod.z.array(EngramNodeSchema).max(require_authoring.PARAM_LIMITS.maxGraphNodes),
-	edges: zod.z.array(EngramEdgeSchema).max(require_authoring.PARAM_LIMITS.maxGraphEdges),
+const EngramReceiptEdgeSchema = z.object({
+	source: boundedSourceText(120),
+	target: boundedSourceText(120),
+	kind: z.enum([
+		"cites",
+		"instantiates",
+		"variant_of",
+		"belongs_to_family"
+	]),
+	confidence: unitInterval.nullable().optional()
+}).strict();
+const EngramGraphSummaryShape = {
 	paper_count: safeCount,
 	model_count: safeCount,
 	family_count: safeCount,
-	edge_counts: zod.z.partialRecord(zod.z.enum(require_authoring.CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS), safeCount),
-	kinds: zod.z.array(zod.z.enum(require_authoring.CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS)).max(3),
-	generated_at: require_authoring.Rfc3339TimestampSchema,
-	advisory_only: zod.z.literal(true),
-	calibrated_posterior: zod.z.literal(false),
-	is_paper_local_evidence: zod.z.literal(false)
+	edge_counts: z.partialRecord(z.enum(CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS), safeCount),
+	kinds: z.array(z.enum(CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS)).max(3),
+	generated_at: Rfc3339TimestampSchema,
+	advisory_only: z.literal(true),
+	calibrated_posterior: z.literal(false),
+	is_paper_local_evidence: z.literal(false)
+};
+const EngramGraphSchema = z.object({
+	nodes: z.array(EngramNodeSchema).max(PARAM_LIMITS.maxGraphNodes),
+	edges: z.array(EngramEdgeSchema).max(PARAM_LIMITS.maxGraphEdges),
+	...EngramGraphSummaryShape
 }).strict();
-const AdapterOptionsSchema = zod.z.object({
+const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/u);
+const CorpusIdentityDerivationSchema = z.object({
+	schema_version: z.literal("engram.corpus-identity-derivation.v1"),
+	policy_version: z.literal("measured-alpha-exact-block-pair-budget-v1"),
+	signatures_considered: safeCount,
+	identity_block_count: safeCount,
+	largest_identity_block_signatures: safeCount,
+	planned_pair_comparisons: safeCount,
+	max_signatures: z.literal(25e3),
+	max_identity_block_signatures: z.literal(250),
+	max_pair_comparisons: z.literal(31125),
+	status: z.enum(["completed", "abstained"]),
+	abstention_reason: z.enum([
+		"identity_signature_input_budget_exceeded",
+		"identity_block_signature_budget_exceeded",
+		"identity_pair_comparison_budget_exceeded"
+	]).nullable(),
+	comparison_mode: z.enum(["exact_exhaustive", "abstained"]),
+	resolver_invoked: z.boolean(),
+	candidate_pair_prefilter: z.literal(false)
+}).strict().superRefine((value, context) => {
+	const chooseTwo = (count) => count * (count - 1) / 2;
+	if (!(value.signatures_considered === 0 ? value.identity_block_count === 0 && value.largest_identity_block_signatures === 0 && value.planned_pair_comparisons === 0 : value.identity_block_count >= 1 && value.identity_block_count <= value.signatures_considered && value.largest_identity_block_signatures >= 1 && value.largest_identity_block_signatures <= value.signatures_considered && value.planned_pair_comparisons >= chooseTwo(value.largest_identity_block_signatures) && value.planned_pair_comparisons <= chooseTwo(value.signatures_considered))) {
+		context.addIssue({
+			code: "custom",
+			message: "identity derivation counts are inconsistent"
+		});
+		return;
+	}
+	const expectedReason = value.signatures_considered > 25e3 ? "identity_signature_input_budget_exceeded" : value.largest_identity_block_signatures > 250 ? "identity_block_signature_budget_exceeded" : value.planned_pair_comparisons > 31125 ? "identity_pair_comparison_budget_exceeded" : null;
+	if (!(expectedReason === null ? value.status === "completed" && value.abstention_reason === null && value.comparison_mode === "exact_exhaustive" && value.resolver_invoked : value.status === "abstained" && value.abstention_reason === expectedReason && value.comparison_mode === "abstained" && !value.resolver_invoked)) context.addIssue({
+		code: "custom",
+		message: "identity derivation status is inconsistent"
+	});
+});
+const CorpusDerivationSourceSchema = z.object({
+	paper_id: z.string().regex(/^[a-z0-9][a-z0-9_.:-]{0,179}$/u),
+	component_path: z.string().min(13).max(1024),
+	component_sha256: sha256Hex,
+	component_bytes: safeCount.min(1).max(268435456),
+	pipeline_run_id: boundedSourceText(512),
+	graph_store_binding_id: z.string().regex(/^wiki-v1:[0-9a-f]{32}$/u),
+	knowledge_graph_sha256: sha256Hex,
+	eligibility_schema_version: boundedSourceText(128),
+	eligibility_decision_sha256: sha256Hex,
+	eligibility_receipt_sha256: sha256Hex,
+	eligibility_policy_sha256: sha256Hex,
+	provider_plan_sha256: sha256Hex,
+	provider_execution_receipt_sha256: sha256Hex,
+	evidence_plane_sha256: sha256Hex,
+	qualified_payload_sha256: sha256Hex
+}).strict();
+const ReceiptSchema = z.object({
+	schema_version: z.literal("engram.corpus-derivation-receipt.v2"),
+	derivation_kind: z.literal("entity_graph"),
+	algorithm_version: boundedSourceText(128),
+	graph_store_binding_id: z.string().regex(/^wiki-v1:[0-9a-f]{32}$/u),
+	source_revision: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+	source_revision_created_at: Rfc3339TimestampSchema,
+	eligibility_decision_set_sha256: sha256Hex,
+	sources: z.array(CorpusDerivationSourceSchema).max(250),
+	eligible_paper_count: safeCount,
+	identity_derivation: CorpusIdentityDerivationSchema,
+	parent_output_sha256: sha256Hex,
+	input_sha256: sha256Hex,
+	output_hash_scope: z.literal("response_without_derivation_receipt"),
+	output_sha256: sha256Hex,
+	receipt_sha256: sha256Hex,
+	advisory_only: z.literal(true),
+	cross_store_evidence_authority: z.literal(false),
+	is_paper_local_evidence: z.literal(false),
+	calibrated_posterior: z.literal(false)
+}).strict();
+const ReceiptBoundEngramGraphSchema = z.object({
+	nodes: z.array(EngramReceiptNodeSchema).max(PARAM_LIMITS.maxGraphNodes),
+	edges: z.array(EngramReceiptEdgeSchema).max(PARAM_LIMITS.maxGraphEdges),
+	...EngramGraphSummaryShape,
+	identity_derivation: CorpusIdentityDerivationSchema,
+	derivation_receipt: ReceiptSchema
+}).strict();
+const AnyEngramGraphSchema = z.union([EngramGraphSchema, ReceiptBoundEngramGraphSchema]);
+const AdapterOptionsSchema = z.object({
 	graphId: boundedSourceText(160),
 	graphSource: boundedSourceText(200),
 	graphSnapshotId: boundedSourceText(200)
@@ -125,10 +225,49 @@ function summaryErrors(graph) {
 	if (JSON.stringify(actualKinds) !== JSON.stringify(declaredKinds)) errors.push("kinds does not equal the distinct node-kind set");
 	const edgeCounts = /* @__PURE__ */ new Map();
 	for (const edge of graph.edges) edgeCounts.set(edge.kind, (edgeCounts.get(edge.kind) ?? 0) + 1);
-	for (const kind of require_authoring.CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS) if ((graph.edge_counts[kind] ?? 0) !== (edgeCounts.get(kind) ?? 0)) {
+	for (const kind of CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS) if ((graph.edge_counts[kind] ?? 0) !== (edgeCounts.get(kind) ?? 0)) {
 		errors.push("edge_counts does not match the edge assertions");
 		break;
 	}
+	return errors;
+}
+function isReceiptBoundGraph(graph) {
+	return "derivation_receipt" in graph;
+}
+function receiptEvidence(graphSnapshotId, recordId) {
+	return [{
+		kind: "graph_snapshot_record",
+		evidence_id: graphSnapshotId,
+		record_id: recordId
+	}];
+}
+function compareTuple(left, right) {
+	for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
+		if (left[index] < right[index]) return -1;
+		if (left[index] > right[index]) return 1;
+	}
+	return left.length - right.length;
+}
+function receiptGraphErrors(graph, graphSnapshotId) {
+	const errors = [];
+	const receipt = graph.derivation_receipt;
+	if (receipt.source_revision_created_at !== graph.generated_at || receipt.eligible_paper_count !== graph.paper_count || canonicalize(receipt.identity_derivation) !== canonicalize(graph.identity_derivation)) errors.push("derivation receipt does not match the graph summary or identity derivation");
+	if (receipt.sources.length !== graph.paper_count || receipt.sources.some((source, index, sources) => source.component_path !== `graphs/${source.paper_id}.json` || source.graph_store_binding_id !== receipt.graph_store_binding_id || index > 0 && sources[index - 1].paper_id >= source.paper_id)) errors.push("derivation receipt source roster is inconsistent");
+	const nodeIds = graph.nodes.map((node) => node.id);
+	if (nodeIds.some((id, index) => index > 0 && nodeIds[index - 1] >= id) || new Set(nodeIds).size !== nodeIds.length) errors.push("receipt-bound graph nodes must be unique and canonically ordered");
+	const paperIds = graph.nodes.filter((node) => node.kind === "paper").map((node) => node.id).sort();
+	const sourcePaperIds = receipt.sources.map((source) => `paper:${source.paper_id}`);
+	if (canonicalize(paperIds) !== canonicalize(sourcePaperIds)) errors.push("receipt source roster does not equal the graph paper-node roster");
+	const nodeIdSet = new Set(nodeIds);
+	const edgeKeys = graph.edges.map((edge) => [
+		edge.kind,
+		edge.source,
+		edge.target
+	]);
+	if (edgeKeys.some((key, index) => index > 0 && compareTuple(edgeKeys[index - 1], key) >= 0) || graph.edges.some((edge) => edge.source === edge.target || !nodeIdSet.has(edge.source) || !nodeIdSet.has(edge.target))) errors.push("receipt-bound graph edges must be unique, canonical, non-self, and non-dangling");
+	if (graph.identity_derivation.status === "abstained" && (graph.nodes.some((node) => node.kind !== "paper") || graph.edges.some((edge) => edge.kind !== "cites"))) errors.push("an abstained identity derivation cannot emit identity entities");
+	if (graph.edges.some((edge) => edge.confidence != null && edge.kind !== "cites" && edge.kind !== "variant_of")) errors.push("membership edges cannot carry an undeclared confidence meaning");
+	if (canonicalDigest(graph) !== graphSnapshotId) errors.push("graphSnapshotId does not bind the complete receipt-bound response");
 	return errors;
 }
 function adaptEngramCorpusEntityGraph(graph, options) {
@@ -141,12 +280,12 @@ function adaptEngramCorpusEntityGraph(graph, options) {
 			ok: false,
 			errors: ["(root): adapter options must be a plain object"]
 		};
-		const nodeBudget = preflightArrayLength(graph, "nodes", require_authoring.PARAM_LIMITS.maxGraphNodes);
+		const nodeBudget = preflightArrayLength(graph, "nodes", PARAM_LIMITS.maxGraphNodes);
 		if (nodeBudget) return {
 			ok: false,
 			errors: [nodeBudget]
 		};
-		const edgeBudget = preflightArrayLength(graph, "edges", require_authoring.PARAM_LIMITS.maxGraphEdges);
+		const edgeBudget = preflightArrayLength(graph, "edges", PARAM_LIMITS.maxGraphEdges);
 		if (edgeBudget) return {
 			ok: false,
 			errors: [edgeBudget]
@@ -156,30 +295,30 @@ function adaptEngramCorpusEntityGraph(graph, options) {
 			ok: false,
 			errors: [kindsBudget]
 		};
-		const countsBudget = preflightRecordKeyCount(graph, "edge_counts", require_authoring.CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS.length);
+		const countsBudget = preflightRecordKeyCount(graph, "edge_counts", CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS.length);
 		if (countsBudget) return {
 			ok: false,
 			errors: [countsBudget]
 		};
-		const graphSnapshot = require_authoring.JsonParamsSchema.safeParse(graph);
+		const graphSnapshot = JsonParamsSchema.safeParse(graph);
 		if (!graphSnapshot.success) return {
 			ok: false,
-			errors: require_knowledgeGraphLimits.formatValidationIssues(graphSnapshot.error.issues)
+			errors: formatValidationIssues(graphSnapshot.error.issues)
 		};
-		const optionsSnapshot = require_authoring.JsonParamsSchema.safeParse(options);
+		const optionsSnapshot = JsonParamsSchema.safeParse(options);
 		if (!optionsSnapshot.success) return {
 			ok: false,
-			errors: require_knowledgeGraphLimits.formatValidationIssues(optionsSnapshot.error.issues)
+			errors: formatValidationIssues(optionsSnapshot.error.issues)
 		};
-		const checkedGraph = EngramGraphSchema.safeParse(graphSnapshot.data);
+		const checkedGraph = AnyEngramGraphSchema.safeParse(graphSnapshot.data);
 		if (!checkedGraph.success) return {
 			ok: false,
-			errors: require_knowledgeGraphLimits.formatValidationIssues(checkedGraph.error.issues)
+			errors: formatValidationIssues(checkedGraph.error.issues)
 		};
 		const checkedOptions = AdapterOptionsSchema.safeParse(optionsSnapshot.data);
 		if (!checkedOptions.success) return {
 			ok: false,
-			errors: require_knowledgeGraphLimits.formatValidationIssues(checkedOptions.error.issues)
+			errors: formatValidationIssues(checkedOptions.error.issues)
 		};
 		const graphValue = checkedGraph.data;
 		const optionValue = checkedOptions.data;
@@ -188,6 +327,14 @@ function adaptEngramCorpusEntityGraph(graph, options) {
 			ok: false,
 			errors: summaries
 		};
+		const receiptBound = isReceiptBoundGraph(graphValue);
+		if (receiptBound) {
+			const receiptErrors = receiptGraphErrors(graphValue, optionValue.graphSnapshotId);
+			if (receiptErrors.length > 0) return {
+				ok: false,
+				errors: receiptErrors
+			};
+		}
 		const params = {
 			graph_id: optionValue.graphId,
 			graph_source: optionValue.graphSource,
@@ -212,12 +359,16 @@ function adaptEngramCorpusEntityGraph(graph, options) {
 						pagerank: node.pagerank ?? null
 					},
 					epistemic: { ...DERIVED_ADVISORY },
-					evidence: node.evidence
+					evidence: receiptBound ? receiptEvidence(optionValue.graphSnapshotId, `node:${node.id}`) : "evidence" in node ? node.evidence : []
 				};
 			}),
 			edges: graphValue.edges.map((edge) => {
-				const id = edge.id ?? legacyEdgeId(edge);
-				const score = edge.uncalibrated_score;
+				const id = ("id" in edge ? edge.id : void 0) ?? legacyEdgeId(edge);
+				const score = receiptBound ? !("confidence" in edge) || edge.confidence == null ? void 0 : {
+					kind: edge.kind === "cites" ? "citation_resolution_confidence" : "structural_similarity",
+					value: edge.confidence,
+					calibrated_posterior: false
+				} : "uncalibrated_score" in edge ? edge.uncalibrated_score : void 0;
 				return {
 					id,
 					source: edge.source,
@@ -226,23 +377,23 @@ function adaptEngramCorpusEntityGraph(graph, options) {
 					label: EDGE_LABELS[edge.kind],
 					attributes: {},
 					epistemic: { ...DERIVED_ADVISORY },
-					evidence: edge.evidence,
+					evidence: receiptBound ? receiptEvidence(optionValue.graphSnapshotId, `edge:${id}`) : "evidence" in edge ? edge.evidence : [],
 					...score ? { uncalibrated_score: score } : {}
 				};
 			})
 		};
-		const checked = require_authoring.KnowledgeGraph3DParamsSchema.safeParse(params);
+		const checked = KnowledgeGraph3DParamsSchema.safeParse(params);
 		return checked.success ? {
 			ok: true,
 			params: checked.data
 		} : {
 			ok: false,
-			errors: require_knowledgeGraphLimits.formatValidationIssues(checked.error.issues)
+			errors: formatValidationIssues(checked.error.issues)
 		};
 	} catch (error) {
 		return {
 			ok: false,
-			errors: [`could not safely inspect Engram corpus graph: ${require_knowledgeGraphLimits.safeErrorMessage(error)}`]
+			errors: [`could not safely inspect Engram corpus graph: ${safeErrorMessage(error)}`]
 		};
 	}
 }
@@ -251,7 +402,7 @@ function adaptEngramCorpusEntityGraph(graph, options) {
 //#region core/skills/router.ts
 const FAMILY_KIND_TO_SKILL = (() => {
 	const output = /* @__PURE__ */ new Map();
-	for (const contract of require_authoring.listSkills()) {
+	for (const contract of listSkills()) {
 		const kind = contract.routerEligibility?.dataShapeKind;
 		if (!kind) continue;
 		const map = output.get(contract.deviceFamily) ?? /* @__PURE__ */ new Map();
@@ -272,7 +423,7 @@ function familyDisambiguator(family) {
 }
 const FAMILY_MEMBERS = (() => {
 	const out = /* @__PURE__ */ new Map();
-	for (const c of require_authoring.listSkills()) {
+	for (const c of listSkills()) {
 		const members = out.get(c.deviceFamily) ?? [];
 		members.push(c.id);
 		out.set(c.deviceFamily, members);
@@ -281,7 +432,7 @@ const FAMILY_MEMBERS = (() => {
 	return out;
 })();
 function resolve(skill) {
-	const contract = require_authoring.NEST_SKILL_REGISTRY[skill];
+	const contract = NEST_SKILL_REGISTRY[skill];
 	if (contract.scene === null) return {
 		ok: false,
 		reason: "no_cortexel_scene",
@@ -320,8 +471,8 @@ function routeToSceneUnsafe(input) {
 		if (typeof key !== "string" || !allowedInputKeys.has(key)) return {
 			ok: false,
 			reason: "invalid_input",
-			field: typeof key === "string" ? require_knowledgeGraphLimits.safePrimitiveDiagnostic(key, require_knowledgeGraphLimits.PUBLIC_DIAGNOSTIC_LIMITS.maxPathLength) : "(symbol)",
-			message: `unknown route input field '${require_knowledgeGraphLimits.safePrimitiveDiagnostic(key)}'`
+			field: typeof key === "string" ? safePrimitiveDiagnostic(key, PUBLIC_DIAGNOSTIC_LIMITS.maxPathLength) : "(symbol)",
+			message: `unknown route input field '${safePrimitiveDiagnostic(key)}'`
 		};
 		const descriptor = Object.getOwnPropertyDescriptor(input, key);
 		if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) return {
@@ -339,11 +490,11 @@ function routeToSceneUnsafe(input) {
 		message: "route input is missing deviceFamily"
 	};
 	const deviceFamily = raw.deviceFamily;
-	if (typeof deviceFamily !== "string" || !require_authoring.NEST_DEVICE_FAMILIES.includes(deviceFamily)) return {
+	if (typeof deviceFamily !== "string" || !NEST_DEVICE_FAMILIES.includes(deviceFamily)) return {
 		ok: false,
 		reason: "unknown_family",
 		field: "deviceFamily",
-		message: `unknown device family '${require_knowledgeGraphLimits.safePrimitiveDiagnostic(deviceFamily)}'`
+		message: `unknown device family '${safePrimitiveDiagnostic(deviceFamily)}'`
 	};
 	const family = deviceFamily;
 	const members = FAMILY_MEMBERS.get(family);
@@ -352,7 +503,7 @@ function routeToSceneUnsafe(input) {
 		reason: "unknown_family",
 		field: "deviceFamily"
 	};
-	const candidates = members.filter((skill) => require_authoring.NEST_SKILL_REGISTRY[skill].routerEligibility?.bareFamilyCandidate !== false);
+	const candidates = members.filter((skill) => NEST_SKILL_REGISTRY[skill].routerEligibility?.bareFamilyCandidate !== false);
 	const dataShape = raw.dataShape;
 	let shapeSkill;
 	if (dataShape !== void 0) {
@@ -400,17 +551,17 @@ function routeToSceneUnsafe(input) {
 			field: "dataShape.kind",
 			candidates: [...candidates],
 			disambiguateBy: disambiguator,
-			message: `unknown ${family} data kind '${require_knowledgeGraphLimits.safePrimitiveDiagnostic(kind)}'`
+			message: `unknown ${family} data kind '${safePrimitiveDiagnostic(kind)}'`
 		};
 	}
 	const suppliedSkill = raw.skill;
 	if (suppliedSkill !== void 0) {
-		if (!require_authoring.isSkillId(suppliedSkill)) return {
+		if (!isSkillId(suppliedSkill)) return {
 			ok: false,
 			reason: "invalid_discriminator",
 			field: "skill",
 			candidates: [...candidates],
-			message: `unknown skill discriminator '${require_knowledgeGraphLimits.safePrimitiveDiagnostic(suppliedSkill)}'`,
+			message: `unknown skill discriminator '${safePrimitiveDiagnostic(suppliedSkill)}'`,
 			disambiguateBy: {
 				field: "skill",
 				maps: Object.fromEntries(candidates.map((skill) => [skill, skill]))
@@ -458,7 +609,7 @@ function routeToScene(input) {
 			ok: false,
 			reason: "invalid_input",
 			field: "(input)",
-			message: `route input could not be safely inspected: ${require_knowledgeGraphLimits.safeErrorMessage(error)}`
+			message: `route input could not be safely inspected: ${safeErrorMessage(error)}`
 		};
 	}
 }
@@ -520,7 +671,7 @@ function denseDataArray(value) {
 	return Reflect.ownKeys(value).length === output.length + 1 ? output : null;
 }
 function nonblank(value) {
-	return typeof value === "string" && value.trim().length > 0 && require_knowledgeGraphLimits.SAFE_DISPLAY_STRING_PATTERN.test(value);
+	return typeof value === "string" && value.trim().length > 0 && SAFE_DISPLAY_STRING_PATTERN.test(value);
 }
 function plainRecord(value) {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
@@ -790,7 +941,7 @@ function boundedArrayInput(value, max) {
 		return snapshot;
 	}
 	if (ArrayBuffer.isView(value) && !(value instanceof DataView)) {
-		const length = require_knowledgeGraphLimits.intrinsicTypedArrayLength(value);
+		const length = intrinsicTypedArrayLength(value);
 		if (length === void 0) return INVALID_ARRAY_INPUT;
 		return length <= max ? value : OVERSIZED_ARRAY_INPUT;
 	}
@@ -799,7 +950,7 @@ function boundedArrayInput(value, max) {
 function typedNumbersToArray(value) {
 	value = boundedArrayInput(value, NEST_INPUT_LIMITS.maxSamples);
 	if (!ArrayBuffer.isView(value) || value instanceof DataView) return value;
-	const length = require_knowledgeGraphLimits.intrinsicTypedArrayLength(value);
+	const length = intrinsicTypedArrayLength(value);
 	if (length === void 0) return INVALID_ARRAY_INPUT;
 	const typed = value;
 	const snapshot = new Array(length);
@@ -807,12 +958,12 @@ function typedNumbersToArray(value) {
 	return snapshot;
 }
 function numberArray(options = {}) {
-	const array = zod.z.array(zod.z.unknown()).min(options.min ?? 0, options.minMessage).max(NEST_INPUT_LIMITS.maxSamples).superRefine((values, ctx) => {
+	const array = z.array(z.unknown()).min(options.min ?? 0, options.minMessage).max(NEST_INPUT_LIMITS.maxSamples).superRefine((values, ctx) => {
 		for (let index = 0; index < values.length; index++) {
 			const value = values[index];
 			if (typeof value !== "number" || !Number.isFinite(value)) {
 				ctx.addIssue({
-					code: zod.z.ZodIssueCode.custom,
+					code: z.ZodIssueCode.custom,
 					path: [index],
 					message: "expected a finite number (NaN/Inf is unusable evidence)"
 				});
@@ -820,7 +971,7 @@ function numberArray(options = {}) {
 			}
 			if (options.float32 && Math.abs(value) > FLOAT32_MAX$1) {
 				ctx.addIssue({
-					code: zod.z.ZodIssueCode.custom,
+					code: z.ZodIssueCode.custom,
 					path: [index],
 					message: "value is outside the Float32 range used by GPU buffers"
 				});
@@ -828,7 +979,7 @@ function numberArray(options = {}) {
 			}
 			if ((options.integerId || options.nonnegativeInteger) && (!Number.isSafeInteger(value) || value < 0 || Object.is(value, -0))) {
 				ctx.addIssue({
-					code: zod.z.ZodIssueCode.custom,
+					code: z.ZodIssueCode.custom,
 					path: [index],
 					message: options.integerId ? "identifier values must be non-negative safe integers" : "counts must be non-negative safe integers"
 				});
@@ -836,7 +987,7 @@ function numberArray(options = {}) {
 			}
 		}
 	}).transform((values) => values);
-	return zod.z.preprocess(typedNumbersToArray, array);
+	return z.preprocess(typedNumbersToArray, array);
 }
 const finiteNumberArray = numberArray();
 const float32NumberArray = numberArray({ float32: true });
@@ -856,7 +1007,7 @@ const nonEmptyFiniteIntegerArray = numberArray({
 	minMessage: "no senders",
 	integerId: true
 });
-const finiteInteger = zod.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "ids must not be negative zero");
+const finiteInteger = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "ids must not be negative zero");
 const nonEmptyFinite = numberArray({
 	min: 1,
 	minMessage: "empty array — no samples to render"
@@ -866,19 +1017,19 @@ const nonEmptyFloat32Array = numberArray({
 	minMessage: "empty array — no samples to render",
 	float32: true
 });
-const synapseModelArray = zod.z.array(zod.z.string().trim().min(1).max(120).regex(require_knowledgeGraphLimits.SAFE_DISPLAY_STRING_PATTERN)).max(NEST_INPUT_LIMITS.maxSamples);
+const synapseModelArray = z.array(z.string().trim().min(1).max(120).regex(SAFE_DISPLAY_STRING_PATTERN)).max(NEST_INPUT_LIMITS.maxSamples);
 function positionArray(dimensions) {
-	return zod.z.preprocess((value) => boundedArrayInput(value, NEST_INPUT_LIMITS.maxPositions), zod.z.array(zod.z.unknown()).min(1, "no positions").max(NEST_INPUT_LIMITS.maxPositions).transform((positions, ctx) => {
+	return z.preprocess((value) => boundedArrayInput(value, NEST_INPUT_LIMITS.maxPositions), z.array(z.unknown()).min(1, "no positions").max(NEST_INPUT_LIMITS.maxPositions).transform((positions, ctx) => {
 		const output = [];
 		for (let index = 0; index < positions.length; index++) {
 			const position = positions[index];
 			if (!Array.isArray(position) || position.length !== dimensions) {
 				ctx.addIssue({
-					code: zod.z.ZodIssueCode.custom,
+					code: z.ZodIssueCode.custom,
 					path: [index],
 					message: `position must be an exact ${dimensions}D coordinate tuple`
 				});
-				return zod.z.NEVER;
+				return z.NEVER;
 			}
 			const tuple = [];
 			for (let axis = 0; axis < dimensions; axis++) {
@@ -886,11 +1037,11 @@ function positionArray(dimensions) {
 				const value = descriptor && "value" in descriptor ? descriptor.value : void 0;
 				if (!descriptor || !descriptor.enumerable || typeof value !== "number" || !Number.isFinite(value) || Math.abs(value) > FLOAT32_MAX$1) {
 					ctx.addIssue({
-						code: zod.z.ZodIssueCode.custom,
+						code: z.ZodIssueCode.custom,
 						path: [index, axis],
 						message: "coordinate must be a finite Float32-range number"
 					});
-					return zod.z.NEVER;
+					return z.NEVER;
 				}
 				tuple.push(value);
 			}
@@ -899,17 +1050,17 @@ function positionArray(dimensions) {
 		return output;
 	}));
 }
-const localEdgeArray = zod.z.preprocess((value) => boundedArrayInput(value, NEST_INPUT_LIMITS.maxSamples), zod.z.array(zod.z.unknown()).max(NEST_INPUT_LIMITS.maxSamples).transform((edges, ctx) => {
+const localEdgeArray = z.preprocess((value) => boundedArrayInput(value, NEST_INPUT_LIMITS.maxSamples), z.array(z.unknown()).max(NEST_INPUT_LIMITS.maxSamples).transform((edges, ctx) => {
 	const output = [];
 	for (let index = 0; index < edges.length; index++) {
 		const edge = edges[index];
 		if (edge === null || typeof edge !== "object" || Array.isArray(edge) || Reflect.ownKeys(edge).some((key) => key !== "source" && key !== "target")) {
 			ctx.addIssue({
-				code: zod.z.ZodIssueCode.custom,
+				code: z.ZodIssueCode.custom,
 				path: [index],
 				message: "edge must be a strict {source,target} object"
 			});
-			return zod.z.NEVER;
+			return z.NEVER;
 		}
 		const source = Object.getOwnPropertyDescriptor(edge, "source");
 		const target = Object.getOwnPropertyDescriptor(edge, "target");
@@ -917,11 +1068,11 @@ const localEdgeArray = zod.z.preprocess((value) => boundedArrayInput(value, NEST
 		const targetValue = target && "value" in target ? target.value : void 0;
 		if (!source?.enumerable || !target?.enumerable || !finiteInteger.safeParse(sourceValue).success || !finiteInteger.safeParse(targetValue).success) {
 			ctx.addIssue({
-				code: zod.z.ZodIssueCode.custom,
+				code: z.ZodIssueCode.custom,
 				path: [index],
 				message: "edge source/target must be non-negative safe integers"
 			});
-			return zod.z.NEVER;
+			return z.NEVER;
 		}
 		output.push({
 			source: sourceValue,
@@ -931,30 +1082,30 @@ const localEdgeArray = zod.z.preprocess((value) => boundedArrayInput(value, NEST
 	return output;
 }));
 /** spike_recorder events: nest.GetStatus(sr, 'events') → {senders, times}. */
-const SpikeRecorderEventsSchema = zod.z.object({
+const SpikeRecorderEventsSchema = z.object({
 	senders: finiteIntegerArray,
 	times: finiteNumberArray
 }).strict().superRefine((v, ctx) => {
 	if (v.senders.length !== v.times.length) ctx.addIssue({
-		code: zod.z.ZodIssueCode.custom,
+		code: z.ZodIssueCode.custom,
 		message: `senders (${v.senders.length}) and times (${v.times.length}) length mismatch`
 	});
 });
 /** multimeter events: {times, <variable>: values}. The host names the variable;
 *  Cortexel takes a normalized {times, values}. */
-const MultimeterEventsSchema = zod.z.object({
+const MultimeterEventsSchema = z.object({
 	times: nonEmptyFinite,
 	values: nonEmptyFloat32Input,
 	/** Present on a series returned by splitMultimeterBySender. */
 	sender: finiteInteger.optional()
 }).strict().superRefine((v, ctx) => {
 	if (v.times.length !== v.values.length) ctx.addIssue({
-		code: zod.z.ZodIssueCode.custom,
+		code: z.ZodIssueCode.custom,
 		message: `times (${v.times.length}) and values (${v.values.length}) length mismatch`
 	});
 	for (let i = 1; i < v.times.length; i++) if (v.times[i] <= v.times[i - 1]) {
 		ctx.addIssue({
-			code: zod.z.ZodIssueCode.custom,
+			code: z.ZodIssueCode.custom,
 			message: "multimeter times must be strictly increasing — likely multiple senders flattened together; split per sender before adapting"
 		});
 		break;
@@ -963,14 +1114,14 @@ const MultimeterEventsSchema = zod.z.object({
 /** A multimeter recording multiple senders: {times, values, senders} parallel
 *  arrays (the flattened form a single multimeter actually returns). Split per
 *  sender before rendering — each sender's sub-series must be monotonic. */
-const MultimeterMultiSenderSchema = zod.z.object({
+const MultimeterMultiSenderSchema = z.object({
 	times: nonEmptyFinite,
 	values: nonEmptyFloat32Array,
 	senders: nonEmptyFiniteIntegerArray
 }).strict().superRefine((v, ctx) => {
 	const n = v.times.length;
 	if (v.values.length !== n || v.senders.length !== n) ctx.addIssue({
-		code: zod.z.ZodIssueCode.custom,
+		code: z.ZodIssueCode.custom,
 		message: "times, values and senders must be the same length"
 	});
 });
@@ -981,7 +1132,7 @@ const MultimeterMultiSenderSchema = zod.z.object({
 * a weight or delay channel is present; endpoint-only snapshots retain their
 * model-free legacy shape.
 */
-const GetConnectionsSchema = zod.z.object({
+const GetConnectionsSchema = z.object({
 	sources: finiteIntegerArray,
 	targets: finiteIntegerArray,
 	weights: float32NumberArray.optional(),
@@ -989,25 +1140,25 @@ const GetConnectionsSchema = zod.z.object({
 	synapse_models: synapseModelArray.optional()
 }).strict().superRefine((v, ctx) => {
 	if (v.sources.length !== v.targets.length) ctx.addIssue({
-		code: zod.z.ZodIssueCode.custom,
+		code: z.ZodIssueCode.custom,
 		message: `sources (${v.sources.length}) and targets (${v.targets.length}) length mismatch`
 	});
 	if (v.weights && v.weights.length !== v.sources.length) ctx.addIssue({
-		code: zod.z.ZodIssueCode.custom,
+		code: z.ZodIssueCode.custom,
 		message: "weights length does not match connection count"
 	});
 	if (v.delays && v.delays.length !== v.sources.length) ctx.addIssue({
-		code: zod.z.ZodIssueCode.custom,
+		code: z.ZodIssueCode.custom,
 		message: "delays length does not match connection count"
 	});
 	if (v.synapse_models && v.synapse_models.length !== v.sources.length) ctx.addIssue({
-		code: zod.z.ZodIssueCode.custom,
+		code: z.ZodIssueCode.custom,
 		message: "synapse_models length does not match connection count"
 	});
 	if (v.delays) {
 		for (let index = 0; index < v.delays.length; index++) if (v.delays[index] <= 0) {
 			ctx.addIssue({
-				code: zod.z.ZodIssueCode.custom,
+				code: z.ZodIssueCode.custom,
 				path: ["delays", index],
 				message: "synaptic delays must be strictly positive durations"
 			});
@@ -1016,34 +1167,34 @@ const GetConnectionsSchema = zod.z.object({
 	}
 });
 /** nest.GetPosition(nodes) in 2D → ((x,y), ...). */
-const GetPosition2DSchema = zod.z.object({
+const GetPosition2DSchema = z.object({
 	positions: positionArray(2),
 	node_ids: finiteIntegerArray.optional()
 }).strict().superRefine((value, ctx) => {
 	if (value.node_ids && value.node_ids.length !== value.positions.length) ctx.addIssue({
-		code: zod.z.ZodIssueCode.custom,
+		code: z.ZodIssueCode.custom,
 		path: ["node_ids"],
 		message: "node_ids length must match positions length"
 	});
 	if (value.node_ids && new Set(value.node_ids).size !== value.node_ids.length) ctx.addIssue({
-		code: zod.z.ZodIssueCode.custom,
+		code: z.ZodIssueCode.custom,
 		path: ["node_ids"],
 		message: "node_ids must be unique"
 	});
 });
 /** nest.GetPosition(nodes) in 3D → ((x,y,z), ...). */
-const GetPosition3DSchema = zod.z.object({
+const GetPosition3DSchema = z.object({
 	positions: positionArray(3),
 	node_ids: finiteIntegerArray.optional(),
 	edges: localEdgeArray.optional()
 }).strict().superRefine((value, ctx) => {
 	if (value.node_ids && value.node_ids.length !== value.positions.length) ctx.addIssue({
-		code: zod.z.ZodIssueCode.custom,
+		code: z.ZodIssueCode.custom,
 		path: ["node_ids"],
 		message: "node_ids length must match positions length"
 	});
 	if (value.node_ids && new Set(value.node_ids).size !== value.node_ids.length) ctx.addIssue({
-		code: zod.z.ZodIssueCode.custom,
+		code: z.ZodIssueCode.custom,
 		path: ["node_ids"],
 		message: "node_ids must be unique"
 	});
@@ -1051,7 +1202,7 @@ const GetPosition3DSchema = zod.z.object({
 		const edge = value.edges[index];
 		if (edge.source >= value.positions.length) {
 			ctx.addIssue({
-				code: zod.z.ZodIssueCode.custom,
+				code: z.ZodIssueCode.custom,
 				path: [
 					"edges",
 					index,
@@ -1063,7 +1214,7 @@ const GetPosition3DSchema = zod.z.object({
 		}
 		if (edge.target >= value.positions.length) {
 			ctx.addIssue({
-				code: zod.z.ZodIssueCode.custom,
+				code: z.ZodIssueCode.custom,
 				path: [
 					"edges",
 					index,
@@ -1083,7 +1234,7 @@ const GetPosition3DSchema = zod.z.object({
 * non-negative safe integers. The strict object rejects the `offsets` channel
 * emitted for `time_in_steps=true` rather than projecting it away.
 */
-const WeightRecorderEventsSchema = zod.z.object({
+const WeightRecorderEventsSchema = z.object({
 	times: finiteNumberArray,
 	weights: finiteNumberArray,
 	senders: finiteIntegerArray,
@@ -1098,7 +1249,7 @@ const WeightRecorderEventsSchema = zod.z.object({
 		"ports",
 		"receptors"
 	]) if (v[field].length !== v.times.length) ctx.addIssue({
-		code: zod.z.ZodIssueCode.custom,
+		code: z.ZodIssueCode.custom,
 		path: [field],
 		message: `${field} (${v[field].length}) and times (${v.times.length}) length mismatch`
 	});
@@ -1108,21 +1259,21 @@ const WeightRecorderEventsSchema = zod.z.object({
 * The public adapter descriptor-projects these from a full device status before
 * applying this schema, so unrelated NEST metadata is accepted but never read.
 */
-const CorrelationDetectorStatusSchema = zod.z.object({
-	delta_tau: zod.z.number().finite().positive(),
-	tau_max: zod.z.number().finite().positive(),
-	Tstart: zod.z.number().finite(),
-	Tstop: zod.z.number().finite(),
+const CorrelationDetectorStatusSchema = z.object({
+	delta_tau: z.number().finite().positive(),
+	tau_max: z.number().finite().positive(),
+	Tstart: z.number().finite(),
+	Tstop: z.number().finite(),
 	count_histogram: nonEmptyNonnegativeSafeIntegerArray.optional(),
 	histogram: nonEmptyFloat32Input.optional()
 }).strict().superRefine((value, ctx) => {
 	if (!(value.Tstop > value.Tstart)) ctx.addIssue({
-		code: zod.z.ZodIssueCode.custom,
+		code: z.ZodIssueCode.custom,
 		path: ["Tstop"],
 		message: "Tstop must be greater than Tstart"
 	});
 	if (value.count_histogram === void 0 && value.histogram === void 0) ctx.addIssue({
-		code: zod.z.ZodIssueCode.custom,
+		code: z.ZodIssueCode.custom,
 		message: "count_histogram or histogram is required"
 	});
 });
@@ -1175,10 +1326,10 @@ function snapshotNestInput(input) {
 			if (value instanceof DataView) return fail(path, "DataView inputs are not supported");
 			try {
 				const typed = value;
-				const bufferKind = require_knowledgeGraphLimits.intrinsicTypedArrayBufferKind(value);
+				const bufferKind = intrinsicTypedArrayBufferKind(value);
 				if (bufferKind === "shared") return fail(path, "SharedArrayBuffer-backed typed arrays are not snapshot-safe");
 				if (bufferKind !== "array") return fail(path, "typed-array backing storage could not be safely inspected");
-				const length = require_knowledgeGraphLimits.intrinsicTypedArrayLength(value);
+				const length = intrinsicTypedArrayLength(value);
 				if (length === void 0) return fail(path, "typed array could not be safely inspected");
 				if (length > NEST_SAFE_INPUT_LIMITS.maxNodes - visited) return fail(path, `input exceeds ${NEST_SAFE_INPUT_LIMITS.maxNodes} values`);
 				const clone = new Array(length);
@@ -1223,7 +1374,7 @@ function snapshotNestInput(input) {
 			const keys = Reflect.ownKeys(value);
 			const maximumKeys = depth === 0 ? NEST_SAFE_INPUT_LIMITS.maxRootKeys : NEST_SAFE_INPUT_LIMITS.maxObjectKeys;
 			if (keys.length > maximumKeys) {
-				const samples = keys.slice(0, 8).map((key) => require_knowledgeGraphLimits.safeDiagnosticText(JSON.stringify(typeof key === "string" ? key.slice(0, 60) : "<symbol>"), 80));
+				const samples = keys.slice(0, 8).map((key) => safeDiagnosticText(JSON.stringify(typeof key === "string" ? key.slice(0, 60) : "<symbol>"), 80));
 				return fail(path, `object has ${keys.length} fields; at most ${maximumKeys} are allowed (sample: ${samples.join(", ")})`);
 			}
 			const clone = {};
@@ -1231,7 +1382,7 @@ function snapshotNestInput(input) {
 				if (typeof key !== "string") return fail(path, "symbol fields are not allowed");
 				if (key.length > NEST_SAFE_INPUT_LIMITS.maxFieldNameLength) return fail(path, `field names may contain at most ${NEST_SAFE_INPUT_LIMITS.maxFieldNameLength} characters`);
 				const descriptor = Object.getOwnPropertyDescriptor(value, key);
-				if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) return fail(`${path}.${require_knowledgeGraphLimits.safeDiagnosticText(JSON.stringify(key), 140)}`, "field must be an enumerable data property, not an accessor");
+				if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) return fail(`${path}.${safeDiagnosticText(JSON.stringify(key), 140)}`, "field must be an enumerable data property, not an accessor");
 				const nested = visit(descriptor.value, `${path}.${key}`, depth + 1);
 				if (!nested.ok) return nested;
 				Object.defineProperty(clone, key, {
@@ -1268,7 +1419,7 @@ function parseNestInput(schema, input) {
 			data: parsed.data
 		} : {
 			ok: false,
-			errors: require_knowledgeGraphLimits.formatValidationIssues(parsed.error.issues)
+			errors: formatValidationIssues(parsed.error.issues)
 		};
 	} catch {
 		return {
@@ -1338,25 +1489,25 @@ const SYNAPSE_MEASUREMENT_FIELD_SEMANTICS = Object.freeze([
 	"unknown"
 ]);
 const SYNAPSE_MODEL_SEMANTICS_MAXIMUM = 1e5;
-const synapseModelNameSchema = zod.z.string().trim().min(1).max(120).regex(require_knowledgeGraphLimits.SAFE_DISPLAY_STRING_PATTERN);
-const SynapseModelMeasurementSemanticsSchema = zod.z.object({
+const synapseModelNameSchema = z.string().trim().min(1).max(120).regex(SAFE_DISPLAY_STRING_PATTERN);
+const SynapseModelMeasurementSemanticsSchema = z.object({
 	synapseModel: synapseModelNameSchema,
-	weight: zod.z.enum(SYNAPSE_MEASUREMENT_FIELD_SEMANTICS),
-	delay: zod.z.enum(SYNAPSE_MEASUREMENT_FIELD_SEMANTICS)
+	weight: z.enum(SYNAPSE_MEASUREMENT_FIELD_SEMANTICS),
+	delay: z.enum(SYNAPSE_MEASUREMENT_FIELD_SEMANTICS)
 }).strict();
 /** Bound declarations before semantic set comparison can amplify host input. */
 function boundedSynapseModelMeasurementSemanticsSchema(maximum) {
-	return zod.z.array(SynapseModelMeasurementSemanticsSchema).max(maximum);
+	return z.array(SynapseModelMeasurementSemanticsSchema).max(maximum);
 }
 const KNOWN_IGNORED_CHANNELS = /* @__PURE__ */ new Map([
 	["gap_junction", /* @__PURE__ */ new Set(["delay"])],
 	["rate_connection_instantaneous", /* @__PURE__ */ new Set(["delay"])],
 	["diffusion_connection", /* @__PURE__ */ new Set(["weight", "delay"])]
 ]);
-const SynapseModelSemanticsValidationInputSchema = zod.z.object({
-	synapseModels: zod.z.array(synapseModelNameSchema).max(SYNAPSE_MODEL_SEMANTICS_MAXIMUM).optional(),
+const SynapseModelSemanticsValidationInputSchema = z.object({
+	synapseModels: z.array(synapseModelNameSchema).max(SYNAPSE_MODEL_SEMANTICS_MAXIMUM).optional(),
 	declarations: boundedSynapseModelMeasurementSemanticsSchema(SYNAPSE_MODEL_SEMANTICS_MAXIMUM).optional(),
-	presentChannels: zod.z.array(zod.z.enum(["weight", "delay"])).max(2)
+	presentChannels: z.array(z.enum(["weight", "delay"])).max(2)
 }).strict();
 /**
 * Bind a complete per-model host declaration to the exact observed model set.
@@ -1433,18 +1584,18 @@ const NEST_ADAPTER_LIMITS = Object.freeze({
 	maxSplitSeries: 4096,
 	maxUniqueSpikeSenders: 5e4
 });
-const MultimeterOptionsSchema = zod.z.object({
-	variable: zod.z.string().max(120).regex(require_knowledgeGraphLimits.SAFE_DISPLAY_STRING_PATTERN).optional(),
-	units: zod.z.string().max(80).regex(require_knowledgeGraphLimits.SAFE_DISPLAY_STRING_PATTERN).optional()
+const MultimeterOptionsSchema = z.object({
+	variable: z.string().max(120).regex(SAFE_DISPLAY_STRING_PATTERN).optional(),
+	units: z.string().max(80).regex(SAFE_DISPLAY_STRING_PATTERN).optional()
 }).strict();
-const ConnectionOptionsSchema = zod.z.object({
+const ConnectionOptionsSchema = z.object({
 	synapseModelSemantics: boundedSynapseModelMeasurementSemanticsSchema(NEST_ADAPTER_LIMITS.maxConnections).optional(),
-	weightUnits: zod.z.string().trim().min(1).max(80).regex(require_knowledgeGraphLimits.SAFE_DISPLAY_STRING_PATTERN).optional(),
-	delayUnits: zod.z.string().trim().min(1).max(80).regex(require_knowledgeGraphLimits.SAFE_DISPLAY_STRING_PATTERN).optional()
+	weightUnits: z.string().trim().min(1).max(80).regex(SAFE_DISPLAY_STRING_PATTERN).optional(),
+	delayUnits: z.string().trim().min(1).max(80).regex(SAFE_DISPLAY_STRING_PATTERN).optional()
 }).strict();
-const PositionOptionsSchema = zod.z.object({
-	dims: zod.z.union([zod.z.literal(2), zod.z.literal(3)]).default(3),
-	coordinateUnits: zod.z.string().trim().min(1).max(80).regex(require_knowledgeGraphLimits.SAFE_DISPLAY_STRING_PATTERN)
+const PositionOptionsSchema = z.object({
+	dims: z.union([z.literal(2), z.literal(3)]).default(3),
+	coordinateUnits: z.string().trim().min(1).max(80).regex(SAFE_DISPLAY_STRING_PATTERN)
 }).strict();
 function preflightArrayFields(input, fields, max) {
 	if (input === null || typeof input !== "object" || Array.isArray(input)) return null;
@@ -1457,7 +1608,7 @@ function preflightArrayFields(input, fields, max) {
 			if (Array.isArray(value)) {
 				const length = Object.getOwnPropertyDescriptor(value, "length");
 				itemCount = length && "value" in length ? length.value : void 0;
-			} else if (ArrayBuffer.isView(value) && !(value instanceof DataView)) itemCount = require_knowledgeGraphLimits.intrinsicTypedArrayLength(value);
+			} else if (ArrayBuffer.isView(value) && !(value instanceof DataView)) itemCount = intrinsicTypedArrayLength(value);
 			if (itemCount !== void 0 && itemCount > max) return {
 				ok: false,
 				errors: [`${field}: may contain at most ${max} items; received ${itemCount}`]
@@ -1762,68 +1913,68 @@ function weightRecorderToSceneData(_events, _opts = {}) {
 //#endregion
 //#region core/nest/analysis.ts
 const NEST_ANALYSIS_LIMITS = Object.freeze({
-	maxPopulations: require_authoring.PARAM_LIMITS.maxSeries,
+	maxPopulations: PARAM_LIMITS.maxSeries,
 	maxSelectedSenders: 5e4,
 	maxTrials: 1e4,
 	maxTotalEvents: NEST_INPUT_LIMITS.maxSamples,
-	maxOutputBins: require_authoring.PARAM_LIMITS.maxSamples,
+	maxOutputBins: PARAM_LIMITS.maxSamples,
 	maxPopulationBinCells: 1e5
 });
-const finite$1 = zod.z.number().finite();
-const senderId = zod.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "sender ids must not be negative zero");
-const displayText$1 = (maximum) => zod.z.string().trim().min(1).max(maximum).regex(require_knowledgeGraphLimits.SAFE_DISPLAY_STRING_PATTERN).transform((value) => value.trim());
-const PopulationRateOptionsSchema = zod.z.object({
+const finite$1 = z.number().finite();
+const senderId = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "sender ids must not be negative zero");
+const displayText$1 = (maximum) => z.string().trim().min(1).max(maximum).regex(SAFE_DISPLAY_STRING_PATTERN).transform((value) => value.trim());
+const PopulationRateOptionsSchema = z.object({
 	startMs: finite$1,
 	stopMs: finite$1,
 	binWidthMs: finite$1.positive(),
-	populations: zod.z.array(zod.z.object({
+	populations: z.array(z.object({
 		id: displayText$1(120),
 		label: displayText$1(240),
-		senderIds: zod.z.array(senderId).min(1).max(NEST_ANALYSIS_LIMITS.maxSelectedSenders)
+		senderIds: z.array(senderId).min(1).max(NEST_ANALYSIS_LIMITS.maxSelectedSenders)
 	}).strict()).min(1).max(NEST_ANALYSIS_LIMITS.maxPopulations),
-	unassignedPolicy: zod.z.enum(["reject", "ignore"])
+	unassignedPolicy: z.enum(["reject", "ignore"])
 }).strict();
-const IsiOptionsSchema = zod.z.object({
-	senderIds: zod.z.array(senderId).min(1).max(NEST_ANALYSIS_LIMITS.maxSelectedSenders),
+const IsiOptionsSchema = z.object({
+	senderIds: z.array(senderId).min(1).max(NEST_ANALYSIS_LIMITS.maxSelectedSenders),
 	binWidthMs: finite$1.positive(),
 	maxIntervalMs: finite$1.positive(),
-	normalization: zod.z.enum([
+	normalization: z.enum([
 		"count",
 		"probability",
 		"probability_density"
 	]),
-	intervalScope: zod.z.literal("per_sender").default("per_sender")
+	intervalScope: z.literal("per_sender").default("per_sender")
 }).strict();
-const PsthOptionsSchema = zod.z.object({
-	alignmentTimesMs: zod.z.array(finite$1).min(1).max(NEST_ANALYSIS_LIMITS.maxTrials),
-	windowMs: zod.z.tuple([finite$1, finite$1]),
+const PsthOptionsSchema = z.object({
+	alignmentTimesMs: z.array(finite$1).min(1).max(NEST_ANALYSIS_LIMITS.maxTrials),
+	windowMs: z.tuple([finite$1, finite$1]),
 	binWidthMs: finite$1.positive(),
-	senderIds: zod.z.array(senderId).min(1).max(NEST_ANALYSIS_LIMITS.maxSelectedSenders),
-	normalization: zod.z.enum([
+	senderIds: z.array(senderId).min(1).max(NEST_ANALYSIS_LIMITS.maxSelectedSenders),
+	normalization: z.enum([
 		"count",
 		"count_per_trial",
 		"rate_hz"
 	]),
 	alignmentEvent: displayText$1(240)
 }).strict();
-const CorrelationDetectorSourceConfigurationSchema = zod.z.object({
+const CorrelationDetectorSourceConfigurationSchema = z.object({
 	simulationResolutionMs: finite$1.positive(),
 	simulationStartMs: finite$1,
 	simulationStopMs: finite$1,
-	referenceReceptorPort: zod.z.literal(0),
-	targetReceptorPort: zod.z.literal(1)
+	referenceReceptorPort: z.literal(0),
+	targetReceptorPort: z.literal(1)
 }).strict().superRefine((value, ctx) => {
 	if (!(value.simulationStopMs > value.simulationStartMs)) ctx.addIssue({
-		code: zod.z.ZodIssueCode.custom,
+		code: z.ZodIssueCode.custom,
 		path: ["simulationStopMs"],
 		message: "simulationStopMs must be greater than simulationStartMs"
 	});
 });
-const CorrelationDetectorOptionsSchema = zod.z.object({
-	measurement: zod.z.literal("count_histogram"),
+const CorrelationDetectorOptionsSchema = z.object({
+	measurement: z.literal("count_histogram"),
 	referenceLabel: displayText$1(240),
 	targetLabel: displayText$1(240),
-	zeroLagPolicy: zod.z.literal("included"),
+	zeroLagPolicy: z.literal("included"),
 	sourceConfiguration: CorrelationDetectorSourceConfigurationSchema
 }).strict();
 function error$1(message) {
@@ -1882,7 +2033,7 @@ function validateOutput$1(schema, params) {
 		params: parsed.data
 	} : {
 		ok: false,
-		errors: require_knowledgeGraphLimits.formatValidationIssues(parsed.error.issues)
+		errors: formatValidationIssues(parsed.error.issues)
 	};
 }
 function requireUniqueIds(values, path) {
@@ -1900,7 +2051,7 @@ function exactBinCount$1(start, stop, width, path) {
 	if (!(stop > start)) return error$1(`${path}: stop must be greater than start`);
 	const ratio = (stop - start) / width;
 	const count = Math.round(ratio);
-	const tolerance = 0 + require_authoring.HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.max(Math.abs(ratio), Math.abs(count));
+	const tolerance = 0 + HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.max(Math.abs(ratio), Math.abs(count));
 	if (!Number.isSafeInteger(count) || count < 1 || !Number.isFinite(ratio) || Math.abs(ratio - count) > tolerance) return error$1(`${path}: window duration must be an exact positive integer multiple of bin width`);
 	if (count > NEST_ANALYSIS_LIMITS.maxOutputBins) return error$1(`${path}: at most ${NEST_ANALYSIS_LIMITS.maxOutputBins} bins are allowed`);
 	return {
@@ -1916,7 +2067,7 @@ function binCenters(start, width, count) {
 const BIN_INDEX_OUTSIDE$1 = -1;
 const BIN_INDEX_INDETERMINATE$1 = -2;
 const BIN_BOUNDARY_ROUNDOFF_ULPS$1 = 16;
-const MAX_BIN_BOUNDARY_SNAP_DISTANCE$1 = require_authoring.GEOMETRY_MAX_ROUNDOFF_FRACTION;
+const MAX_BIN_BOUNDARY_SNAP_DISTANCE$1 = GEOMETRY_MAX_ROUNDOFF_FRACTION;
 /**
 * Assign a binary64 sample to a half-open bin while repairing only arithmetic
 * roundoff at a boundary. This deliberately does not reuse the portable
@@ -2011,7 +2162,7 @@ function spikeRecorderToPopulationRateParams(events, options) {
 			aggregation: "selected_senders",
 			binning: "left_closed_right_open"
 		};
-		return validateOutput$1(require_authoring.PopulationRateParamsSchema, params);
+		return validateOutput$1(PopulationRateParamsSchema, params);
 	} catch {
 		return error$1("population-rate analysis could not safely process the input");
 	}
@@ -2058,7 +2209,7 @@ function spikeRecorderToIsiParams(events, options) {
 			}
 		});
 		const valueUnits = opts.normalization === "count" ? "count" : opts.normalization === "probability" ? "probability" : "1/ms";
-		return validateOutput$1(require_authoring.IsiDistributionParamsSchema, {
+		return validateOutput$1(IsiDistributionParamsSchema, {
 			bin_centers_ms: binCenters(0, opts.binWidthMs, geometry.count),
 			values,
 			bin_width_ms: opts.binWidthMs,
@@ -2072,7 +2223,7 @@ function spikeRecorderToIsiParams(events, options) {
 }
 function spikeTrialsToPsthParams(trials, options) {
 	try {
-		const TrialArraySchema = zod.z.array(SpikeRecorderEventsSchema).min(1).max(NEST_ANALYSIS_LIMITS.maxTrials);
+		const TrialArraySchema = z.array(SpikeRecorderEventsSchema).min(1).max(NEST_ANALYSIS_LIMITS.maxTrials);
 		const parsedTrials = parseNestInput(TrialArraySchema, trials);
 		if (!parsedTrials.ok) return parsedTrials;
 		const total = totalEventCount(parsedTrials.data);
@@ -2112,7 +2263,7 @@ function spikeTrialsToPsthParams(trials, options) {
 			}
 		});
 		const valueUnits = opts.normalization === "count" ? "count" : opts.normalization === "count_per_trial" ? "count/trial" : "Hz";
-		return validateOutput$1(require_authoring.PsthParamsSchema, {
+		return validateOutput$1(PsthParamsSchema, {
 			bin_centers_ms: binCenters(opts.windowMs[0], opts.binWidthMs, geometry.count),
 			values,
 			bin_width_ms: opts.binWidthMs,
@@ -2151,7 +2302,7 @@ function correlationDetectorToCorrelogramParams(status, options) {
 		if (stopMarginComparison === null || stopMarginComparison > 0) return error$1("Tstop + tau_max must be at most sourceConfiguration.simulationStopMs to exclude the detector stop-edge window");
 		const halfBinRatio = parsedStatus.data.tau_max / parsedStatus.data.delta_tau;
 		const halfBinCount = Math.round(halfBinRatio);
-		const halfBinTolerance = 0 + require_authoring.HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.max(Math.abs(halfBinRatio), Math.abs(halfBinCount));
+		const halfBinTolerance = 0 + HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.max(Math.abs(halfBinRatio), Math.abs(halfBinCount));
 		if (!Number.isSafeInteger(halfBinCount) || halfBinCount < 1 || Math.abs(halfBinRatio - halfBinCount) > halfBinTolerance) return error$1("tau_max must be an exact positive integer multiple of delta_tau");
 		const expectedLength = halfBinCount * 2 + 1;
 		if (expectedLength > NEST_ANALYSIS_LIMITS.maxOutputBins) return error$1(`correlation detector output exceeds ${NEST_ANALYSIS_LIMITS.maxOutputBins} bins`);
@@ -2161,7 +2312,7 @@ function correlationDetectorToCorrelogramParams(status, options) {
 			const centeredIndex = index - halfBinCount;
 			lags[index] = centeredIndex === 0 ? 0 : centeredIndex === -halfBinCount ? -parsedStatus.data.tau_max : centeredIndex === halfBinCount ? parsedStatus.data.tau_max : centeredIndex * parsedStatus.data.delta_tau;
 		}
-		return validateOutput$1(require_authoring.CorrelogramParamsSchema, {
+		return validateOutput$1(CorrelogramParamsSchema, {
 			lags_ms: lags,
 			values: [...values],
 			bin_width_ms: parsedStatus.data.delta_tau,
@@ -2189,22 +2340,22 @@ function correlationDetectorToCorrelogramParams(status, options) {
 //#region core/nest/topology.ts
 const NEST_TOPOLOGY_LIMITS = Object.freeze({
 	maxConnections: NEST_INPUT_LIMITS.maxSamples,
-	maxGraphNodes: require_authoring.PARAM_LIMITS.maxTopologyNodes,
-	maxGraphEdges: require_authoring.PARAM_LIMITS.maxTopologyEdges,
-	maxMatrixCells: require_authoring.PARAM_LIMITS.maxSamples,
-	maxDegreeBins: require_authoring.PARAM_LIMITS.maxSamples,
-	maxDelayBins: require_authoring.PARAM_LIMITS.maxSamples,
-	maxWeightBins: require_authoring.PARAM_LIMITS.maxSamples,
-	maxSpatialNodes: require_authoring.PARAM_LIMITS.maxSpatialObjects
+	maxGraphNodes: PARAM_LIMITS.maxTopologyNodes,
+	maxGraphEdges: PARAM_LIMITS.maxTopologyEdges,
+	maxMatrixCells: PARAM_LIMITS.maxSamples,
+	maxDegreeBins: PARAM_LIMITS.maxSamples,
+	maxDelayBins: PARAM_LIMITS.maxSamples,
+	maxWeightBins: PARAM_LIMITS.maxSamples,
+	maxSpatialNodes: PARAM_LIMITS.maxSpatialObjects
 });
 const FLOAT32_MAX = 34028234663852886e22;
-const finite = zod.z.number().finite().refine((value) => !Object.is(value, -0), "negative zero is not exact JSON");
+const finite = z.number().finite().refine((value) => !Object.is(value, -0), "negative zero is not exact JSON");
 const gpuNumber = finite.min(-34028234663852886e22).max(FLOAT32_MAX);
-const nodeId = zod.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "node ids must not be negative zero");
-const displayText = (maximum) => zod.z.string().trim().min(1).max(maximum).regex(require_knowledgeGraphLimits.SAFE_DISPLAY_STRING_PATTERN).transform((value) => value.trim());
-const scalarOrArray = (item) => zod.z.union([item, zod.z.array(item).max(NEST_TOPOLOGY_LIMITS.maxConnections)]);
-const arrayOnly = (item) => zod.z.array(item).max(NEST_TOPOLOGY_LIMITS.maxConnections);
-const RawSynapseCollectionSchema = zod.z.object({
+const nodeId = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "node ids must not be negative zero");
+const displayText = (maximum) => z.string().trim().min(1).max(maximum).regex(SAFE_DISPLAY_STRING_PATTERN).transform((value) => value.trim());
+const scalarOrArray = (item) => z.union([item, z.array(item).max(NEST_TOPOLOGY_LIMITS.maxConnections)]);
+const arrayOnly = (item) => z.array(item).max(NEST_TOPOLOGY_LIMITS.maxConnections);
+const RawSynapseCollectionSchema = z.object({
 	source: scalarOrArray(nodeId).optional(),
 	sources: arrayOnly(nodeId).optional(),
 	target: scalarOrArray(nodeId).optional(),
@@ -2253,7 +2404,7 @@ function validateOutput(schema, params) {
 		params: parsed.data
 	} : {
 		ok: false,
-		errors: require_knowledgeGraphLimits.formatValidationIssues(parsed.error.issues)
+		errors: formatValidationIssues(parsed.error.issues)
 	};
 }
 function normalizeAlias(value, singular, plural, required) {
@@ -2362,32 +2513,32 @@ function normalizeSynapseCollectionSnapshot(input) {
 		return error("SynapseCollection input could not be safely normalized");
 	}
 }
-const graphNodeIds = zod.z.array(nodeId).min(1).max(NEST_TOPOLOGY_LIMITS.maxGraphNodes);
-const connectionAxisIds = zod.z.array(nodeId).min(1).max(require_authoring.PARAM_LIMITS.maxSamples);
+const graphNodeIds = z.array(nodeId).min(1).max(NEST_TOPOLOGY_LIMITS.maxGraphNodes);
+const connectionAxisIds = z.array(nodeId).min(1).max(PARAM_LIMITS.maxSamples);
 const CommonConnectionOptionsShape = {
 	sourceIds: connectionAxisIds,
 	targetIds: connectionAxisIds,
 	snapshotTimeMs: finite.nonnegative(),
-	snapshotScope: require_authoring.SnapshotScopeSchema
+	snapshotScope: SnapshotScopeSchema
 };
-const GraphOptionsSchema = zod.z.object({
+const GraphOptionsSchema = z.object({
 	...CommonConnectionOptionsShape,
 	sourceIds: graphNodeIds,
 	targetIds: graphNodeIds,
 	synapseModelSemantics: boundedSynapseModelMeasurementSemanticsSchema(NEST_TOPOLOGY_LIMITS.maxConnections).optional(),
 	weightUnits: displayText(80).optional(),
-	delayUnits: zod.z.literal("ms").optional(),
-	samplePolicy: zod.z.discriminatedUnion("kind", [zod.z.object({ kind: zod.z.literal("complete") }).strict(), zod.z.object({
-		kind: zod.z.literal("deterministic_even_stride"),
-		maxEdges: zod.z.number().int().positive().max(NEST_TOPOLOGY_LIMITS.maxGraphEdges)
+	delayUnits: z.literal("ms").optional(),
+	samplePolicy: z.discriminatedUnion("kind", [z.object({ kind: z.literal("complete") }).strict(), z.object({
+		kind: z.literal("deterministic_even_stride"),
+		maxEdges: z.number().int().positive().max(NEST_TOPOLOGY_LIMITS.maxGraphEdges)
 	}).strict()])
 }).strict();
-const MatrixOptionsSchema = zod.z.object(CommonConnectionOptionsShape).strict();
-const WeightMatrixOptionsSchema = zod.z.object({
+const MatrixOptionsSchema = z.object(CommonConnectionOptionsShape).strict();
+const WeightMatrixOptionsSchema = z.object({
 	...CommonConnectionOptionsShape,
 	synapseModelSemantics: boundedSynapseModelMeasurementSemanticsSchema(NEST_TOPOLOGY_LIMITS.maxConnections),
 	weightUnits: displayText(80),
-	aggregation: zod.z.enum([
+	aggregation: z.enum([
 		"sum",
 		"mean",
 		"minimum",
@@ -2395,50 +2546,50 @@ const WeightMatrixOptionsSchema = zod.z.object({
 		"single_connection"
 	])
 }).strict();
-const DelayMatrixOptionsSchema = zod.z.object({
+const DelayMatrixOptionsSchema = z.object({
 	...CommonConnectionOptionsShape,
 	synapseModelSemantics: boundedSynapseModelMeasurementSemanticsSchema(NEST_TOPOLOGY_LIMITS.maxConnections),
-	delayUnits: zod.z.literal("ms"),
-	aggregation: zod.z.enum([
+	delayUnits: z.literal("ms"),
+	aggregation: z.enum([
 		"mean",
 		"minimum",
 		"maximum",
 		"single_connection"
 	])
 }).strict();
-const DegreeOptionsSchema = zod.z.object({
+const DegreeOptionsSchema = z.object({
 	...CommonConnectionOptionsShape,
-	normalization: zod.z.enum(["count", "probability"])
+	normalization: z.enum(["count", "probability"])
 }).strict();
-const DelayDistributionOptionsSchema = zod.z.object({
+const DelayDistributionOptionsSchema = z.object({
 	...CommonConnectionOptionsShape,
 	synapseModelSemantics: boundedSynapseModelMeasurementSemanticsSchema(NEST_TOPOLOGY_LIMITS.maxConnections),
-	delayUnits: zod.z.literal("ms"),
+	delayUnits: z.literal("ms"),
 	binWidthMs: finite.positive(),
 	windowStartMs: finite.nonnegative(),
 	windowStopMs: finite.positive(),
-	normalization: zod.z.enum([
+	normalization: z.enum([
 		"count",
 		"probability",
 		"probability_density"
 	])
 }).strict();
-const WeightHistogramOptionsSchema = zod.z.object({
+const WeightHistogramOptionsSchema = z.object({
 	...CommonConnectionOptionsShape,
 	synapseModelSemantics: boundedSynapseModelMeasurementSemanticsSchema(NEST_TOPOLOGY_LIMITS.maxConnections),
 	weightUnits: displayText(80),
 	binWidth: finite.positive(),
 	windowStart: finite,
 	windowStop: finite,
-	normalization: zod.z.enum(["count", "probability"])
+	normalization: z.enum(["count", "probability"])
 }).strict();
-const SpatialMapOptionsSchema = zod.z.object({
-	nodeIds: zod.z.array(nodeId).min(1).max(NEST_TOPOLOGY_LIMITS.maxSpatialNodes),
+const SpatialMapOptionsSchema = z.object({
+	nodeIds: z.array(nodeId).min(1).max(NEST_TOPOLOGY_LIMITS.maxSpatialNodes),
 	coordinateUnits: displayText(80),
-	extent: zod.z.tuple([gpuNumber.positive(), gpuNumber.positive()]),
-	center: zod.z.tuple([gpuNumber, gpuNumber]),
-	edgeWrap: zod.z.boolean(),
-	positionScope: require_authoring.PositionScopeSchema
+	extent: z.tuple([gpuNumber.positive(), gpuNumber.positive()]),
+	center: z.tuple([gpuNumber, gpuNumber]),
+	edgeWrap: z.boolean(),
+	positionScope: PositionScopeSchema
 }).strict();
 function parseConnectionContext(input, options, schema) {
 	const normalized = normalizeSynapseCollectionSnapshot(input);
@@ -2543,7 +2694,7 @@ function synapseCollectionToConnectionGraphParams(input, options) {
 				...snapshot.synapse_models ? { synapse_model: snapshot.synapse_models[rawIndex] } : {}
 			};
 		});
-		return validateOutput(require_authoring.ConnectionGraphParamsSchema, {
+		return validateOutput(ConnectionGraphParamsSchema, {
 			nodes: allNodeIds.map((id) => ({
 				id,
 				label: String(id)
@@ -2614,7 +2765,7 @@ function aggregateMeasurements(values, aggregation) {
 	try {
 		return {
 			ok: true,
-			value: aggregation === "mean" ? require_exact_binary64.exactBinary64Mean(values) : require_exact_binary64.exactBinary64Sum(values)
+			value: aggregation === "mean" ? exactBinary64Mean(values) : exactBinary64Sum(values)
 		};
 	} catch {
 		return {
@@ -2651,7 +2802,7 @@ function synapseCollectionToAdjacencyMatrixParams(input, options) {
 		if (scopeError) return scopeError;
 		const buckets = pairBuckets(context.params.snapshot, context.params.sourceIds, context.params.targetIds);
 		if (buckets.length > NEST_TOPOLOGY_LIMITS.maxMatrixCells) return error(`adjacency matrix exceeds ${NEST_TOPOLOGY_LIMITS.maxMatrixCells} present cells`);
-		return validateOutput(require_authoring.AdjacencyMatrixParamsSchema, {
+		return validateOutput(AdjacencyMatrixParamsSchema, {
 			...matrixCommon(context.params),
 			cells: buckets.map(({ source_id, target_id, connection_count }) => ({
 				source_id,
@@ -2694,7 +2845,7 @@ function synapseCollectionToWeightMatrixParams(input, options) {
 				value
 			});
 		}
-		return validateOutput(require_authoring.WeightMatrixParamsSchema, {
+		return validateOutput(WeightMatrixParamsSchema, {
 			...matrixCommon(context.params),
 			cells,
 			weight_units: opts.weightUnits,
@@ -2733,7 +2884,7 @@ function synapseCollectionToDelayMatrixParams(input, options) {
 				value
 			});
 		}
-		return validateOutput(require_authoring.DelayMatrixParamsSchema, {
+		return validateOutput(DelayMatrixParamsSchema, {
 			...matrixCommon(context.params),
 			cells,
 			delay_units: opts.delayUnits,
@@ -2774,7 +2925,7 @@ function degreeDistribution(input, options, direction) {
 		snapshot_time_ms: context.params.snapshotTimeMs,
 		snapshot_scope: context.params.snapshotScope
 	};
-	return direction === "in" ? validateOutput(require_authoring.InDegreeDistributionParamsSchema, params) : validateOutput(require_authoring.OutDegreeDistributionParamsSchema, params);
+	return direction === "in" ? validateOutput(InDegreeDistributionParamsSchema, params) : validateOutput(OutDegreeDistributionParamsSchema, params);
 }
 function synapseCollectionToInDegreeDistributionParams(input, options) {
 	return degreeDistribution(input, options, "in");
@@ -2786,7 +2937,7 @@ function exactBinCount(start, stop, width, measurement, maximum) {
 	if (!(stop > start)) return error(`${measurement} window: stop must be greater than start`);
 	const ratio = (stop - start) / width;
 	const count = Math.round(ratio);
-	const tolerance = 0 + require_authoring.HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.max(Math.abs(ratio), Math.abs(count));
+	const tolerance = 0 + HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.max(Math.abs(ratio), Math.abs(count));
 	if (!Number.isSafeInteger(count) || count < 1 || !Number.isFinite(ratio) || Math.abs(ratio - count) > tolerance) return error(`${measurement} window: duration must be an exact positive integer multiple of bin width`);
 	if (count > maximum) return error(`${measurement} distribution exceeds ${maximum} bins`);
 	return {
@@ -2799,7 +2950,7 @@ const BIN_INDEX_INDETERMINATE = -2;
 const BIN_BOUNDARY_ROUNDOFF_ULPS = 16;
 /** Maximum dimensionless fraction of one bin that boundary repair may move.
 * The cap is independent of absolute time and bin index. */
-const MAX_BIN_BOUNDARY_SNAP_DISTANCE = require_authoring.GEOMETRY_MAX_ROUNDOFF_FRACTION;
+const MAX_BIN_BOUNDARY_SNAP_DISTANCE = GEOMETRY_MAX_ROUNDOFF_FRACTION;
 function halfOpenBinIndex(value, start, stop, width, count) {
 	if (value < start || value >= stop) return BIN_INDEX_OUTSIDE;
 	let scaled = (value - start) / width;
@@ -2840,7 +2991,7 @@ function synapseCollectionToDelayDistributionParams(input, options) {
 			counts[bin] += 1;
 		}
 		const values = counts.map((count) => opts.normalization === "count" ? count : opts.normalization === "probability" ? count / delays.length : count / densityDenominator);
-		return validateOutput(require_authoring.DelayDistributionParamsSchema, {
+		return validateOutput(DelayDistributionParamsSchema, {
 			bin_centers_ms: Array.from({ length: geometry.count }, (_, index) => opts.windowStartMs + (index + .5) * opts.binWidthMs),
 			delay_counts: counts,
 			values,
@@ -2883,7 +3034,7 @@ function synapseCollectionToWeightHistogramParams(input, options) {
 			counts[bin] += 1;
 		}
 		const values = counts.map((count) => opts.normalization === "count" ? count : count / weights.length);
-		return validateOutput(require_authoring.WeightHistogramParamsSchema, {
+		return validateOutput(WeightHistogramParamsSchema, {
 			bin_centers: Array.from({ length: geometry.count }, (_, index) => opts.windowStart + (index + .5) * opts.binWidth),
 			weight_counts: counts,
 			values,
@@ -2904,10 +3055,10 @@ function synapseCollectionToWeightHistogramParams(input, options) {
 		return error("weight histogram transform could not safely inspect its inputs");
 	}
 }
-const PositionListSchema = zod.z.union([zod.z.tuple([gpuNumber, gpuNumber]).transform((position) => [position]), zod.z.array(zod.z.tuple([gpuNumber, gpuNumber])).min(1).max(NEST_TOPOLOGY_LIMITS.maxSpatialNodes)]);
-const PositionWrapperSchema = zod.z.object({
+const PositionListSchema = z.union([z.tuple([gpuNumber, gpuNumber]).transform((position) => [position]), z.array(z.tuple([gpuNumber, gpuNumber])).min(1).max(NEST_TOPOLOGY_LIMITS.maxSpatialNodes)]);
+const PositionWrapperSchema = z.object({
 	positions: PositionListSchema,
-	node_ids: zod.z.array(nodeId).min(1).max(NEST_TOPOLOGY_LIMITS.maxSpatialNodes).optional()
+	node_ids: z.array(nodeId).min(1).max(NEST_TOPOLOGY_LIMITS.maxSpatialNodes).optional()
 }).strict();
 function normalizePositions2D(input) {
 	if (input !== null && typeof input === "object" && !Array.isArray(input) && !ArrayBuffer.isView(input)) {
@@ -2944,7 +3095,7 @@ function getPositionToSpatialMap2DParams(input, options) {
 		if (positions.params.nodeIds) {
 			if (positions.params.nodeIds.length !== opts.nodeIds.length || positions.params.nodeIds.some((id, index) => id !== opts.nodeIds[index])) return error("node_ids: wrapper ids must exactly match the explicit nodeIds option");
 		}
-		return validateOutput(require_authoring.SpatialMap2DParamsSchema, {
+		return validateOutput(SpatialMap2DParamsSchema, {
 			nodes: positions.params.positions.map(([x, y], index) => ({
 				id: opts.nodeIds[index],
 				label: String(opts.nodeIds[index]),
@@ -2964,238 +3115,5 @@ function getPositionToSpatialMap2DParams(input, options) {
 }
 
 //#endregion
-Object.defineProperty(exports, 'CorrelationDetectorStatusSchema', {
-  enumerable: true,
-  get: function () {
-    return CorrelationDetectorStatusSchema;
-  }
-});
-Object.defineProperty(exports, 'GetConnectionsSchema', {
-  enumerable: true,
-  get: function () {
-    return GetConnectionsSchema;
-  }
-});
-Object.defineProperty(exports, 'GetPosition2DSchema', {
-  enumerable: true,
-  get: function () {
-    return GetPosition2DSchema;
-  }
-});
-Object.defineProperty(exports, 'GetPosition3DSchema', {
-  enumerable: true,
-  get: function () {
-    return GetPosition3DSchema;
-  }
-});
-Object.defineProperty(exports, 'MultimeterEventsSchema', {
-  enumerable: true,
-  get: function () {
-    return MultimeterEventsSchema;
-  }
-});
-Object.defineProperty(exports, 'MultimeterMultiSenderSchema', {
-  enumerable: true,
-  get: function () {
-    return MultimeterMultiSenderSchema;
-  }
-});
-Object.defineProperty(exports, 'NEST_ADAPTER_LIMITS', {
-  enumerable: true,
-  get: function () {
-    return NEST_ADAPTER_LIMITS;
-  }
-});
-Object.defineProperty(exports, 'NEST_ANALYSIS_LIMITS', {
-  enumerable: true,
-  get: function () {
-    return NEST_ANALYSIS_LIMITS;
-  }
-});
-Object.defineProperty(exports, 'NEST_INPUT_LIMITS', {
-  enumerable: true,
-  get: function () {
-    return NEST_INPUT_LIMITS;
-  }
-});
-Object.defineProperty(exports, 'NEST_TOPOLOGY_LIMITS', {
-  enumerable: true,
-  get: function () {
-    return NEST_TOPOLOGY_LIMITS;
-  }
-});
-Object.defineProperty(exports, 'ROUTING_DISCRIMINATORS', {
-  enumerable: true,
-  get: function () {
-    return ROUTING_DISCRIMINATORS;
-  }
-});
-Object.defineProperty(exports, 'SYNAPSE_MEASUREMENT_FIELD_SEMANTICS', {
-  enumerable: true,
-  get: function () {
-    return SYNAPSE_MEASUREMENT_FIELD_SEMANTICS;
-  }
-});
-Object.defineProperty(exports, 'SpikeRecorderEventsSchema', {
-  enumerable: true,
-  get: function () {
-    return SpikeRecorderEventsSchema;
-  }
-});
-Object.defineProperty(exports, 'WeightRecorderEventsSchema', {
-  enumerable: true,
-  get: function () {
-    return WeightRecorderEventsSchema;
-  }
-});
-Object.defineProperty(exports, 'adaptEngramCorpusEntityGraph', {
-  enumerable: true,
-  get: function () {
-    return adaptEngramCorpusEntityGraph;
-  }
-});
-Object.defineProperty(exports, 'correlationDetectorToCorrelogramParams', {
-  enumerable: true,
-  get: function () {
-    return correlationDetectorToCorrelogramParams;
-  }
-});
-Object.defineProperty(exports, 'detectEmptyScene', {
-  enumerable: true,
-  get: function () {
-    return detectEmptyScene;
-  }
-});
-Object.defineProperty(exports, 'getConnectionsToSceneData', {
-  enumerable: true,
-  get: function () {
-    return getConnectionsToSceneData;
-  }
-});
-Object.defineProperty(exports, 'getPositionToSceneData', {
-  enumerable: true,
-  get: function () {
-    return getPositionToSceneData;
-  }
-});
-Object.defineProperty(exports, 'getPositionToSpatialMap2DParams', {
-  enumerable: true,
-  get: function () {
-    return getPositionToSpatialMap2DParams;
-  }
-});
-Object.defineProperty(exports, 'multimeterToSceneData', {
-  enumerable: true,
-  get: function () {
-    return multimeterToSceneData;
-  }
-});
-Object.defineProperty(exports, 'normalizeSynapseCollectionSnapshot', {
-  enumerable: true,
-  get: function () {
-    return normalizeSynapseCollectionSnapshot;
-  }
-});
-Object.defineProperty(exports, 'routeToScene', {
-  enumerable: true,
-  get: function () {
-    return routeToScene;
-  }
-});
-Object.defineProperty(exports, 'spikeRecorderToIsiParams', {
-  enumerable: true,
-  get: function () {
-    return spikeRecorderToIsiParams;
-  }
-});
-Object.defineProperty(exports, 'spikeRecorderToPopulationRateParams', {
-  enumerable: true,
-  get: function () {
-    return spikeRecorderToPopulationRateParams;
-  }
-});
-Object.defineProperty(exports, 'spikeRecorderToSceneData', {
-  enumerable: true,
-  get: function () {
-    return spikeRecorderToSceneData;
-  }
-});
-Object.defineProperty(exports, 'spikeTrialsToPsthParams', {
-  enumerable: true,
-  get: function () {
-    return spikeTrialsToPsthParams;
-  }
-});
-Object.defineProperty(exports, 'splitMultimeterBySender', {
-  enumerable: true,
-  get: function () {
-    return splitMultimeterBySender;
-  }
-});
-Object.defineProperty(exports, 'splitWeightRecorderByRecordedTuple', {
-  enumerable: true,
-  get: function () {
-    return splitWeightRecorderByRecordedTuple;
-  }
-});
-Object.defineProperty(exports, 'splitWeightRecorderBySynapse', {
-  enumerable: true,
-  get: function () {
-    return splitWeightRecorderBySynapse;
-  }
-});
-Object.defineProperty(exports, 'synapseCollectionToAdjacencyMatrixParams', {
-  enumerable: true,
-  get: function () {
-    return synapseCollectionToAdjacencyMatrixParams;
-  }
-});
-Object.defineProperty(exports, 'synapseCollectionToConnectionGraphParams', {
-  enumerable: true,
-  get: function () {
-    return synapseCollectionToConnectionGraphParams;
-  }
-});
-Object.defineProperty(exports, 'synapseCollectionToDelayDistributionParams', {
-  enumerable: true,
-  get: function () {
-    return synapseCollectionToDelayDistributionParams;
-  }
-});
-Object.defineProperty(exports, 'synapseCollectionToDelayMatrixParams', {
-  enumerable: true,
-  get: function () {
-    return synapseCollectionToDelayMatrixParams;
-  }
-});
-Object.defineProperty(exports, 'synapseCollectionToInDegreeDistributionParams', {
-  enumerable: true,
-  get: function () {
-    return synapseCollectionToInDegreeDistributionParams;
-  }
-});
-Object.defineProperty(exports, 'synapseCollectionToOutDegreeDistributionParams', {
-  enumerable: true,
-  get: function () {
-    return synapseCollectionToOutDegreeDistributionParams;
-  }
-});
-Object.defineProperty(exports, 'synapseCollectionToWeightHistogramParams', {
-  enumerable: true,
-  get: function () {
-    return synapseCollectionToWeightHistogramParams;
-  }
-});
-Object.defineProperty(exports, 'synapseCollectionToWeightMatrixParams', {
-  enumerable: true,
-  get: function () {
-    return synapseCollectionToWeightMatrixParams;
-  }
-});
-Object.defineProperty(exports, 'weightRecorderToSceneData', {
-  enumerable: true,
-  get: function () {
-    return weightRecorderToSceneData;
-  }
-});
-//# sourceMappingURL=core-X30y1nvx.cjs.map
+export { GetPosition3DSchema as A, splitWeightRecorderByRecordedTuple as C, CorrelationDetectorStatusSchema as D, SYNAPSE_MEASUREMENT_FIELD_SEMANTICS as E, WeightRecorderEventsSchema as F, detectEmptyScene as I, ROUTING_DISCRIMINATORS as L, MultimeterMultiSenderSchema as M, NEST_INPUT_LIMITS as N, GetConnectionsSchema as O, SpikeRecorderEventsSchema as P, routeToScene as R, splitMultimeterBySender as S, weightRecorderToSceneData as T, NEST_ADAPTER_LIMITS as _, synapseCollectionToConnectionGraphParams as a, multimeterToSceneData as b, synapseCollectionToInDegreeDistributionParams as c, synapseCollectionToWeightMatrixParams as d, NEST_ANALYSIS_LIMITS as f, spikeTrialsToPsthParams as g, spikeRecorderToPopulationRateParams as h, synapseCollectionToAdjacencyMatrixParams as i, MultimeterEventsSchema as j, GetPosition2DSchema as k, synapseCollectionToOutDegreeDistributionParams as l, spikeRecorderToIsiParams as m, getPositionToSpatialMap2DParams as n, synapseCollectionToDelayDistributionParams as o, correlationDetectorToCorrelogramParams as p, normalizeSynapseCollectionSnapshot as r, synapseCollectionToDelayMatrixParams as s, NEST_TOPOLOGY_LIMITS as t, synapseCollectionToWeightHistogramParams as u, getConnectionsToSceneData as v, splitWeightRecorderBySynapse as w, spikeRecorderToSceneData as x, getPositionToSceneData as y, adaptEngramCorpusEntityGraph as z };
+//# sourceMappingURL=core-DKXLskci.js.map

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { canonicalDigest } from '../src/core/canonicalize';
 import {
   adaptEngramCorpusEntityGraph,
   type EngramCorpusEntityGraphResponse,
+  type EngramReceiptBoundCorpusEntityGraphResponse,
 } from '../core/skills/corpusKnowledgeGraph';
 
 function evidence(evidenceId: string, recordId: string) {
@@ -77,6 +79,80 @@ function response(): EngramCorpusEntityGraphResponse {
   };
 }
 
+function receiptBoundResponse(): EngramReceiptBoundCorpusEntityGraphResponse {
+  const legacy = response();
+  const identityDerivation = {
+    schema_version: 'engram.corpus-identity-derivation.v1',
+    policy_version: 'measured-alpha-exact-block-pair-budget-v1',
+    signatures_considered: 1,
+    identity_block_count: 1,
+    largest_identity_block_signatures: 1,
+    planned_pair_comparisons: 0,
+    max_signatures: 25_000,
+    max_identity_block_signatures: 250,
+    max_pair_comparisons: 31_125,
+    status: 'completed',
+    abstention_reason: null,
+    comparison_mode: 'exact_exhaustive',
+    resolver_invoked: true,
+    candidate_pair_prefilter: false,
+  };
+  const source = (paperId: string) => ({
+    paper_id: paperId,
+    component_path: `graphs/${paperId}.json`,
+    component_sha256: '8'.repeat(64),
+    component_bytes: 100,
+    pipeline_run_id: 'run-1',
+    graph_store_binding_id: `wiki-v1:${'1'.repeat(32)}`,
+    knowledge_graph_sha256: '9'.repeat(64),
+    eligibility_schema_version: 'engram.corpus-eligibility.v1',
+    eligibility_decision_sha256: 'a'.repeat(64),
+    eligibility_receipt_sha256: 'b'.repeat(64),
+    eligibility_policy_sha256: 'c'.repeat(64),
+    provider_plan_sha256: 'd'.repeat(64),
+    provider_execution_receipt_sha256: 'e'.repeat(64),
+    evidence_plane_sha256: 'f'.repeat(64),
+    qualified_payload_sha256: '0'.repeat(64),
+  });
+  return {
+    ...legacy,
+    nodes: legacy.nodes.map(({ evidence: _evidence, ...node }) => node),
+    edges: legacy.edges.map((sourceEdge) => {
+      if (sourceEdge.kind === 'same_as') throw new Error('fixture is not an entity edge');
+      return {
+        source: sourceEdge.source,
+        target: sourceEdge.target,
+        kind: sourceEdge.kind,
+        ...(sourceEdge.uncalibrated_score
+          ? { confidence: sourceEdge.uncalibrated_score.value }
+          : {}),
+      };
+    }),
+    identity_derivation: identityDerivation,
+    derivation_receipt: {
+      schema_version: 'engram.corpus-derivation-receipt.v2',
+      derivation_kind: 'entity_graph',
+      algorithm_version: 'entity-graph-v1',
+      graph_store_binding_id: `wiki-v1:${'1'.repeat(32)}`,
+      source_revision: `sha256:${'2'.repeat(64)}`,
+      source_revision_created_at: legacy.generated_at,
+      eligibility_decision_set_sha256: '3'.repeat(64),
+      sources: [source('p1')],
+      eligible_paper_count: 1,
+      identity_derivation: identityDerivation,
+      parent_output_sha256: '4'.repeat(64),
+      input_sha256: '5'.repeat(64),
+      output_hash_scope: 'response_without_derivation_receipt',
+      output_sha256: '6'.repeat(64),
+      receipt_sha256: '7'.repeat(64),
+      advisory_only: true,
+      cross_store_evidence_authority: false,
+      is_paper_local_evidence: false,
+      calibrated_posterior: false,
+    },
+  };
+}
+
 const options = {
   graphId: 'engram-corpus-entities',
   graphSource: 'engram:corpus_entity_graph',
@@ -121,6 +197,86 @@ describe('adaptEngramCorpusEntityGraph', () => {
         calibrated_posterior: false,
       },
     });
+  });
+
+  it('accepts current receipt-bound Engram responses without inventing scientific evidence', () => {
+    const graph = receiptBoundResponse();
+    graph.nodes = [
+      ...graph.nodes,
+      { ...graph.nodes[0], id: 'paper:p2', label: 'Paper two' },
+    ].sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+    graph.paper_count = 2;
+    graph.edges = [
+      ...graph.edges,
+      {
+        source: 'paper:p1',
+        target: 'paper:p2',
+        kind: 'cites' as const,
+        confidence: 0.75,
+      },
+    ].sort((left, right) => {
+      const leftKey = [left.kind, left.source, left.target];
+      const rightKey = [right.kind, right.source, right.target];
+      for (let index = 0; index < leftKey.length; index += 1) {
+        if (leftKey[index]! < rightKey[index]!) return -1;
+        if (leftKey[index]! > rightKey[index]!) return 1;
+      }
+      return 0;
+    });
+    graph.edge_counts = { ...graph.edge_counts, cites: 1 };
+    graph.derivation_receipt = {
+      ...(graph.derivation_receipt as Record<string, unknown>),
+      sources: [
+        (graph.derivation_receipt as { sources: Array<Record<string, unknown>> }).sources[0],
+        {
+          ...(graph.derivation_receipt as { sources: Array<Record<string, unknown>> }).sources[0],
+          paper_id: 'p2',
+          component_path: 'graphs/p2.json',
+        },
+      ],
+      eligible_paper_count: 2,
+    };
+    const receiptOptions = { ...options, graphSnapshotId: canonicalDigest(graph) };
+    const result = adaptEngramCorpusEntityGraph(graph, receiptOptions);
+    if (!result.ok) throw new Error(result.errors.join('\n'));
+    expect(result.params.nodes.find((node) => node.id === 'paper:p1')?.evidence).toEqual([{
+      kind: 'graph_snapshot_record',
+      evidence_id: receiptOptions.graphSnapshotId,
+      record_id: 'node:paper:p1',
+    }]);
+    expect(result.params.edges.find((edge) => edge.kind === 'cites')?.uncalibrated_score).toEqual({
+      kind: 'citation_resolution_confidence',
+      value: 0.75,
+      calibrated_posterior: false,
+    });
+    expect(result.params.nodes[0].epistemic).toMatchObject({
+      status: 'derived_advisory',
+      calibrated_posterior: false,
+    });
+  });
+
+  it('fails closed when the receipt-bound summary and receipt disagree', () => {
+    const graph = receiptBoundResponse();
+    graph.derivation_receipt = {
+      ...(graph.derivation_receipt as Record<string, unknown>),
+      source_revision_created_at: '2026-07-12T12:00:00Z',
+    };
+    expect(adaptEngramCorpusEntityGraph(graph, options)).toMatchObject({ ok: false });
+  });
+
+  it('fails closed when the caller snapshot id does not bind the receipt response', () => {
+    expect(adaptEngramCorpusEntityGraph(receiptBoundResponse(), options)).toMatchObject({
+      ok: false,
+    });
+  });
+
+  it('does not guess a score meaning for Engram membership edges', () => {
+    const graph = receiptBoundResponse();
+    graph.edges = graph.edges.map((edge) => ({ ...edge, confidence: 0.8 }));
+    expect(adaptEngramCorpusEntityGraph(graph, {
+      ...options,
+      graphSnapshotId: canonicalDigest(graph),
+    })).toMatchObject({ ok: false });
   });
 
   it('fails closed when upstream omits an element evidence anchor', () => {

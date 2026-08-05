@@ -1,7 +1,7 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
 const require_authoring = require('./authoring-MTqY6OMZ.cjs');
 const require_knowledgeGraphLimits = require('./knowledgeGraphLimits-BnjbjxkI.cjs');
-const require_core = require('./core-X30y1nvx.cjs');
+const require_core = require('./core-D01umxG7.cjs');
 
 exports.AXIS_COLORS = require_authoring.AXIS_COLORS;
 exports.AdjacencyMatrixParamsSchema = require_authoring.AdjacencyMatrixParamsSchema;
