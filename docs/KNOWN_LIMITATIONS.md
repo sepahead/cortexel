@@ -169,14 +169,18 @@ The machine-readable state of every release gate is in
   discriminated uncalibrated scores, but the legacy envelope has no closed top-level
   evidence-record inventory that can resolve those references or authenticate a graph
   snapshot. Its caller-supplied snapshot id is a cache namespace rather than a digest or
-  receipt. The peer-free and React graph subpaths now share one detached, deeply frozen
-  runtime capability across preparation, exact-source views, scene, legend, paginated
-  DOM, and deterministic source-record browsing. The canonical composition preserves
+  receipt. The peer-free, React-only DOM, and interactive React graph subpaths now share
+  one detached, deeply frozen runtime capability across preparation, exact-source views,
+  scene, legend, paginated DOM, and deterministic source-record browsing. The
+  caption-bound DOM composition mounts no Canvas/WebGL/force scene, owns selection, and
+  admits the full presentation bound without the lower live-force gate; the interactive
+  composition preserves
   the DOM surfaces and visible caption when a descendant client render/lifecycle failure
   is caught or the host declares the visual unavailable. It does not catch SSR,
-  event-handler or asynchronous errors, and it cannot infer WebGL context loss. Only one
-  bounded record page exists during SSR/no-JS; all records become reachable after
-  hydration, or are available as complete canonical presentation-inspection bytes.
+  event-handler or asynchronous errors, and it cannot infer WebGL context loss. In both
+  React compositions, only bounded initial node and relationship pages exist during
+  SSR/no-JS; all records become reachable after successful hydration, or are available
+  as complete canonical presentation-inspection bytes.
   Those bytes omit caption/view/host policy, do not rehydrate runtime authority, and do
   not establish a figure or evidence artifact. Runtime tokens are local to one physical
   package instance and realm; structured clone, workers/processes, another realm, or a
@@ -186,10 +190,12 @@ The machine-readable state of every release gate is in
   to a value that arrived through an ordinary JSON parser.
   The materialized-value preparer rejects accessors but cannot inspect an arbitrary
   JavaScript Proxy without executing traps, and says so in `inputAssurance`.
-  None of that turns the force simulation into a deterministic FigureRequest renderer:
-  its geometry remains schematic, cannot carry quantitative distance meaning, and has no
-  stable SVG/table artifact or detached verifier. Required DOM companions improve
-  operability but do not establish whole-view accessibility, and a host that hides the
+  None of that turns either React composition into a deterministic FigureRequest
+  renderer: the 3D geometry remains schematic and cannot carry quantitative distance
+  meaning, while the DOM output is hydrated React inspection rather than deterministic
+  HTML or a complete no-JavaScript document. Neither has a stable SVG/table artifact,
+  evidence authentication, or a detached verifier. The DOM surfaces improve operability
+  but do not establish whole-view accessibility certification, and a host that hides the
   honesty caption inside collapsed disclosure does not satisfy Cortexel's visible-caption
   obligation. A future stable evidence-graph
   capability must bind a closed evidence inventory, immutable snapshot digest, source

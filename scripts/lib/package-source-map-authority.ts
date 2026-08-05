@@ -40,6 +40,8 @@ export const REVIEWED_PACKAGE_SOURCE_MAP_INPUTS = Object.freeze([
   'react/KnowledgeGraph3DScene.tsx',
   'react/KnowledgeGraphA11yList.tsx',
   'react/KnowledgeGraphAccessibleFigure.tsx',
+  'react/KnowledgeGraphCorpusFrame.internal.tsx',
+  'react/KnowledgeGraphDomFigure.tsx',
   'react/KnowledgeGraphStaticRecordView.tsx',
   'react/SelectionA11yControls.tsx',
   'react/VizSpecRenderer.tsx',
@@ -143,7 +145,7 @@ const REVIEWED_SOURCE_SET: ReadonlySet<string> = new Set(
 
 /** SHA-256(JSON(sorted [identity, decoded UTF-8 source text] pairs)). */
 export const REVIEWED_PACKAGE_SOURCE_MAP_INPUT_CLOSURE_DIGEST =
-  '6d0277519b820c8656e5cac28fb22aae4d8ec4d358f3b5038fe1283c185d73a4' as const;
+  'a851fcbe80416b77559745d9b8cc2a274469fd7220670cb3f1657d096bcaec21' as const;
 
 export type SourceMapOwnerKind = 'runtime' | 'declaration';
 

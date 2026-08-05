@@ -84,29 +84,13 @@ import {
   knowledgeGraphFocusLabelSpriteCenterY,
 } from './focusLabelResource.internal';
 import {
-  KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
-  PREPARED_KNOWLEDGE_GRAPH_PRESENTATION_V1,
-  PREPARED_KNOWLEDGE_GRAPH_VIEW_V1,
-  KnowledgeGraphPresentationJsonError,
   assertPreparedCorpusKnowledgeGraphPresentation,
   assertPreparedGenericKnowledgeGraphPresentation,
   assertPreparedKnowledgeGraphView,
   assertPreparedKnowledgeGraphPresentation,
-  isPreparedKnowledgeGraphPresentation,
-  isPreparedKnowledgeGraphView,
-  knowledgeGraphPresentationContainsNode,
   knowledgeGraphViewContainsNode,
-  parseKnowledgeGraphPresentationJson,
-  prepareKnowledgeGraphPresentation,
-  prepareKnowledgeGraphView,
-  serializePreparedKnowledgeGraphPresentation,
-  type KnowledgeGraphPresentationBudgetReceiptV1,
-  type KnowledgeGraphPresentationInputAssuranceV1,
-  type KnowledgeGraphPresentationInputV1,
-  type KnowledgeGraphViewPolicyV1,
   type PreparedCorpusKnowledgeGraphPresentationV1,
   type PreparedGenericKnowledgeGraphPresentationV1,
-  type PreparedKnowledgeGraphPresentationV1,
   type PreparedKnowledgeGraphViewV1,
 } from './knowledgeGraphPresentation.internal';
 import {
@@ -211,7 +195,7 @@ export interface KnowledgeGraph3DSceneProps
 
 interface KnowledgeGraphCorpus3DSceneInternalProps
   extends KnowledgeGraph3DSceneCommonProps {
-  /** Corpus presentations remain package-internal to the caption-bound composition. */
+  /** Corpus presentations remain package-internal to caption-bound compositions. */
   presentation: PreparedCorpusKnowledgeGraphPresentationV1;
 }
 
@@ -1780,31 +1764,3 @@ function KnowledgeGraph3DSceneInstance({
     </>
   );
 }
-
-export * from './knowledgeGraph';
-export * from './knowledgeGraphFigure';
-export * from './KnowledgeGraphA11yList';
-export * from './KnowledgeGraphStaticRecordView';
-export * from './KnowledgeGraphAccessibleFigure';
-export {
-  KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
-  PREPARED_KNOWLEDGE_GRAPH_PRESENTATION_V1,
-  PREPARED_KNOWLEDGE_GRAPH_VIEW_V1,
-  KnowledgeGraphPresentationJsonError,
-  assertPreparedKnowledgeGraphView,
-  assertPreparedKnowledgeGraphPresentation,
-  isPreparedKnowledgeGraphPresentation,
-  isPreparedKnowledgeGraphView,
-  knowledgeGraphPresentationContainsNode,
-  knowledgeGraphViewContainsNode,
-  parseKnowledgeGraphPresentationJson,
-  prepareKnowledgeGraphPresentation,
-  prepareKnowledgeGraphView,
-  serializePreparedKnowledgeGraphPresentation,
-  type KnowledgeGraphPresentationBudgetReceiptV1,
-  type KnowledgeGraphPresentationInputAssuranceV1,
-  type KnowledgeGraphPresentationInputV1,
-  type KnowledgeGraphViewPolicyV1,
-  type PreparedKnowledgeGraphPresentationV1,
-  type PreparedKnowledgeGraphViewV1,
-};

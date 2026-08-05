@@ -491,7 +491,7 @@ const PHYSICAL_CAPABILITY_EDGES = [
     KNOWLEDGE_GRAPH_PRESENTATION_CAPABILITY_RESOLUTION,
   ],
   [
-    'react/KnowledgeGraphAccessibleFigure.tsx',
+    'react/KnowledgeGraphCorpusFrame.internal.tsx',
     './knowledgeGraphPresentation.internal',
     KNOWLEDGE_GRAPH_PRESENTATION_CAPABILITY_RESOLUTION,
   ],
@@ -545,7 +545,7 @@ const DECLARATION_CAPABILITY_EDGES = [
     KNOWLEDGE_GRAPH_PRESENTATION_CAPABILITY_RESOLUTION,
   ],
   [
-    'react/KnowledgeGraphAccessibleFigure.d.ts',
+    'react/KnowledgeGraphCorpusFrame.internal.d.ts',
     './knowledgeGraphPresentation.internal',
     KNOWLEDGE_GRAPH_PRESENTATION_CAPABILITY_RESOLUTION,
   ],
@@ -2668,6 +2668,9 @@ export const CORTEXEL_PACKAGE_BUILD_CONFIG = deepFreezeBuildConfig({
     // as its own subpath (cortexel/react/knowledge-graph) — keeps the base react
     // entry d3-free and the "optional" d3-force-3d peer honest.
     'react/knowledge-graph': 'react/knowledgeGraphPublic.ts',
+    // Caption-bound corpus inspection without Canvas, Three, R3F, or d3. This
+    // entry owns selection and exposes no visual injection or prepared token.
+    'react/knowledge-graph-dom': 'react/knowledgeGraphDomPublic.ts',
   },
   format: ['esm', 'cjs'],
   // The producer must create its declaration maps so the same-pass plugin above

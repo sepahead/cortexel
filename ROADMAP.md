@@ -221,6 +221,10 @@ paths and installs the new FigureRequest kernel, headless renderer, NEST adapter
 normative contract data, and offline CLI through capability-named paths. `dist/` remains
 checked in because git-dependency consumers install without a build step. Packaged
 availability is explicitly independent of publication and `releaseReady` evidence.
+The package also carries three experimental legacy graph tiers: peer-free preparation,
+caption-bound React-only DOM inspection, and optional 3D presentation. None closes the
+future stable evidence-graph or release gates, and the DOM path is neither a
+FigureRequest renderer nor evidence of stable-catalog readiness.
 
 **What remains.**
 

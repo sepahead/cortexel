@@ -9425,18 +9425,97 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
 
   consumer = chartsConsumer;
   installedRoot = join(consumer, 'node_modules', 'cortexel');
-  for (const forbiddenHeavyPeer of ['three', '@react-three/fiber', 'd3-force-3d']) {
+  for (const forbiddenHeavyPeer of [
+    'three',
+    '@types/three',
+    '@react-three/fiber',
+    'd3-force-3d',
+  ]) {
     if (existsSync(join(consumer, 'node_modules', forbiddenHeavyPeer))) {
       throw new Error(`chart-only probe unexpectedly installed heavy peer ${forbiddenHeavyPeer}`);
     }
   }
 
-  // The canonical chart subpath is intentionally React + SVG only. Exercise it
-  // before installing three/r3f/d3 so an accidental heavyweight import fails.
+  phaseWriteFile(
+    join(consumer, 'knowledge-graph-dom-consumer.tsx'),
+    `
+      import {
+        KnowledgeGraphDomFigure,
+        type KnowledgeGraphDomFigureProps,
+        type KnowledgeGraphViewPolicyV1,
+      } from 'cortexel/react/knowledge-graph-dom';
+
+      const materialized: KnowledgeGraphDomFigureProps = { spec: {} };
+      const raw: KnowledgeGraphDomFigureProps = { specJson: '{}' };
+      const viewPolicy: KnowledgeGraphViewPolicyV1 = { nodeKinds: [] };
+      const first = <KnowledgeGraphDomFigure {...materialized} />;
+      const second = <KnowledgeGraphDomFigure {...raw} query="model" viewPolicy={viewPolicy} />;
+      // @ts-expect-error exactly one input boundary is required
+      const neither = <KnowledgeGraphDomFigure />;
+      // @ts-expect-error materialized and raw inputs are mutually exclusive
+      const both = <KnowledgeGraphDomFigure spec={{}} specJson="{}" />;
+      // @ts-expect-error the bound caption has no caller replacement prop
+      const caption = <KnowledgeGraphDomFigure spec={{}} caption="forged" />;
+      // @ts-expect-error the DOM entry has no renderer injection slot
+      const renderer = <KnowledgeGraphDomFigure spec={{}} renderVisual={() => null} />;
+      // @ts-expect-error children cannot replace or wrap the owned composition
+      const children = <KnowledgeGraphDomFigure spec={{}}>forged</KnowledgeGraphDomFigure>;
+      void [first, second, neither, both, caption, renderer, children];
+    `,
+  );
+  phaseWriteFile(
+    join(consumer, 'knowledge-graph-dom-consumer.cts'),
+    `
+      import dom = require('cortexel/react/knowledge-graph-dom');
+      const materialized: dom.KnowledgeGraphDomFigureProps = { spec: {} };
+      const raw: dom.KnowledgeGraphDomFigureProps = { specJson: '{}' };
+      const viewPolicy: dom.KnowledgeGraphViewPolicyV1 = { edgeKinds: [] };
+      // @ts-expect-error exactly one input boundary is required
+      const neither: dom.KnowledgeGraphDomFigureProps = {};
+      // @ts-expect-error materialized and raw inputs are mutually exclusive
+      const both: dom.KnowledgeGraphDomFigureProps = { spec: {}, specJson: '{}' };
+      // @ts-expect-error no caption replacement is public
+      const caption: dom.KnowledgeGraphDomFigureProps = { spec: {}, caption: 'forged' };
+      void [
+        materialized,
+        raw,
+        viewPolicy,
+        neither,
+        both,
+        caption,
+        dom.KnowledgeGraphDomFigure,
+      ];
+    `,
+  );
+
+  // The canonical chart and DOM knowledge-graph subpaths are intentionally React
+  // only. Exercise both while every heavy optional peer is physically absent.
   for (const mode of ['import', 'require'] as const) {
     const expression = mode === 'import'
       ? `
           const charts = await import('cortexel/react/charts');
+          const dom = await import('cortexel/react/knowledge-graph-dom');
+          const React = await import('react');
+          const { renderToStaticMarkup } = await import('react-dom/server');
+          const core = await import('cortexel/core');
+          const spec = core.getExamplePayload('corpus.knowledge_graph');
+          const gated = core.validateSpec(spec);
+          const materialized = renderToStaticMarkup(
+            React.createElement(dom.KnowledgeGraphDomFigure, { spec }),
+          );
+          const raw = renderToStaticMarkup(
+            React.createElement(dom.KnowledgeGraphDomFigure, {
+              specJson: JSON.stringify(spec),
+            }),
+          );
+          const duplicate = renderToStaticMarkup(
+            React.createElement(dom.KnowledgeGraphDomFigure, {
+              specJson: JSON.stringify(spec).replace(
+                '{',
+                '{"skill":"corpus.knowledge_graph",',
+              ),
+            }),
+          );
           if (typeof charts.ReferenceVizSpecFigure !== 'function' ||
               typeof charts.ReferenceChartScene !== 'function' ||
               Object.hasOwn(charts, 'CheckedReferenceChartScene') ||
@@ -9446,12 +9525,43 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
               typeof charts.circleTopologyGeometry !== 'function' ||
               typeof charts.equalAspectDomains !== 'function' ||
               charts.REFERENCE_CHART_SKILLS?.length !== 19 ||
-              !charts.REFERENCE_CHART_SKILLS.includes('nest.spatial_map_2d')) {
-            throw new Error('ESM chart exports are incomplete');
+              !charts.REFERENCE_CHART_SKILLS.includes('nest.spatial_map_2d') ||
+              Object.keys(dom).join(',') !== 'KnowledgeGraphDomFigure' ||
+              !gated.ok || gated.caption === null ||
+              !materialized.startsWith('<figure') ||
+              !materialized.includes('<figcaption') ||
+              !materialized.includes(gated.caption) ||
+              !materialized.includes('DOM-only knowledge graph inspection') ||
+              !raw.includes(gated.caption) ||
+              duplicate.includes('<figure') ||
+              !duplicate.includes('appears more than once')) {
+            throw new Error('ESM React-only exports are incomplete');
           }
         `
       : `
           const charts = require('cortexel/react/charts');
+          const dom = require('cortexel/react/knowledge-graph-dom');
+          const React = require('react');
+          const { renderToStaticMarkup } = require('react-dom/server');
+          const core = require('cortexel/core');
+          const spec = core.getExamplePayload('corpus.knowledge_graph');
+          const gated = core.validateSpec(spec);
+          const materialized = renderToStaticMarkup(
+            React.createElement(dom.KnowledgeGraphDomFigure, { spec }),
+          );
+          const raw = renderToStaticMarkup(
+            React.createElement(dom.KnowledgeGraphDomFigure, {
+              specJson: JSON.stringify(spec),
+            }),
+          );
+          const duplicate = renderToStaticMarkup(
+            React.createElement(dom.KnowledgeGraphDomFigure, {
+              specJson: JSON.stringify(spec).replace(
+                '{',
+                '{"skill":"corpus.knowledge_graph",',
+              ),
+            }),
+          );
           if (typeof charts.ReferenceVizSpecFigure !== 'function' ||
               typeof charts.ReferenceChartScene !== 'function' ||
               Object.hasOwn(charts, 'CheckedReferenceChartScene') ||
@@ -9461,8 +9571,17 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
               typeof charts.circleTopologyGeometry !== 'function' ||
               typeof charts.equalAspectDomains !== 'function' ||
               charts.REFERENCE_CHART_SKILLS?.length !== 19 ||
-              !charts.REFERENCE_CHART_SKILLS.includes('nest.spatial_map_2d')) {
-            throw new Error('CJS chart exports are incomplete');
+              !charts.REFERENCE_CHART_SKILLS.includes('nest.spatial_map_2d') ||
+              Object.keys(dom).join(',') !== 'KnowledgeGraphDomFigure' ||
+              !gated.ok || gated.caption === null ||
+              !materialized.startsWith('<figure') ||
+              !materialized.includes('<figcaption') ||
+              !materialized.includes(gated.caption) ||
+              !materialized.includes('DOM-only knowledge graph inspection') ||
+              !raw.includes(gated.caption) ||
+              duplicate.includes('<figure') ||
+              !duplicate.includes('appears more than once')) {
+            throw new Error('CJS React-only exports are incomplete');
           }
         `;
     phaseRun(
@@ -9665,6 +9784,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         'graph-brand-producer.cts',
         'graph-brand-consumer.mts',
         'documented-knowledge-graph-example.tsx',
+        '../charts-consumer/knowledge-graph-dom-consumer.tsx',
+        '../charts-consumer/knowledge-graph-dom-consumer.cts',
       ],
     }),
   );

@@ -367,20 +367,26 @@ rejected by a named gate or is impossible to express in the request schema.
 The package export map preserves the pre-1.0 root, `core/`, and `react/` implementation
 while adding FigureRequestV1 at `cortexel/figure`, `cortexel/render-svg`, and
 `cortexel/adapters/nest`. It also packages peer-free experimental graph preparation at
-`cortexel/knowledge-graph` and interactive presentation at
+`cortexel/knowledge-graph`, caption-bound React-only DOM inspection at
+`cortexel/react/knowledge-graph-dom`, and interactive presentation at
 `cortexel/react/knowledge-graph` as legacy exports, and
-contains legacy WebGL scenes through `cortexel/react`. The corpus bind path uses legacy
-`VizSpec`; generic graph preparation has its own versioned visual-record input. Neither
-is a new-contract skill, participates in the nineteen-skill catalog, or inherits the
+contains legacy WebGL scenes through `cortexel/react`. Both canonical React components
+accept only the legacy `corpus.knowledge_graph` VizSpec in `mode: interactive`; generic
+graph preparation has its own versioned visual-record input. Neither input path is a
+new-contract skill, participates in the nineteen-skill catalog, or inherits the
 FigureRequestV1 deterministic-SVG or artifact guarantees.
 The graph exports' prepared-presentation capability, exact-source filtered views,
-canonical record serialization, paginated DOM browser, and visual-failure fallback
-establish coherent bounded presentation only. SSR/no-JS contains only the initial
-bounded record page; complete canonical presentation bytes omit caption, view, and host
+canonical record serialization, paginated DOM browser, caption-bound DOM composition,
+and visual-failure fallback establish coherent bounded presentation only. The DOM entry
+uses the 1,000-node/4,000-relationship presentation bound and mounts no force solver;
+the 3D entry additionally has a 250-node/1,000-relationship live-force bound. The DOM
+output is not a deterministic HTML artifact. SSR/no-JS contains only the initial bounded
+record pages; complete canonical presentation bytes omit caption, view, and host
 policy and are an inspection record, not a complete visual/evidence artifact. These
 surfaces do not
 resolve evidence references, authenticate the caller-declared snapshot namespace, make
-force-layout geometry quantitative, or create a stable evidence artifact.
+force-layout geometry quantitative, create a stable evidence artifact, or establish
+WCAG/browser/assistive-technology conformance.
 
 The packaged FigureRequestV1 catalog currently declares **no** experimental 3D,
 knowledge-graph, animation, NCP-adapter, or bundle skill/compiler. The old ids

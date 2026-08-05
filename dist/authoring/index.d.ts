@@ -1,5 +1,5 @@
-import { _ as isStableSkillId, a as CapabilityAvailability, f as SKILL_CATALOG, g as isCapabilityId, h as StableSkillId, i as CAPABILITY_IDS, m as SkillCatalogEntry, n as CAPABILITY_AVAILABILITIES, o as CapabilityCatalogEntry, p as STABLE_SKILL_IDS, r as CAPABILITY_CATALOG, s as CapabilityId, v as lookupCapabilityCatalogEntry, y as lookupSkillCatalogEntry } from "../catalog-Di6m93lS.js";
-import { i as CATALOG_DIGEST_DOMAIN, r as CATALOG_DIGEST } from "../identity-DYGqCOfx.js";
+import { _ as isStableSkillId, a as CapabilityAvailability, f as SKILL_CATALOG, g as isCapabilityId, h as StableSkillId, i as CAPABILITY_IDS, m as SkillCatalogEntry, n as CAPABILITY_AVAILABILITIES, o as CapabilityCatalogEntry, p as STABLE_SKILL_IDS, r as CAPABILITY_CATALOG, s as CapabilityId, v as lookupCapabilityCatalogEntry, y as lookupSkillCatalogEntry } from "../catalog-loFdaQY_.js";
+import { i as CATALOG_DIGEST_DOMAIN, r as CATALOG_DIGEST } from "../identity-DZ0E0rUc.js";
 //#region src/generated/authoring.d.ts
 interface SkillAuthoringEntry {
   /** Complete structural request schema. Full Cortexel validation remains authoritative. */

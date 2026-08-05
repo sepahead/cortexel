@@ -1,13 +1,13 @@
-// Paginated DOM companion for KnowledgeGraph3DScene. WebGL meshes do not expose
-// this exact textual record themselves; hosts render the list beside (or in a
-// disclosure below) the Canvas so node identity and directed-edge semantics are
-// present outside pointer-hover and colour encodings.
+// Paginated DOM surface shared by the caption-bound DOM and 3D compositions.
+// WebGL meshes do not expose this exact textual record themselves; the 3D host
+// renders the list beside (or below) its Canvas so node identity and directed-edge
+// semantics remain present outside pointer-hover and colour encodings.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type {
   KnowledgeGraph3DEdge,
   KnowledgeGraph3DNode,
-} from './KnowledgeGraph3DScene';
+} from './knowledgeGraphPresentation.types';
 import {
   filterGraphEdges,
   graphQueryMatchIds,
@@ -47,6 +47,17 @@ const INLINE_ATTRIBUTE_ARRAY_LIMIT = 3;
 const INLINE_EVIDENCE_LIMIT = 2;
 export const DEFAULT_A11Y_NODE_PAGE_SIZE = 25;
 export const MAX_A11Y_NODE_PAGE_SIZE = 100;
+const A11Y_INSTANCE_KEYS = new WeakMap<object, string>();
+let nextA11yInstanceKey = 0n;
+
+function a11yInstanceKey(token: object): string {
+  const existing = A11Y_INSTANCE_KEYS.get(token);
+  if (existing !== undefined) return existing;
+  const created = `cortexel-kg-a11y-${nextA11yInstanceKey}`;
+  nextA11yInstanceKey += 1n;
+  A11Y_INSTANCE_KEYS.set(token, created);
+  return created;
+}
 
 interface KnowledgeGraphA11yListCommonProps {
   /** Exact-source-bound visible subset; omission exposes the full presentation. */
@@ -361,7 +372,7 @@ export function KnowledgeGraphA11yList(props: KnowledgeGraphA11yListProps) {
   return renderKnowledgeGraphA11yList(props);
 }
 
-/** Package-internal corpus companion used only in the caption-bound composition. */
+/** Package-internal corpus companion used only in caption-bound compositions. */
 export function KnowledgeGraphCorpusA11yListInternal(
   props: KnowledgeGraphCorpusA11yListInternalProps,
 ) {
@@ -380,7 +391,7 @@ function renderKnowledgeGraphA11yList(props: KnowledgeGraphA11yListSurfaceProps)
     : props.selectedId;
   return (
     <KnowledgeGraphA11yListInstance
-      key={presentation.graphIdentity}
+      key={a11yInstanceKey(view ?? presentation)}
       {...interactionProps}
       selectedId={selectedId}
       nodes={view?.nodes ?? presentation.nodes}
@@ -559,8 +570,8 @@ function KnowledgeGraphA11yListInstance({
       )}
       {normalizedQuery.length > 0 && (
         <p role="status">
-          Query emphasizes {queryMatchCount} of {rows.length} nodes; all nodes remain
-          available below.
+          Query matches {queryMatchCount} of {rows.length} nodes; every node in the
+          active view remains available below as context.
         </p>
       )}
       {normalizedQuery.length > 0 && queryMatchCount > 0 && (
@@ -641,9 +652,9 @@ function KnowledgeGraphA11yListInstance({
                   {normalizedQuery.length > 0
                     ? queryMatch
                       ? currentQueryMatchNode?.id === node.id
-                        ? 'Current navigated query match; visually emphasized. '
-                        : 'Query match; visually emphasized. '
-                      : 'Not a query match; visually de-emphasized but still present. '
+                        ? 'Current navigated query match. '
+                        : 'Query match. '
+                      : 'Not a query match; retained as active-view context. '
                     : ''}
                   {nodeMetadata ? `${nodeMetadata}. ` : ''}
                   {preview.length > 0
@@ -728,7 +739,7 @@ export function KnowledgeGraphLegend(props: KnowledgeGraphLegendProps) {
   return renderKnowledgeGraphLegend(props);
 }
 
-/** Package-internal corpus legend used only in the caption-bound composition. */
+/** Package-internal corpus legend used only in caption-bound compositions. */
 export function KnowledgeGraphCorpusLegendInternal(
   props: KnowledgeGraphCorpusLegendInternalProps,
 ) {
@@ -865,7 +876,8 @@ function renderKnowledgeGraphLegend({
               <span aria-hidden="true" style={swatchStyle(renderedColor)} />
               {safeDiagnosticText(entry.kind, 80)}: {entry.count}{' '}
               {entry.count === 1 ? 'node' : 'nodes'}; source color{' '}
-              {safeDiagnosticText(entry.color, 80)}; intended undimmed scene color{' '}
+              {safeDiagnosticText(entry.color, 80)}; intended undimmed optional 3D
+              scene color{' '}
               {safeDiagnosticText(renderedColor, 80)}; glyph{' '}
               {knowledgeGraphNodeGlyphDescription(entry.nodeGlyph)}; visual radius{' '}
               {entry.minRadius === entry.maxRadius
@@ -895,7 +907,8 @@ function renderKnowledgeGraphLegend({
               {safeDiagnosticText(entry.kind, 80)}: {entry.count}{' '}
               {entry.count === 1 ? 'relationship' : 'relationships'};{' '}
               {entry.directed ? 'directed' : 'undirected'}; source color{' '}
-              {safeDiagnosticText(entry.color, 80)}; intended undimmed scene color{' '}
+              {safeDiagnosticText(entry.color, 80)}; intended undimmed optional 3D
+              scene color{' '}
               {safeDiagnosticText(
                 knowledgeGraphContrastSafeColor(entry.color, themeMode),
                 80,
@@ -906,12 +919,13 @@ function renderKnowledgeGraphLegend({
         </ul>
       )}
       <p role="note">
-        The listed scene colors are the intended undimmed baseline. Glyph shells use{' '}
-        {themeMode === 'light' ? '#0f172a' : '#f8fafc'} before dimming. Focus and query
-        interactions dim peripheral node fills, glyph shells, relationships, arrows,
-        and flow markers without changing their kind glyph, stroke pattern, direction,
-        or DOM record. Layout positions and distances are schematic, not quantitative
-        evidence.
+        In the optional 3D scene, the listed colors are the intended undimmed baseline
+        and glyph shells use {themeMode === 'light' ? '#0f172a' : '#f8fafc'} before
+        dimming. That scene's focus and query interactions dim peripheral node fills,
+        glyph shells, relationships, arrows, and flow markers without changing their
+        kind glyph, stroke pattern, direction, or DOM record. Layout positions and
+        distances are schematic, not quantitative evidence. This legend does not imply
+        that a 3D scene is mounted.
       </p>
     </aside>
   );

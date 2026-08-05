@@ -233,4 +233,45 @@ describe('peer-free host-agnostic sources do not import optional peers', () => {
     );
     expect(offenders).toEqual([]);
   });
+
+  it('the React-only knowledge-graph DOM entry has no heavy or host-only edge', () => {
+    const entrypoint = path.join(REPOSITORY_ROOT, 'react/knowledgeGraphDomPublic.ts');
+    const closure = relativeSourceClosure(entrypoint);
+    expect(closure.length).toBeGreaterThan(20);
+    expect(closure).not.toContain(
+      path.join(REPOSITORY_ROOT, 'react/KnowledgeGraph3DScene.tsx'),
+    );
+    const nodeBuiltins = new Set([
+      ...builtinModules,
+      ...builtinModules.map((module) => `node:${module}`),
+    ]);
+    const forbiddenPackages = new Set([
+      '@react-three/drei',
+      '@react-three/fiber',
+      'axios',
+      'cross-fetch',
+      'd3',
+      'd3-force-3d',
+      'got',
+      'isomorphic-fetch',
+      'isomorphic-ws',
+      'node-fetch',
+      'react-dom',
+      'three',
+      'undici',
+      'whatwg-fetch',
+      'ws',
+    ]);
+    const offenders = closure.flatMap((file) =>
+      importedModules(file)
+        .filter((module) => {
+          const packageRoot = module.startsWith('@')
+            ? module.split('/').slice(0, 2).join('/')
+            : module.split('/')[0];
+          return nodeBuiltins.has(module) || forbiddenPackages.has(packageRoot);
+        })
+        .map((module) => ({ file: path.relative(REPOSITORY_ROOT, file), module })),
+    );
+    expect(offenders).toEqual([]);
+  });
 });

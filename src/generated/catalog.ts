@@ -10529,6 +10529,7 @@ export const CAPABILITY_IDS = freezeGenerated([
   "cortexel/react",
   "cortexel/react/charts",
   "cortexel/react/knowledge-graph",
+  "cortexel/react/knowledge-graph-dom",
   "cortexel/render-svg",
   "cortexel/skills.manifest.json",
   "nest.animation_replay",
@@ -10766,6 +10767,19 @@ export const CAPABILITY_CATALOG: Readonly<Record<CapabilityId, CapabilityCatalog
     "owner": "Sepehr Mahmoudian",
     "limitations": [
       "The packaged force-directed legacy knowledge-graph view is nondeterministic and is not a FigureRequestV1 skill/compiler."
+    ]
+  },
+  "cortexel/react/knowledge-graph-dom": {
+    "id": "cortexel/react/knowledge-graph-dom",
+    "kind": "export",
+    "status": "experimental",
+    "availability": "packaged",
+    "requiredPeers": [
+      "react"
+    ],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "This caption-bound legacy VizSpec inspection surface is not a FigureRequestV1 artifact, evidence authenticator, complete no-JavaScript view, or WCAG/assistive-technology certification."
     ]
   },
   "cortexel/render-svg": {

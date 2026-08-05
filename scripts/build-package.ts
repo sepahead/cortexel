@@ -98,6 +98,16 @@ const REVIEWED_DECLARATION_EXTERNAL_PACKAGE_SPECIFIERS = new Set([
 ]);
 const REVIEWED_DECLARATION_NODE_BUILTIN_SPECIFIERS = new Set<string>();
 
+const KNOWLEDGE_GRAPH_DOM_RUNTIME_EXTERNAL_SPECIFIERS = new Set([
+  'react',
+  'react/jsx-runtime',
+  'zod',
+]);
+const KNOWLEDGE_GRAPH_DOM_DECLARATION_EXTERNAL_SPECIFIERS = new Set([
+  'react',
+  'zod',
+]);
+
 const EXACT_RUNTIME_ORPHANS = Object.freeze([
   'cli/main.cjs',
   'internal/figure-result-capability.js',
@@ -196,6 +206,10 @@ const REVIEWED_PACKAGE_IMPORT_EDGES: readonly ReviewedPackageImportEdge[] =
       'nominal-brand',
     ],
     ['internal/request-capability.d.cts', '#cortexel-validated-request-brand', 'types', 'declaration', 'nominal-brand'],
+    ['KnowledgeGraphCorpusFrame.internal-GDMeS6bL.js', '#cortexel-knowledge-graph-presentation-capability', 'import', 'runtime', 'shared-capability'],
+    ['KnowledgeGraphCorpusFrame.internal-B_E_kBQQ.cjs', '#cortexel-knowledge-graph-presentation-capability', 'require', 'runtime', 'shared-capability'],
+    ['KnowledgeGraphCorpusFrame.internal-Ca8p2VTN.d.cts', '#cortexel-knowledge-graph-presentation-capability', 'types', 'declaration', 'shared-capability'],
+    ['KnowledgeGraphCorpusFrame.internal-DngsoYeo.d.ts', '#cortexel-knowledge-graph-presentation-capability', 'types', 'declaration', 'shared-capability'],
     ['knowledge-graph/index.cjs', '#cortexel-knowledge-graph-presentation-capability', 'require', 'runtime', 'shared-capability'],
     ['knowledge-graph/index.d.cts', '#cortexel-knowledge-graph-presentation-capability', 'types', 'declaration', 'shared-capability'],
     ['knowledge-graph/index.d.ts', '#cortexel-knowledge-graph-presentation-capability', 'types', 'declaration', 'shared-capability'],
@@ -1221,6 +1235,93 @@ function buildReachabilityGraph(
   };
 }
 
+/**
+ * Bind the light DOM entry's package claim to its emitted artifacts, not only to
+ * source imports or a consumer whose host may happen to install more peers. Zod
+ * is a normal dependency; React is the entry's sole runtime peer.
+ */
+function assertKnowledgeGraphDomEmittedClosure(
+  distRoot: string,
+  manifest: PackageBuildManifest,
+  runtimeOutputs: ReadonlySet<string>,
+  declarationOutputs: ReadonlySet<string>,
+): void {
+  const expectedRoots = [
+    'react/knowledge-graph-dom.js',
+    'react/knowledge-graph-dom.cjs',
+    'react/knowledge-graph-dom.d.ts',
+    'react/knowledge-graph-dom.d.cts',
+  ] as const;
+  const presentRoots = expectedRoots.filter((root) =>
+    (root.endsWith('.d.ts') || root.endsWith('.d.cts')
+      ? declarationOutputs
+      : runtimeOutputs).has(root)
+  );
+  // Narrow test fixtures may describe another package surface. Once any DOM root
+  // exists, however, the complete conditional export must be present and closed.
+  if (presentRoots.length === 0) return;
+  if (presentRoots.length !== expectedRoots.length) {
+    throw new Error(
+      `knowledge-graph DOM emitted roots are incomplete: ${JSON.stringify({
+        expected: expectedRoots,
+        observed: presentRoots,
+      })}`,
+    );
+  }
+  const profiles = [
+    {
+      label: 'ESM runtime',
+      kind: 'runtime' as const,
+      root: 'react/knowledge-graph-dom.js',
+      outputs: runtimeOutputs,
+      expectedExternals: KNOWLEDGE_GRAPH_DOM_RUNTIME_EXTERNAL_SPECIFIERS,
+    },
+    {
+      label: 'CommonJS runtime',
+      kind: 'runtime' as const,
+      root: 'react/knowledge-graph-dom.cjs',
+      outputs: runtimeOutputs,
+      expectedExternals: KNOWLEDGE_GRAPH_DOM_RUNTIME_EXTERNAL_SPECIFIERS,
+    },
+    {
+      label: 'ESM declarations',
+      kind: 'declaration' as const,
+      root: 'react/knowledge-graph-dom.d.ts',
+      outputs: declarationOutputs,
+      expectedExternals: KNOWLEDGE_GRAPH_DOM_DECLARATION_EXTERNAL_SPECIFIERS,
+    },
+    {
+      label: 'CommonJS declarations',
+      kind: 'declaration' as const,
+      root: 'react/knowledge-graph-dom.d.cts',
+      outputs: declarationOutputs,
+      expectedExternals: KNOWLEDGE_GRAPH_DOM_DECLARATION_EXTERNAL_SPECIFIERS,
+    },
+  ] as const;
+  for (const profile of profiles) {
+    const graph = buildReachabilityGraph(
+      distRoot,
+      manifest,
+      profile.kind,
+      new Set([profile.root]),
+      profile.outputs,
+    );
+    if (
+      !sameStringSet(graph.externalSpecifiers, profile.expectedExternals) ||
+      graph.nodeBuiltinSpecifiers.size > 0
+    ) {
+      throw new Error(
+        `knowledge-graph DOM ${profile.label} closure differs from its React-only ` +
+        `contract: ${JSON.stringify({
+          expectedExternalSpecifiers: sorted(profile.expectedExternals),
+          observedExternalSpecifiers: sorted(graph.externalSpecifiers),
+          observedNodeBuiltinSpecifiers: sorted(graph.nodeBuiltinSpecifiers),
+        })}`,
+      );
+    }
+  }
+}
+
 function assertExactReviewedModuleInventory(
   runtime: BuildGraph,
   declarations: BuildGraph,
@@ -1848,6 +1949,12 @@ function verifyPackageBuildOutput(
     manifest,
     'declaration',
     roots.declarations,
+    declarationOutputs,
+  );
+  assertKnowledgeGraphDomEmittedClosure(
+    distRoot,
+    manifest,
+    runtimeOutputs,
     declarationOutputs,
   );
   if (runtime.unreachable.size > 0) {

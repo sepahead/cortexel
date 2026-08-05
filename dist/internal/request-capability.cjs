@@ -1,13 +1,13 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
 const require_canonicalize = require('../canonicalize-CM-RPRQS.cjs');
 const require_exact_binary64 = require('../exact-binary64-B9QJo1AS.cjs');
-const require_identity = require('../identity-Q753Itj4.cjs');
+const require_identity = require('../identity-DvvM9pyL.cjs');
 const require_deep_freeze = require('../deep-freeze-CX4sIEIO.cjs');
-const require_catalog = require('../catalog-NfLEhJFQ.cjs');
+const require_catalog = require('../catalog-B4eoXq8w.cjs');
 const require_registry = require('../registry-CCvLcMCj.cjs');
 const require_errors = require('../errors-DaUwoa4p.cjs');
-const require_contract_identity = require('../contract-identity-DzgEYCjW.cjs');
-const require_provenance = require('../provenance-BiKBRiGl.cjs');
+const require_contract_identity = require('../contract-identity-C8tt01Zs.cjs');
+const require_provenance = require('../provenance-DIN9L67L.cjs');
 const require_response_curve_basis = require('../response-curve-basis-Bzq_xSZ2.cjs');
 const require_nest_time = require('../nest-time-CaEztfRm.cjs');
 const require_structural_validator = require('../structural-validator-CThM5GMk.cjs');
@@ -6347,7 +6347,7 @@ function checkIdentity(request) {
 		message: `this build implements ${require_identity.REQUEST_CONTRACT}. Compare with getBuildIdentity(), then use migrateLegacyRequest() for a supported pre-1.0 request. The packaged CLI equivalents are \`cortexel identity --json\` and \`cortexel migrate ...\`; a repository checkout may run the same implementation through \`bun src/cli/main.ts ...\`.`
 	}));
 	const digest = request.contractDigest;
-	if (typeof digest === "string" && digest !== "sha256:61286a89091acaaee0ffb70b377b176cdea460f680d8ea0a7ef3f19da4da6dd0") errors.push(require_errors.makeError({
+	if (typeof digest === "string" && digest !== "sha256:c5ae167f1d7f07650eb240750abd78bae7453940ae21d4d50e4ecb56b0c7681f") errors.push(require_errors.makeError({
 		code: "CONTRACT_DIGEST_MISMATCH",
 		stage: "identity",
 		instancePath: "/contractDigest",

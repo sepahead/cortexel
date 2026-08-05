@@ -65,8 +65,9 @@ import {
 import {
   KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
   prepareKnowledgeGraphPresentation,
-  type KnowledgeGraph3DEdge,
-} from '../react/KnowledgeGraph3DScene';
+} from '../react/knowledgeGraphPresentation.internal';
+import type { KnowledgeGraph3DEdge } from
+  '../react/knowledgeGraphPresentation.types';
 import {
   beginKnowledgeGraphRuntimeTransition,
   handleKnowledgeGraphNodeClick,
@@ -111,11 +112,13 @@ import {
 } from '../react/knowledgeGraphParticles.internal';
 import {
   KnowledgeGraph3DScene,
-  KnowledgeGraphA11yList,
-  KnowledgeGraphLegend,
   knowledgeGraphNodeUsesFocusScale,
   type KnowledgeGraph3DNode,
 } from '../react/KnowledgeGraph3DScene';
+import {
+  KnowledgeGraphA11yList,
+  KnowledgeGraphLegend,
+} from '../react/KnowledgeGraphA11yList';
 import type { KnowledgeGraph3DParams } from '../core/skills/params';
 import { KNOWLEDGE_GRAPH_LIMITS, PARAM_LIMITS } from '../core/skills/params';
 
@@ -1550,7 +1553,7 @@ describe('graph helpers', () => {
     })).toThrow(/non-empty display-safe string <= 1024/);
   });
 
-  it('keys the scene-owned lifecycle boundary by the declared graph namespace', () => {
+  it('separates scene cache namespaces from exact DOM capability lifecycles', () => {
     const props = {
       graphIdentity: 'graph:one',
       nodes: [],
@@ -1572,7 +1575,16 @@ describe('graph helpers', () => {
     expect(other.key).toBe('graph:two');
     expect(other.type).toBe(first.type);
 
-    const a11yFirst = KnowledgeGraphA11yList(withPreparedPresentation({
+    const a11yFirstProps = withPreparedPresentation({
+      graphIdentity: 'graph:one',
+      nodes: [],
+      edges: [],
+      selectedId: null,
+      onSelect: () => {},
+    });
+    const a11yFirst = KnowledgeGraphA11yList(a11yFirstProps);
+    const a11ySame = KnowledgeGraphA11yList(a11yFirstProps);
+    const a11yEquivalent = KnowledgeGraphA11yList(withPreparedPresentation({
       graphIdentity: 'graph:one',
       nodes: [],
       edges: [],
@@ -1586,11 +1598,12 @@ describe('graph helpers', () => {
       selectedId: null,
       onSelect: () => {},
     }));
-    expect(a11yFirst.key).toBe('graph:one');
-    expect(a11yOther.key).toBe('graph:two');
+    expect(a11yFirst.key).toBe(a11ySame.key);
+    expect(a11yEquivalent.key).not.toBe(a11yFirst.key);
+    expect(a11yOther.key).not.toBe(a11yFirst.key);
   });
 
-  it('retains accessible paging for same-key views and resets it for a new namespace', async () => {
+  it('retains accessible paging for one capability and resets for a new token', async () => {
     const nodes = Array.from({ length: 201 }, (_, index) => ({
       id: `node:${index}`,
       label: `Node ${index}`,
@@ -1605,11 +1618,12 @@ describe('graph helpers', () => {
       selectedId: null,
       onSelect: () => {},
     };
+    const firstCapability = withPreparedPresentation(props);
     let renderer!: ReturnType<typeof create>;
     await act(async () => {
       renderer = create(createElement(
         KnowledgeGraphA11yList,
-        withPreparedPresentation(props),
+        firstCapability,
       ));
     });
     const next = () => renderer.root.findAllByType('button').find(
@@ -1623,14 +1637,13 @@ describe('graph helpers', () => {
     await act(async () => {
       renderer.update(createElement(
         KnowledgeGraphA11yList,
-        withPreparedPresentation({ ...props }),
+        firstCapability,
       ));
     });
     expect(nodePageText()).toContain('Node page 2 of 9');
     await act(async () => {
       renderer.update(createElement(KnowledgeGraphA11yList, withPreparedPresentation({
         ...props,
-        graphIdentity: 'graph:two',
       })));
     });
     expect(nodePageText()).toContain('Node page 1 of 9');
@@ -1734,7 +1747,7 @@ describe('graph helpers', () => {
     expect(html).toContain('Selected model');
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain('Matching paper');
-    expect(html).toContain('all nodes remain available below');
+    expect(html).toContain('every node in the active view remains available below');
     expect(html).not.toContain('No graph nodes match this view');
   });
 
@@ -2373,6 +2386,11 @@ describe('graph helpers', () => {
     await act(async () => {
       renderer.update(tree(edges.map((edge) => ({ ...edge }))));
     });
+    expect(pageText()).toBe('Page 1 of 4');
+    const nextAfterCapabilityChange = renderer.root.findAllByType('button').find(
+      (button) => button.children.join('') === 'Next relationships',
+    )!;
+    await act(async () => nextAfterCapabilityChange.props.onClick());
     expect(pageText()).toBe('Page 2 of 4');
     captureCommit = true;
     await act(async () => {
@@ -2453,7 +2471,8 @@ describe('graph helpers', () => {
     expect(accessibleText).toContain('connected to Model C');
     expect(accessibleText).not.toContain('points to Model B');
     expect(legendText).toContain(
-      'family: 1 node; source color #ff00ff; intended undimmed scene color #ff00ff; ' +
+      'family: 1 node; source color #ff00ff; intended undimmed optional 3D ' +
+      'scene color #ff00ff; ' +
       'glyph outlined sphere',
     );
     expect(legendText).toContain('variant_of: 1 relationship; undirected');
@@ -2464,7 +2483,7 @@ describe('graph helpers', () => {
     });
   });
 
-  it('keeps expanded metadata bound to its exact assertion across edge reorder', async () => {
+  it('resets disclosure for a new capability and rebinds exact assertion metadata', async () => {
     const nodes = [
       { id: 'a', label: 'Model A', kind: 'model', color: '#fff', radius: 4 },
       { id: 'b', label: 'Model B', kind: 'model', color: '#fff', radius: 4 },
@@ -2540,6 +2559,13 @@ describe('graph helpers', () => {
         KnowledgeGraphA11yList,
         withPreparedPresentation(props),
       ));
+    });
+    expect(testRendererText(findMetadata('Identified assertion')!.children))
+      .not.toContain('IDENTIFIED FULL EXCERPT');
+    await act(async () => {
+      findMetadata('Identified assertion')!.props.onToggle({
+        currentTarget: { open: true },
+      });
     });
     expect(testRendererText(findMetadata('Identified assertion')!.children))
       .toContain('IDENTIFIED FULL EXCERPT');
@@ -2784,18 +2810,21 @@ describe('graph helpers', () => {
       }),
     ));
     expect(html).toContain(
-      'paper: 2 nodes; source color #00ffff; intended undimmed scene color #00ffff; ' +
+      'paper: 2 nodes; source color #00ffff; intended undimmed optional 3D ' +
+      'scene color #00ffff; ' +
       'glyph outlined sphere',
     );
     expect(html).toContain(
       'visual radius 4–6; Caller-declared: visual size has no declared quantitative interpretation',
     );
     expect(html).toContain(
-      'model: 2 nodes; source color #ffaa00; intended undimmed scene color #ffaa00; ' +
+      'model: 2 nodes; source color #ffaa00; intended undimmed optional 3D ' +
+      'scene color #ffaa00; ' +
       'glyph sphere with box shell',
     );
     expect(html).toContain(
-      'family: 1 node; source color #aa55ff; intended undimmed scene color #aa55ff; ' +
+      'family: 1 node; source color #aa55ff; intended undimmed optional 3D ' +
+      'scene color #aa55ff; ' +
       'glyph sphere with diamond shell',
     );
     for (const kind of [
@@ -2809,18 +2838,18 @@ describe('graph helpers', () => {
     }
     expect(html).toContain(
       'same_as: 1 relationship; undirected; source color #ff8800; ' +
-      'intended undimmed scene color #ff8800; solid stroke',
+      'intended undimmed optional 3D scene color #ff8800; solid stroke',
     );
     expect(html).toContain(
       'cites: 1 relationship; directed; source color #11ff11; ' +
-      'intended undimmed scene color #11ff11; solid stroke; flow markers',
+      'intended undimmed optional 3D scene color #11ff11; solid stroke; flow markers',
     );
     expect(html).toContain('instantiates: 1 relationship; directed; source color ' +
-      '#00aaaa; intended undimmed scene color #00aaaa; short-dash stroke');
+      '#00aaaa; intended undimmed optional 3D scene color #00aaaa; short-dash stroke');
     expect(html).toContain('belongs_to_family: 1 relationship; directed; source color ' +
-      '#888888; intended undimmed scene color #888888; dotted stroke');
+      '#888888; intended undimmed optional 3D scene color #888888; dotted stroke');
     expect(html).toContain('variant_of: 1 relationship; directed; source color ' +
-      '#ff0088; intended undimmed scene color #ff0088; long-dash stroke');
+      '#ff0088; intended undimmed optional 3D scene color #ff0088; long-dash stroke');
     expect(html).toContain(
       'Layout positions and distances are schematic, not quantitative evidence.',
     );

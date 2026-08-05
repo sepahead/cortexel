@@ -105,11 +105,16 @@ Summary:
 | `nest.spatial_map_2d` | report-only target skeleton | `network.spatial_map_2d` |
 | `nest.plasticity_dynamics` | report-only target skeleton | `network.synaptic_weight_trace` (observation kind and stable connection identity required; report-only migration copies neither, and a legacy recorded tuple cannot satisfy identity without a bound same-run post-prepare inventory and receipt) |
 | `nest.spatial_3d` | experimental legacy-only | no FigureRequestV1 target; the pre-1.0 WebGL surface is not silently aliased |
-| `corpus.knowledge_graph` | experimental legacy-only | no FigureRequestV1 target; the packaged `cortexel/react/knowledge-graph` export remains a legacy surface |
+| `corpus.knowledge_graph` | experimental legacy-only | no FigureRequestV1 target; the packaged peer-free, React-only DOM, and interactive 3D knowledge-graph exports remain legacy inspection surfaces |
 | `nest.animation_replay` | experimental legacy-only | no FigureRequestV1 target or deterministic renderer |
 | `nest.connectivity_matrix` | report-only target skeleton with unresolved graph facts | `network.connection_graph`; despite its name the legacy skill was an edge-list topology, never a literal matrix |
 | `nest.spatial_2d` | report-only conditional target skeleton | `network.spatial_map_2d`; a future implemented transform may complete it only from a full measured-position contract |
 | `nest.stimulus_response` | manual recipe | no target request; separately author and validate trace, rate, and response-curve requests as appropriate |
+
+Choosing the React-only DOM surface instead of optional 3D changes the legacy
+presentation path and its dependency and interaction requirements. It does not migrate
+the legacy `VizSpec`, mint a FigureRequest artifact, authenticate graph evidence, or
+strengthen any scientific claim.
 
 ## Information Cortexel refuses to invent
 

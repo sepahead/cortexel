@@ -21,7 +21,7 @@ PACKAGE_VERSION: str = "0.10.0-dev.0"
 PYTHON_DISTRIBUTION_VERSION: str = "0.10.0.dev0"
 REQUEST_CONTRACT: str = "cortexel-figure-request/1.0"
 ARTIFACT_CONTRACT: str = "cortexel-figure-artifact/1.0"
-CONTRACT_DIGEST: str = "sha256:61286a89091acaaee0ffb70b377b176cdea460f680d8ea0a7ef3f19da4da6dd0"
+CONTRACT_DIGEST: str = "sha256:c5ae167f1d7f07650eb240750abd78bae7453940ae21d4d50e4ecb56b0c7681f"
 CATALOG_DIGEST: str = "sha256:e6ef9014ca56f4bd159f8b3545ba8d7cf0241550ff25b9de44b05fde826f0dd5"
 CATALOG_DIGEST_DOMAIN: str = "cortexel-public-stable-catalog.v2"
 AUTHORING_SCHEMA_COMPILATION_PROFILE_V1: Final[Mapping[str, Any]] = _freeze({
@@ -14333,6 +14333,7 @@ CAPABILITY_AVAILABILITY: Final[Mapping[str, str]] = _freeze({
     "cortexel/react": "packaged",
     "cortexel/react/charts": "packaged",
     "cortexel/react/knowledge-graph": "packaged",
+    "cortexel/react/knowledge-graph-dom": "packaged",
     "cortexel/skills.manifest.json": "packaged",
     "cortexel/adapters/nest": "packaged",
     "cortexel/contract": "packaged",

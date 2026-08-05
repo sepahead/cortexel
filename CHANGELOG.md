@@ -6,6 +6,36 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — React-only caption-bound knowledge-graph inspection
+
+- Added the experimental `cortexel/react/knowledge-graph-dom` subpath. Its sole runtime
+  export, `KnowledgeGraphDomFigure`, accepts exactly one materialized corpus `VizSpec`
+  or raw JSON through a duplicate-member-rejecting boundary in legacy
+  `mode: interactive`, runs the existing strict corpus bind, and derives and displays
+  the mandatory caption as the first
+  child of every accepted figure, owns selection, and keeps
+  the legend, operable query/list controls, and full-source paginated record browser
+  in ordinary DOM. It exposes no caption replacement, prepared capability, children,
+  renderer injection, hover, camera, controls, force-layout, or visual-availability
+  authority.
+- Extracted one package-private React-only corpus frame shared with the existing
+  `KnowledgeGraphAccessibleFigure`. The frame binds validation, caption, exact-source
+  views, state invalidation, legend, operable list, and full-source records once; the
+  3D wrapper alone injects its guarded visual region. Removed the redundant
+  `KnowledgeGraph3DScene` compatibility re-export cycle and redirected DOM declaration
+  types away from the 3D module.
+- Added source-closure, capability-edge, ESM/CommonJS, declaration, heavy-peer-absence,
+  duplicate-JSON, caption-order, invalid-view, exact-token state-reset, and package SSR
+  regressions. The DOM path uses the 1,000-node/4,000-relationship presentation bound,
+  not the lower 250-node/1,000-relationship live-force ceiling. Its reviewed Cortexel
+  source and emitted import closures admit React, the React JSX runtime, and the normal
+  Zod dependency, but no ReactDOM, Three, R3F, D3, other external package, or Node
+  builtin.
+- This remains a legacy experimental inspection composition. It is not a
+  FigureRequestV1 renderer or artifact, an evidence/snapshot authenticator, a
+  deterministic HTML receipt, a complete no-JavaScript document, or WCAG/browser/
+  assistive-technology conformance evidence.
+
 ### Fixed — legacy NEST weight-recorder identity boundary
 
 - Replaced the legacy sender/target pair splitter with
@@ -440,7 +470,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   complete self-describing legacy `VizSpec` through the strict corpus gate to the exact
   bound caption, mapped presentation, palette snapshot, theme mode, and camera policy.
   It rejects the wrong skill and export mode and performs no I/O.
-- All surfaces inside the canonical corpus composition now consume the exact same
+- All surfaces inside both canonical corpus compositions now consume the exact same
   prepared capability. This removes independent scene/legend/DOM snapshots and binds
   nodes, relationships, context, budgets, and corpus lifecycle identity to one
   publication event. The
@@ -463,14 +493,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `KnowledgeGraphStaticRecordView` provides deterministic paginated access to the
   accepted context, nodes, assertions, typed evidence references, epistemic records,
   attributes, and discriminated uncalibrated scores without force coordinates.
-  `KnowledgeGraphAccessibleFigure` is the canonical host-owned-Canvas composition: it
+  `KnowledgeGraphAccessibleFigure` is the canonical host-owned-Canvas 3D composition: it
   accepts either a materialized spec or raw `specJson` (never an independent caption),
   keeps the visible honesty caption,
   legend, paginated operable DOM, and full source-record browser mounted, and replaces
   only a failed visual region with an availability status. Its boundary is precisely
   limited to descendant client render/lifecycle failures; hosts report WebGL/context
   availability and explicitly key retries. SSR/no-JS contains only the bounded initial
-  record page; hydrated controls expose all pages. The canonical serializer emits the
+  node and relationship pages; successfully hydrated controls expose all pages. The
+  canonical serializer emits the
   complete presentation inspection record, not caption, view, host policy, or a figure
   artifact. Invalid view policy retains the accepted caption and source-record browser;
   source/view transitions invalidate controlled focus that has become hidden. The
@@ -510,12 +541,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to a future 3.x resolution, so evidence-sensitive hosts must exact-lock or re-audit.
 - Preparation and DOM inspection admit at most 1,000 nodes and 4,000 relationships;
   the allocating main-thread live force scene separately admits at most 250 nodes and
-  1,000 relationships. Above the live ceiling the canonical composition does not invoke
+  1,000 relationships. Above the live ceiling the canonical 3D composition does not invoke
   the visual renderer but keeps the caption, legend, operable DOM, and complete
   paginated source-record browser. An exact source-bound filtered view can regain the
   visual when it falls within both live limits; some sources have no nonempty eligible
   filter.
-- The canonical React boundary runtime-enforces an own-property XOR between `spec` and
+- Both canonical React boundaries runtime-enforce an own-property XOR between `spec` and
   `specJson`; both, neither, `spec={undefined}`, and a non-string `specJson` fail before
   graph preparation.
 - Raw JSON byte, decoded-string, and numeric-token limits now stop their respective

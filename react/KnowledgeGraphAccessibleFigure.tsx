@@ -1,45 +1,26 @@
 import {
   Component,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
   type ErrorInfo,
   type ReactElement,
   type ReactNode,
+  type RefObject,
 } from 'react';
 
 import type { ReadonlySemanticPalette } from '../core/colormaps';
-import { safeDiagnosticText, safeErrorMessage } from '../core/safeRuntime';
 import {
   KnowledgeGraphCorpus3DSceneInternal,
   type ControlsHandle,
 } from './KnowledgeGraph3DScene';
 import {
-  KnowledgeGraphCorpusA11yListInternal,
-  KnowledgeGraphCorpusLegendInternal,
-} from './KnowledgeGraphA11yList';
-import { KnowledgeGraphCorpusStaticRecordViewInternal } from
-  './KnowledgeGraphStaticRecordView';
-import { knowledgeGraphLiveForceAvailability } from './knowledgeGraph';
-import {
-  prepareCorpusKnowledgeGraphFigure,
-  prepareCorpusKnowledgeGraphFigureJson,
-  type KnowledgeGraphFigureHostPolicyV1,
-  type PrepareCorpusKnowledgeGraphFigureResultV1,
-} from './knowledgeGraphFigure';
-import {
-  knowledgeGraphPresentationContainsNode,
-  knowledgeGraphViewContainsNode,
-  prepareKnowledgeGraphView,
+  KnowledgeGraphCorpusFrameInternal,
+  type KnowledgeGraphCorpusFrameContextInternal,
   type KnowledgeGraphViewPolicyV1,
-  type PreparedKnowledgeGraphPresentationV1,
-  type PreparedKnowledgeGraphViewV1,
-} from './knowledgeGraphPresentation.internal';
+} from './KnowledgeGraphCorpusFrame.internal';
+import type { KnowledgeGraphFigureHostPolicyV1 } from './knowledgeGraphFigure';
 
 interface VisualBoundaryProps {
   /** Exact presentation or subordinate view rendered by the failed visual. */
-  readonly resetToken: PreparedKnowledgeGraphPresentationV1 | PreparedKnowledgeGraphViewV1;
+  readonly resetToken: object;
   readonly retryToken: string | number | undefined;
   readonly fallback: ReactNode;
   readonly children: ReactNode;
@@ -98,7 +79,6 @@ export type KnowledgeGraphVisualRenderer = (
 ) => ReactNode;
 
 export interface KnowledgeGraphAccessibleFigureCommonProps {
-  /** Host retains Canvas, controls, camera, postprocessing, and asset authority. */
   /**
    * Invoked synchronously (including during SSR) with the checked scene and host
    * policy. The host owns Canvas/client boundaries, controls/camera application,
@@ -121,7 +101,7 @@ export interface KnowledgeGraphAccessibleFigureCommonProps {
   /** Strict host-owned kind filters; omission means the complete prepared graph. */
   readonly viewPolicy?: KnowledgeGraphViewPolicyV1;
   readonly query?: string;
-  readonly controlsRef?: React.RefObject<ControlsHandle | null>;
+  readonly controlsRef?: RefObject<ControlsHandle | null>;
   /** Defaults true for the canonical composition; set false to retain host camera. */
   readonly autoFrame?: boolean;
   readonly flyToSelection?: boolean;
@@ -139,7 +119,7 @@ export interface KnowledgeGraphAccessibleFigureCommonProps {
 export type KnowledgeGraphAccessibleFigureProps =
   KnowledgeGraphAccessibleFigureCommonProps & (
     | {
-        /** Materialized self-describing legacy VizSpec; duplicate members are no longer observable. */
+        /** Materialized self-describing legacy VizSpec; duplicates are no longer observable. */
         readonly spec: unknown;
         readonly specJson?: never;
       }
@@ -150,201 +130,46 @@ export type KnowledgeGraphAccessibleFigureProps =
       }
   );
 
-function inputBoundaryFailure(message: string): PrepareCorpusKnowledgeGraphFigureResultV1 {
-  return Object.freeze({
-    ok: false as const,
-    errors: Object.freeze([Object.freeze({
-      code: 'input_boundary_rejected' as const,
-      path: 'spec/specJson',
-      message,
-    })]),
-  });
+interface KnowledgeGraphInteractiveRegionProps {
+  readonly context: KnowledgeGraphCorpusFrameContextInternal;
+  readonly renderVisual: KnowledgeGraphVisualRenderer;
+  readonly visualAvailable: boolean;
+  readonly visualRetryKey: string | number | undefined;
+  readonly controlsRef: RefObject<ControlsHandle | null> | undefined;
+  readonly autoFrame: boolean;
+  readonly flyToSelection: boolean | undefined;
+  readonly labelColor: string | undefined;
+  readonly particleColor: string | undefined;
+  readonly reducedMotion: boolean | undefined;
+  readonly query: string;
 }
 
-/**
- * Canonical legacy corpus-graph composition. It binds strict validation,
- * mapping, caption, legend, interactive DOM controls, and a paginated record
- * view to one detached presentation. Unit tests establish those narrow
- * composition invariants only—not whole-figure WCAG, browser, WebGL, or
- * assistive-technology conformance.
- */
-export function KnowledgeGraphAccessibleFigure(
-  props: KnowledgeGraphAccessibleFigureProps,
-) {
+function KnowledgeGraphInteractiveRegion({
+  context,
+  renderVisual,
+  visualAvailable,
+  visualRetryKey,
+  controlsRef,
+  autoFrame,
+  flyToSelection,
+  labelColor,
+  particleColor,
+  reducedMotion,
+  query,
+}: KnowledgeGraphInteractiveRegionProps) {
   const {
-    renderVisual,
+    presentation,
+    view,
+    hostPolicy,
+    activeToken,
     selectedId,
     onSelect,
     hoverId,
     onHover,
-    visualAvailable = true,
-    visualRetryKey,
-    viewPolicy,
-    query = '',
-    controlsRef,
-    autoFrame = true,
-    flyToSelection,
-    labelColor,
-    particleColor,
-    reducedMotion,
-    nodePageSize,
-    recordNodePageSize,
-    recordEdgePageSize,
-    activePalette,
-    className,
-    label = 'Interactive knowledge graph',
-  } = props;
-  const hasSpec = Object.hasOwn(props, 'spec');
-  const hasSpecJson = Object.hasOwn(props, 'specJson');
-  const spec = hasSpec ? (props as { readonly spec?: unknown }).spec : undefined;
-  const specJson = hasSpecJson
-    ? (props as { readonly specJson?: unknown }).specJson
-    : undefined;
-  const preparedSource = useMemo(
-    () => {
-      if (hasSpec === hasSpecJson) {
-        return inputBoundaryFailure(
-          'provide exactly one own input property: spec or specJson',
-        );
-      }
-      if (hasSpecJson) {
-        if (typeof specJson !== 'string') {
-          return inputBoundaryFailure('specJson must be a string');
-        }
-        return prepareCorpusKnowledgeGraphFigureJson(specJson, { activePalette });
-      }
-      return prepareCorpusKnowledgeGraphFigure(spec, { activePalette });
-    },
-    [hasSpec, hasSpecJson, spec, specJson, activePalette],
-  );
-  const preparedView = useMemo<
-    | { readonly ok: true; readonly view: PreparedKnowledgeGraphViewV1 | undefined }
-    | { readonly ok: false; readonly message: string }
-  >(() => {
-    if (!preparedSource.ok || viewPolicy === undefined) {
-      return { ok: true, view: undefined };
-    }
-    try {
-      return {
-        ok: true,
-        view: prepareKnowledgeGraphView(preparedSource.presentation, viewPolicy),
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        message: `knowledge-graph view preparation failed: ${safeErrorMessage(error)}`,
-      };
-    }
-  }, [preparedSource, viewPolicy]);
-  const hostPolicy = useMemo<KnowledgeGraphFigureHostPolicyV1 | undefined>(
-    () => {
-      if (!preparedSource.ok || !preparedView.ok) return undefined;
-      const activeNodes = preparedView.view?.nodes ?? preparedSource.presentation.nodes;
-      const activeEdges = preparedView.view?.edges ?? preparedSource.presentation.edges;
-      return Object.freeze({
-        ...preparedSource.hostPolicy,
-        view: preparedView.view,
-        liveForceAvailability: knowledgeGraphLiveForceAvailability(
-          activeNodes.length,
-          activeEdges.length,
-        ),
-      });
-    },
-    [preparedSource, preparedView],
-  );
-  const captionId = `cortexel-kg-caption-${useId().replace(/:/gu, '')}`;
-  const selectionInvalidation = useRef<{
-    readonly token: object;
-    readonly id: string;
-  } | null>(null);
-  const hoverInvalidation = useRef<{
-    readonly token: object;
-    readonly id: string;
-  } | null>(null);
-  const activeToken = preparedSource.ok && preparedView.ok
-    ? preparedView.view ?? preparedSource.presentation
-    : undefined;
-  const selectedIsInvalid = preparedSource.ok && preparedView.ok &&
-    selectedId !== null && !(
-    preparedView.view === undefined
-      ? knowledgeGraphPresentationContainsNode(preparedSource.presentation, selectedId)
-      : knowledgeGraphViewContainsNode(
-          preparedView.view,
-          preparedSource.presentation,
-          selectedId,
-        )
-  );
-  const hoverIsInvalid = preparedSource.ok && preparedView.ok && hoverId !== null && !(
-    preparedView.view === undefined
-      ? knowledgeGraphPresentationContainsNode(preparedSource.presentation, hoverId)
-      : knowledgeGraphViewContainsNode(
-          preparedView.view,
-          preparedSource.presentation,
-          hoverId,
-        )
-  );
-  useEffect(() => {
-    if (!selectedIsInvalid || activeToken === undefined || selectedId === null) {
-      selectionInvalidation.current = null;
-      return;
-    }
-    const previous = selectionInvalidation.current;
-    if (previous?.token === activeToken && previous.id === selectedId) return;
-    selectionInvalidation.current = { token: activeToken, id: selectedId };
-    onSelect(null);
-  }, [activeToken, onSelect, selectedId, selectedIsInvalid]);
-  useEffect(() => {
-    if (!hoverIsInvalid || activeToken === undefined || hoverId === null) {
-      hoverInvalidation.current = null;
-      return;
-    }
-    const previous = hoverInvalidation.current;
-    if (previous?.token === activeToken && previous.id === hoverId) return;
-    hoverInvalidation.current = { token: activeToken, id: hoverId };
-    onHover(null);
-  }, [activeToken, hoverId, hoverIsInvalid, onHover]);
-
-  if (!preparedSource.ok) {
-    return (
-      <section role="alert" aria-label="Invalid knowledge graph figure">
-        <h3>Knowledge graph figure rejected</h3>
-        <ul>
-          {preparedSource.errors.map((error, index) => (
-            <li key={index}>{safeDiagnosticText(`${error.path}: ${error.message}`, 840)}</li>
-          ))}
-        </ul>
-      </section>
-    );
+  } = context;
+  if (onHover === undefined) {
+    throw new Error('interactive knowledge-graph hover controller invariant failed');
   }
-  if (!preparedView.ok) {
-    return (
-      <figure
-        className={className}
-        aria-label={safeDiagnosticText(label, 240)}
-        aria-describedby={captionId}
-      >
-        <figcaption id={captionId}>
-          <bdi dir="auto" style={{ unicodeBidi: 'isolate' }}>
-            {preparedSource.caption}
-          </bdi>
-        </figcaption>
-        <section role="alert" aria-label="Invalid knowledge graph view policy">
-          <h3>Knowledge graph view rejected</h3>
-          <p>{safeDiagnosticText(`viewPolicy: ${preparedView.message}`, 840)}</p>
-        </section>
-        <KnowledgeGraphCorpusStaticRecordViewInternal
-          presentation={preparedSource.presentation}
-          nodePageSize={recordNodePageSize}
-          edgePageSize={recordEdgePageSize}
-        />
-      </figure>
-    );
-  }
-  if (hostPolicy === undefined) {
-    throw new Error('knowledge-graph host policy invariant failed');
-  }
-  const { caption, presentation } = preparedSource;
-  const { view } = preparedView;
   const visualUnavailableStatus = (
     <p role="status">
       The host-owned interactive 3D view is unavailable. The paginated graph-record
@@ -384,57 +209,82 @@ export function KnowledgeGraphAccessibleFigure(
       reducedMotion={reducedMotion}
     />
   ) : null;
-  return (
-    <figure
-      className={className}
-      aria-label={safeDiagnosticText(label, 240)}
-      aria-describedby={captionId}
+  return visualAvailable && liveForceAvailable && scene !== null ? (
+    <KnowledgeGraphVisualBoundary
+      resetToken={activeToken}
+      retryToken={visualRetryKey}
+      fallback={visualUnavailableStatus}
     >
-      <figcaption id={captionId}>
-        <bdi dir="auto" style={{ unicodeBidi: 'isolate' }}>{caption}</bdi>
-      </figcaption>
-      {view !== undefined && (
-        <p role="note">
-          Filtered view: showing {view.counts.visibleNodes} of {view.counts.sourceNodes}{' '}
-          nodes and {view.counts.visibleEdges} of {view.counts.sourceEdges}{' '}
-          relationships. Relationships excluded by kind: {' '}
-          {view.counts.edgeKindFilteredEdges}; excluded because an endpoint is hidden:{' '}
-          {view.counts.endpointPrunedEdges}. The caption and record browser remain bound
-          to the full source.
-        </p>
+      <KnowledgeGraphVisualMount
+        renderVisual={renderVisual}
+        scene={scene}
+        context={hostPolicy}
+      />
+    </KnowledgeGraphVisualBoundary>
+  ) : liveForceAvailable ? visualUnavailableStatus : liveForceLimitStatus;
+}
+
+/**
+ * Canonical legacy 3D corpus-graph composition. It binds strict validation,
+ * mapping, caption, legend, interactive DOM controls, and a paginated record
+ * view to one detached presentation. Unit tests establish those narrow
+ * composition invariants only—not whole-figure WCAG, browser, WebGL, or
+ * assistive-technology conformance.
+ */
+export function KnowledgeGraphAccessibleFigure(
+  props: KnowledgeGraphAccessibleFigureProps,
+) {
+  const {
+    renderVisual,
+    selectedId,
+    onSelect,
+    hoverId,
+    onHover,
+    visualAvailable = true,
+    visualRetryKey,
+    viewPolicy,
+    query = '',
+    controlsRef,
+    autoFrame = true,
+    flyToSelection,
+    labelColor,
+    particleColor,
+    reducedMotion,
+    nodePageSize,
+    recordNodePageSize,
+    recordEdgePageSize,
+    activePalette,
+    className,
+    label = 'Interactive knowledge graph',
+  } = props;
+  return (
+    <KnowledgeGraphCorpusFrameInternal
+      sourceInput={props}
+      selectionController={{ value: selectedId, onChange: onSelect }}
+      hoverController={{ value: hoverId, onChange: onHover }}
+      viewPolicy={viewPolicy}
+      query={query}
+      nodePageSize={nodePageSize}
+      recordNodePageSize={recordNodePageSize}
+      recordEdgePageSize={recordEdgePageSize}
+      activePalette={activePalette}
+      className={className}
+      label={label}
+      renderPrimaryRegion={(context) => (
+        <KnowledgeGraphInteractiveRegion
+          context={context}
+          renderVisual={renderVisual}
+          visualAvailable={visualAvailable}
+          visualRetryKey={visualRetryKey}
+          controlsRef={controlsRef}
+          autoFrame={autoFrame}
+          flyToSelection={flyToSelection}
+          labelColor={labelColor}
+          particleColor={particleColor}
+          reducedMotion={reducedMotion}
+          query={query}
+        />
       )}
-      {visualAvailable && liveForceAvailable && scene !== null ? (
-        <KnowledgeGraphVisualBoundary
-          resetToken={view ?? presentation}
-          retryToken={visualRetryKey}
-          fallback={visualUnavailableStatus}
-        >
-          <KnowledgeGraphVisualMount
-            renderVisual={renderVisual}
-            scene={scene}
-            context={hostPolicy}
-          />
-        </KnowledgeGraphVisualBoundary>
-      ) : liveForceAvailable ? visualUnavailableStatus : liveForceLimitStatus}
-      <KnowledgeGraphCorpusLegendInternal
-        presentation={presentation}
-        view={view}
-        themeMode={hostPolicy.themeMode}
-      />
-      <KnowledgeGraphCorpusA11yListInternal
-        presentation={presentation}
-        view={view}
-        selectedId={selectedId}
-        onSelect={onSelect}
-        query={query}
-        nodePageSize={nodePageSize}
-      />
-      <KnowledgeGraphCorpusStaticRecordViewInternal
-        presentation={presentation}
-        view={view}
-        nodePageSize={recordNodePageSize}
-        edgePageSize={recordEdgePageSize}
-      />
-    </figure>
+    />
   );
 }

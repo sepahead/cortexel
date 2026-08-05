@@ -367,9 +367,13 @@ scientific review (§7), not a runtime gate.
   registry contains no 3D, knowledge-graph, animation, NCP-adapter, or bundle skill.
   Their legacy ids have null-target or blocking migration outcomes, so stable validation
   fails closed instead of inventing an `experimental.*` replacement. The separately
-  packaged legacy `cortexel/react/knowledge-graph` export is explicitly experimental
-  and nondeterministic; it is not a FigureRequestV1 skill or a byte-stable output path.
-  Its peer-free/runtime-branded prepared-presentation boundary prevents independently
+  packaged legacy `cortexel/react/knowledge-graph-dom` and
+  `cortexel/react/knowledge-graph` exports are explicitly experimental; neither is a
+  FigureRequestV1 skill or a byte-stable output path, and the latter also contains the
+  nondeterministic force layout. The DOM entry's closed public props prevent supported
+  caption, renderer, children, and prepared-token injection, but cannot constrain a host
+  that controls the surrounding page or CSS. The shared peer-free/runtime-branded
+  prepared-presentation boundary prevents independently
   sampled mapper/scene/legend/DOM inputs and is shared across ESM/CommonJS. Exact-source
   view tokens cannot be rebound to another presentation, but that capability proves
   only that Cortexel copied and checked one coherent presentation. It does not
@@ -458,14 +462,18 @@ release ledger — that bounds or will close it.
   escaping hold regardless. **Gate:** the layout/metrics work in the ledger
   (R083–R085).
 
-- **Legacy WebGL carries no FigureRequestV1 security guarantee.** GPU output is
+- **Legacy graph React surfaces carry no FigureRequestV1 security guarantee.** The
+  React-only DOM entry is not a deterministic HTML artifact; GPU output is
   nondeterministic, and the packaged legacy knowledge-graph force layout is schematic.
-  A visual-region error in the canonical graph composition retains the visible honesty
+  In the canonical 3D composition, a visual-region error retains the visible honesty
   caption and paginated operable DOM views when the host reports unavailability or a
   descendant client render/lifecycle error is caught. React boundaries do not cover SSR,
-  event/async errors, or unreported WebGL context loss; SSR/no-JS contains only a bounded
-  initial record page. This focused failure-containment invariant is not browser,
-  assistive-technology, or WCAG conformance evidence.
+  event/async errors, or unreported WebGL context loss; SSR/no-JS contains only bounded
+  initial node and relationship pages. The React-only DOM entry deliberately mounts no
+  host-injected Canvas/WebGL/force region, but remains hydrated React inspection with the
+  same bounded no-JavaScript reachability and no byte-stable artifact. These focused
+  invariants are not FigureRequestV1,
+  browser, assistive-technology, or WCAG conformance evidence.
   No current-contract 3D, animation, NCP, resolver, or MCP capability exists; a future
   record must prove concrete availability before it can be callable. **Gate:** the
   package/source availability checker, stable-entry rejection, host-owned I/O, and the

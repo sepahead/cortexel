@@ -177,7 +177,7 @@ const REVIEWED_PHYSICAL_CAPABILITY_EDGES = [
     KNOWLEDGE_GRAPH_PRESENTATION_CAPABILITY_RESOLUTION,
   ],
   [
-    'react/KnowledgeGraphAccessibleFigure.tsx',
+    'react/KnowledgeGraphCorpusFrame.internal.tsx',
     './knowledgeGraphPresentation.internal',
     KNOWLEDGE_GRAPH_PRESENTATION_CAPABILITY_RESOLUTION,
   ],
@@ -230,7 +230,7 @@ const REVIEWED_DECLARATION_CAPABILITY_EDGES = [
     KNOWLEDGE_GRAPH_PRESENTATION_CAPABILITY_RESOLUTION,
   ],
   [
-    'react/KnowledgeGraphAccessibleFigure.d.ts',
+    'react/KnowledgeGraphCorpusFrame.internal.d.ts',
     './knowledgeGraphPresentation.internal',
     KNOWLEDGE_GRAPH_PRESENTATION_CAPABILITY_RESOLUTION,
   ],
@@ -1455,6 +1455,7 @@ describe('capability maturity and concrete availability', () => {
       'cortexel/react',
       'cortexel/react/charts',
       'cortexel/react/knowledge-graph',
+      'cortexel/react/knowledge-graph-dom',
       'cortexel/render-svg',
       'cortexel/skills.manifest.json',
     ];
@@ -1466,6 +1467,17 @@ describe('capability maturity and concrete availability', () => {
       .map((capability: any) => capability.id)
       .sort();
     expect(packagedExports).toEqual(expected);
+    const domGraphCapability = registry.capabilities.find((capability: any) =>
+      capability.id === 'cortexel/react/knowledge-graph-dom'
+    );
+    expect(domGraphCapability).toMatchObject({
+      kind: 'export',
+      status: 'experimental',
+      availability: 'packaged',
+      requiredPeers: ['react'],
+    });
+    expect(typeof packageJson.dependencies?.zod).toBe('string');
+    expect(packageJson.dependencies?.zod).not.toHaveLength(0);
     expect([...evidence.buildEntryIds].sort()).toEqual(expected.filter(
       (id) => ![
         'cortexel/contract',

@@ -11,13 +11,27 @@ import type { KnowledgeGraph3DParams } from '../core/skills/params';
 import { KnowledgeGraph3DParamsSchema } from '../core/skills/params';
 import {
   KnowledgeGraph3DScene,
+} from '../react/KnowledgeGraph3DScene';
+import {
   KnowledgeGraphA11yList,
-  KnowledgeGraphAccessibleFigure,
   KnowledgeGraphLegend,
-  KnowledgeGraphPresentationJsonError,
-  KnowledgeGraphStaticRecordView,
+} from '../react/KnowledgeGraphA11yList';
+import { KnowledgeGraphAccessibleFigure } from
+  '../react/KnowledgeGraphAccessibleFigure';
+import { KnowledgeGraphDomFigure } from '../react/KnowledgeGraphDomFigure';
+import { KnowledgeGraphStaticRecordView } from
+  '../react/KnowledgeGraphStaticRecordView';
+import {
   MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES,
   MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES,
+  mapCorpusKnowledgeGraph,
+} from '../react/knowledgeGraph';
+import {
+  prepareCorpusKnowledgeGraphFigure,
+  prepareCorpusKnowledgeGraphFigureJson,
+} from '../react/knowledgeGraphFigure';
+import {
+  KnowledgeGraphPresentationJsonError,
   KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
   PREPARED_KNOWLEDGE_GRAPH_PRESENTATION_V1,
   PREPARED_KNOWLEDGE_GRAPH_VIEW_V1,
@@ -25,21 +39,19 @@ import {
   isPreparedKnowledgeGraphPresentation,
   isPreparedKnowledgeGraphView,
   knowledgeGraphViewContainsNode,
-  mapCorpusKnowledgeGraph,
   parseKnowledgeGraphPresentationJson,
-  prepareCorpusKnowledgeGraphFigure,
-  prepareCorpusKnowledgeGraphFigureJson,
   prepareKnowledgeGraphPresentation,
   prepareKnowledgeGraphView,
   serializePreparedKnowledgeGraphPresentation,
   type KnowledgeGraphPresentationInputV1,
   type PreparedKnowledgeGraphViewV1,
-} from '../react/KnowledgeGraph3DScene';
+} from '../react/knowledgeGraphPresentation.internal';
 import { KNOWLEDGE_GRAPH_LIMITS } from '../core/skills/knowledgeGraphLimits';
 import { KnowledgeGraphPresentationBudgetCounter } from
   '../react/knowledgeGraphPresentationBudget.internal';
 import * as headlessKnowledgeGraphPublic from '../src/knowledge-graph/index';
 import * as reactKnowledgeGraphPublic from '../react/knowledgeGraphPublic';
+import * as reactKnowledgeGraphDomPublic from '../react/knowledgeGraphDomPublic';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -768,6 +780,135 @@ describe('PreparedKnowledgeGraphPresentationV1 authority', () => {
 });
 
 describe('coherent knowledge-graph surfaces', () => {
+  it('offers one minimal caption-bound React-only DOM composition', () => {
+    expect(Object.keys(reactKnowledgeGraphDomPublic).sort()).toEqual([
+      'KnowledgeGraphDomFigure',
+    ]);
+    const spec = corpusSpec();
+    const gated = validateSpec(spec);
+    if (!gated.ok || gated.caption === null) {
+      throw new Error('valid corpus fixture required');
+    }
+    const html = renderToStaticMarkup(<KnowledgeGraphDomFigure spec={spec} />);
+    expect(html).toMatch(/^<figure[^>]*><figcaption[^>]*>/u);
+    expect(html).toContain(gated.caption);
+    expect(html).toContain('<bdi dir="auto" style="unicode-bidi:isolate">');
+    expect(html).toContain('DOM-only knowledge graph inspection');
+    expect(html).toContain('mounts no Canvas, WebGL, or force layout');
+    expect(html).toContain('Without client-side JavaScript');
+    expect(html).toContain('Knowledge graph legend');
+    expect(html).toContain('aria-pressed="false"');
+    expect(html).toContain('Deterministic paginated knowledge graph record view');
+    expect(html).not.toContain('<canvas');
+    expect(html).not.toContain('host-owned interactive 3D');
+  });
+
+  it('fails closed at every DOM input boundary without minting a caption', () => {
+    const text = JSON.stringify(corpusSpec());
+    const duplicate = text.replace('{', '{"skill":"corpus.knowledge_graph",');
+    const duplicateHtml = renderToStaticMarkup(
+      <KnowledgeGraphDomFigure specJson={duplicate} />,
+    );
+    expect(duplicateHtml).toContain('Knowledge graph figure rejected');
+    expect(duplicateHtml).toContain('appears more than once');
+    expect(duplicateHtml).not.toContain('<figure');
+    expect(duplicateHtml).not.toContain('<figcaption');
+
+    const renderUnchecked = (inputProps: Record<string, unknown>): string =>
+      renderToStaticMarkup(
+        <KnowledgeGraphDomFigure
+          {...(inputProps as unknown as ComponentProps<
+            typeof KnowledgeGraphDomFigure
+          >)}
+        />,
+      );
+    expect(renderUnchecked({})).toContain(
+      'provide exactly one own input property: spec or specJson',
+    );
+    expect(renderUnchecked({ spec: corpusSpec(), specJson: text })).toContain(
+      'provide exactly one own input property: spec or specJson',
+    );
+    expect(renderUnchecked({ specJson: undefined })).toContain(
+      'specJson must be a string',
+    );
+
+    const wrong = renderToStaticMarkup(
+      <KnowledgeGraphDomFigure spec={getExamplePayload('nest.spike_raster')} />,
+    );
+    expect(wrong).toContain('requires corpus.knowledge_graph');
+    expect(wrong).not.toContain('<figure');
+
+    const exportSpec = structuredClone(corpusSpec()) as { mode: string };
+    exportSpec.mode = 'export';
+    const unsupported = renderToStaticMarkup(
+      <KnowledgeGraphDomFigure spec={exportSpec} />,
+    );
+    expect(unsupported).toContain('requires interactive mode');
+    expect(unsupported).not.toContain('<figure');
+  });
+
+  it('keeps the full caption and records when a DOM view policy rejects', () => {
+    const spec = corpusSpec();
+    const gated = validateSpec(spec);
+    if (!gated.ok || gated.caption === null) {
+      throw new Error('valid corpus fixture required');
+    }
+    const html = renderToStaticMarkup(
+      <KnowledgeGraphDomFigure
+        spec={spec}
+        viewPolicy={{ nodeKinds: ['not-present'] }}
+      />,
+    );
+    expect(html).toMatch(/^<figure[^>]*><figcaption[^>]*>/u);
+    expect(html).toContain(gated.caption);
+    expect(html).toContain('Knowledge graph view rejected');
+    expect(html).toContain('Deterministic paginated knowledge graph record view');
+    expect(html).not.toContain('Knowledge graph legend');
+  });
+
+  it('does not apply the allocating live-force ceiling to the DOM composition', () => {
+    const spec = oversizedFilterableCorpusSpec();
+    const prepared = prepareCorpusKnowledgeGraphFigure(spec);
+    if (!prepared.ok) throw new Error('oversized accepted corpus fixture required');
+    const html = renderToStaticMarkup(<KnowledgeGraphDomFigure spec={spec} />);
+    expect(html).toContain(prepared.caption);
+    expect(html).toContain('DOM-only knowledge graph inspection');
+    expect(html).toContain(`Nodes (${MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES + 1})`);
+    expect(html).not.toContain('reviewed main-thread ceiling');
+    expect(html).not.toContain('unavailable_resource_limit');
+  });
+
+  it('owns selection and resets it on an exact active-view capability change', async () => {
+    const spec = corpusSpec();
+    const prepared = prepareCorpusKnowledgeGraphFigure(spec);
+    if (!prepared.ok) throw new Error('valid corpus fixture required');
+    const selected = prepared.presentation.nodes[0];
+    let renderer!: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = create(<KnowledgeGraphDomFigure spec={spec} />);
+    });
+    const selectedButton = () => renderer.root.findAllByType('button').find(
+      (button) => button.props.className === 'cortexel-knowledge-graph-node' &&
+        String(button.props.children).includes(selected.label),
+    );
+    const initial = selectedButton();
+    if (initial === undefined) throw new Error('selected node button required');
+    expect(initial.props['aria-pressed']).toBe(false);
+    await act(async () => initial.props.onClick());
+    expect(selectedButton()?.props['aria-pressed']).toBe(true);
+
+    await act(async () => {
+      renderer.update(
+        <KnowledgeGraphDomFigure
+          spec={spec}
+          viewPolicy={{ nodeKinds: [selected.kind] }}
+        />,
+      );
+    });
+    expect(selectedButton()?.props['aria-pressed']).toBe(false);
+    await act(async () => renderer.unmount());
+  });
+
   it('offers one peer-free no-throw strict bind-and-prepare path for agents', () => {
     const spec = corpusSpec();
     const gated = validateSpec(spec);
@@ -943,6 +1084,7 @@ describe('coherent knowledge-graph surfaces', () => {
         hoverId={null}
         onHover={() => {}}
         reducedMotion
+        label={'Graph\u202e'}
       />,
     );
     expect(html).toContain('<figure');
@@ -954,6 +1096,8 @@ describe('coherent knowledge-graph surfaces', () => {
     expect(html).toContain('Deterministic paginated knowledge graph record view');
     expect(html).not.toMatch(/<details[^>]*>[^]*<figcaption/u);
     expect(html).toMatch(/^<figure[^>]*><figcaption[^>]*>/u);
+    expect(html).toContain('aria-label="Graph\\u202e"');
+    expect(html).not.toContain('\u202e');
     expect(observedContext?.presentation.profile).toBe('corpus_entity');
     expect(observedContext?.view).toBeUndefined();
     expect(observedContext?.themeMode).toBe(gated.spec.themeMode);

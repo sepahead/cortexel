@@ -48,13 +48,13 @@ const STATIC_RECORD_INSTANCE_KEYS = new WeakMap<object, string>();
 let nextStaticRecordInstanceKey = 0n;
 
 function staticRecordInstanceKey(
-  presentation: PreparedKnowledgeGraphPresentationV1,
+  token: PreparedKnowledgeGraphPresentationV1 | PreparedKnowledgeGraphViewV1,
 ): string {
-  const existing = STATIC_RECORD_INSTANCE_KEYS.get(presentation);
+  const existing = STATIC_RECORD_INSTANCE_KEYS.get(token);
   if (existing !== undefined) return existing;
   const created = `cortexel-kg-record-${nextStaticRecordInstanceKey}`;
   nextStaticRecordInstanceKey += 1n;
-  STATIC_RECORD_INSTANCE_KEYS.set(presentation, created);
+  STATIC_RECORD_INSTANCE_KEYS.set(token, created);
   return created;
 }
 
@@ -252,7 +252,7 @@ export function KnowledgeGraphStaticRecordView(
   return renderKnowledgeGraphStaticRecordView(props);
 }
 
-/** Package-internal corpus records used only in the caption-bound composition. */
+/** Package-internal corpus records used only in caption-bound compositions. */
 export function KnowledgeGraphCorpusStaticRecordViewInternal(
   props: KnowledgeGraphCorpusStaticRecordViewInternalProps,
 ) {
@@ -269,7 +269,7 @@ function renderKnowledgeGraphStaticRecordView(
   }
   return (
     <KnowledgeGraphStaticRecordViewInstance
-      key={staticRecordInstanceKey(props.presentation)}
+      key={staticRecordInstanceKey(props.view ?? props.presentation)}
       {...props}
     />
   );
@@ -318,7 +318,7 @@ function KnowledgeGraphStaticRecordViewInstance({
       {view !== undefined && (
         <div role="note">
           <p>
-            Filtered interactive view: showing {view.counts.visibleNodes} of{' '}
+            Filtered active view: showing {view.counts.visibleNodes} of{' '}
             {view.counts.sourceNodes} nodes and {view.counts.visibleEdges} of{' '}
             {view.counts.sourceEdges} relationships. The paginated records below
             remain the full source presentation.

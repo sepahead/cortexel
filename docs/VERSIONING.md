@@ -322,10 +322,11 @@ The nineteen FigureRequestV1 skills are semantically `stable`, `packaged`, and
 that a 1.0 release gate passed. The packaged `cortexel`, `cortexel/core`, and React
 exports remain the legacy VizSpec surfaces alongside the additive FigureRequestV1
 entries; their registry limitations say so explicitly. The packaged peer-free
-`cortexel/knowledge-graph` and interactive `cortexel/react/knowledge-graph` exports
-remain experimental legacy code, not FigureRequestV1 skills. Before 1.0 their function,
-record, and component contracts may change fail-closed: the scene, legend, DOM mirror,
-and record browser now require one runtime-branded
+`cortexel/knowledge-graph`, React-only `cortexel/react/knowledge-graph-dom`, and
+interactive `cortexel/react/knowledge-graph` exports remain experimental legacy code,
+not FigureRequestV1 skills. Before 1.0 their function, record, and component contracts
+may change fail-closed: the scene, caption-bound DOM composition, legend, operable DOM
+mirror, and record browser now share one runtime-branded
 `PreparedKnowledgeGraphPresentationV1` instead of independently accepting raw arrays and
 caller-supplied cache identities. That breaking experimental change prevents different
 surfaces from blessing different mutable snapshots; the subordinate filtered-view token
@@ -333,7 +334,9 @@ is likewise bound to one exact source capability. Canonical serialization preser
 presentation record but omits caption/view/host policy and intentionally does not
 rehydrate the runtime brand. Runtime identity is local to one physical package instance
 and realm, although that installation shares ESM/CommonJS identity. None of this is
-promotion to stable status.
+promotion to stable status. Adding the DOM export records package capability
+availability only; it is not a FigureRequest skill/revision, stable promotion, artifact
+contract, or transfer of evidence from another surface.
 
 Adapter records inside a skill are versioned composite mappings.
 `feasibilityStatus` records a bounded assessment, `definitionStatus` distinguishes

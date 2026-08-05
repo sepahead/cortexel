@@ -60,7 +60,7 @@ explicitly.
 |------|------------------|
 | `core/` | zero-dep (beyond `zod`) contract: `vizSpec`, `provenance`, `designLaws`, `colormaps`, `skills/*`, `nest/*` |
 | `core/skills/` | the skill axis: ids/registry/router, strict params/provenance, Cortexel + host invocation gates, authoring, examples, verification |
-| `react/` | render layer: strict `VizSpecRenderer`, React-only canonical SVG charts, `Expandable*`, `neuronShaders`, and (subpath-only) `KnowledgeGraph3DScene` + `knowledgeGraph` |
+| `react/` | render layer: strict `VizSpecRenderer`, React-only canonical SVG charts and caption-bound graph DOM, `Expandable*`, `neuronShaders`, and (subpath-only) `KnowledgeGraph3DScene` + `knowledgeGraph` |
 | `src/` | FigureRequestV1 kernel, headless SVG renderer, NEST adapter, offline CLI, and generated contract projections |
 | `contract/` | Normative FigureRequestV1 registries/schemas/skills; copied exactly once to `dist/contract` after the code build cleans |
 | `types/` | ambient shims for deps that ship none (`d3-force-3d`) |
@@ -68,9 +68,10 @@ explicitly.
 | `test/` | vitest; several tests are *executable guards* for the invariants below |
 | `dist/` | **committed build output** (see below) |
 
-The legacy entrypoints ascend in dependency weight: `cortexel/core` (zod only) →
-`cortexel/react/charts` (+ React only) → `cortexel/react`
-(+ react/react-dom/three/r3f) → `cortexel/react/knowledge-graph` (+ d3-force-3d).
+The legacy entrypoints have four dependency-weight tiers: `cortexel/core` (zod only);
+`cortexel/react/charts` and `cortexel/react/knowledge-graph-dom` (+ React only);
+`cortexel/react` (+ react/react-dom/three/r3f); and
+`cortexel/react/knowledge-graph` (+ d3-force-3d).
 The root `cortexel` re-exports **only** `core`, so a server import never pulls in
 React or Three. Additive FigureRequestV1 capabilities live at `cortexel/figure`,
 `cortexel/authoring`, `cortexel/render-svg`, and `cortexel/adapters/nest`. The
@@ -211,11 +212,23 @@ Mirrored in [CONTRIBUTING.md](./CONTRIBUTING.md); laws 3–5 have executable gua
   scene needing the d3 peer, so it lives at `cortexel/react/knowledge-graph` to keep
   the base react entry d3-free. Its pure logic is in `react/knowledgeGraph.ts`
   (THREE-free, unit-tested) — put testable graph logic there, not in the GPU scene.
+- **The caption-bound graph DOM entry stays React-only and closed.**
+  `cortexel/react/knowledge-graph-dom` exports only `KnowledgeGraphDomFigure`; it must
+  not import ReactDOM, Three, R3F, D3, Node, network, browser, or filesystem modules.
+  On accepted legacy `corpus.knowledge_graph` input in `mode: interactive`, it accepts
+  exactly one complete `spec` or raw `specJson` through a boundary that rejects
+  duplicate members, owns selection, and exposes no caption, presentation, children,
+  renderer, hover, camera,
+  controls, force, or visual-availability authority. Keep its source, ESM, CommonJS,
+  and declaration closures mechanically checked in a consumer without heavy peers.
+  Never publicly export `KnowledgeGraphCorpusFrameInternal` or any equivalent injection
+  boundary.
 - **One prepared graph capability owns every canonical corpus surface.** The internal
-  scene, legend, paginated DOM, deterministic record browser, and accessible composition
-  accept the exact same deeply frozen `PreparedCorpusKnowledgeGraphPresentationV1`;
+  scene, legend, paginated DOM, deterministic record browser, and both canonical
+  compositions accept the exact same deeply frozen
+  `PreparedCorpusKnowledgeGraphPresentationV1`;
   never restore independent raw-array snapshots. Public direct primitives accept and
-  runtime-check only `PreparedGenericKnowledgeGraphPresentationV1`, and neither public
+  runtime-check only `PreparedGenericKnowledgeGraphPresentationV1`, and no public
   package entry may export the corpus mapper or internal corpus components. The
   package-private WeakSet authority and nominal brand must remain singletons across
   ESM/CJS, with both directions exercised by package smoke. Corpus identities are
@@ -230,24 +243,26 @@ Mirrored in [CONTRIBUTING.md](./CONTRIBUTING.md); laws 3–5 have executable gua
   presentation capability into evidence authentication or custody.
 - **Bind the corpus spec, mapper, and caption once.** Agent/server code uses the
   peer-free `prepareCorpusKnowledgeGraphFigure` for a materialized value or its `Json`
-  sibling for raw text; the canonical React composition runtime-enforces exactly one
-  own `spec` or `specJson` property and invokes the corresponding boundary. A present
+  sibling for raw text; both canonical React compositions runtime-enforce exactly one
+  own `spec` or `specJson` property and invoke the corresponding boundary. A present
   property with the wrong value type still rejects. Never accept an independent caption
-  prop. `mode=export` fails closed because the WebGL composition has no stable artifact
-  contract.
+  prop. `mode=export` fails closed because neither canonical React composition has a
+  stable artifact contract.
 - **A filtered view is subordinate to one exact source capability.** Omission means all,
   an empty kind set means none, and duplicate or unknown kinds reject. Views reuse exact
   frozen record references and every consumer checks the source identity. Filtering must
   not hide or rewrite the full caption or full source-record browser. Keep a host's policy
   object identity stable across ordinary interaction renders; the bounded per-source LRU
-  must also preserve exact token identity for equivalent hot policies. The canonical
+  must also preserve exact token identity for equivalent hot policies. The 3D
   composition invalidates controlled selected/hovered ids when a new source/view hides
-  them.
+  them; the DOM composition owns and resets selection on an exact token change.
 - **Presentation admission is not live-force admission.** Preparation, captions,
   legends, DOM controls, and the source-record browser admit at most 1,000 nodes and
-  4,000 relationships. The allocating main-thread force scene separately admits at
-  most 250 nodes and 1,000 relationships. Above the live ceiling the canonical
-  composition does not mount or invoke the visual renderer, but it retains the bound
+  4,000 relationships. The DOM composition uses that bound, never mounts a solver, and
+  does not apply the lower force ceiling. The allocating main-thread force scene
+  separately admits at most 250 nodes and 1,000 relationships. Above that live ceiling
+  the canonical 3D composition does not mount or invoke the visual renderer, but it
+  retains the bound
   caption, legend, operable DOM, and complete paginated source-record browser. An exact
   source-bound filtered view can regain the visual when it is within both live limits;
   not every source has such a nonempty filter.
@@ -338,7 +353,7 @@ Mirrored in [CONTRIBUTING.md](./CONTRIBUTING.md); laws 3–5 have executable gua
   projection geometry make no camera write and do not commit the pending fit stage; a
   later valid resize may retry. Do not restore the old center-only `+Z` frame,
   containment-only zoom rule, or projection fallbacks inside the scene.
-- **Theme and interaction semantics are shared.** The canonical composition passes the
+- **Theme and interaction semantics are shared.** The canonical 3D composition passes the
   validated theme and exact required background into the host. Undimmed opaque
   node/edge source colors are normalized to at least 3:1 against that painted
   background, and the legend discloses both source and intended undimmed scene colors.
@@ -357,14 +372,22 @@ Mirrored in [CONTRIBUTING.md](./CONTRIBUTING.md); laws 3–5 have executable gua
   flags bound to the element epistemic contract, preserve immutable snapshot
   context in the DOM legend, and reject accessor-bearing adapter input before any
   getter can run.
-- Prefer `KnowledgeGraphAccessibleFigure` for interactive WebGL graphs: it keeps the
+- Prefer `KnowledgeGraphDomFigure` from `cortexel/react/knowledge-graph-dom` when a
+  React host needs caption-bound corpus inspection without 3D. It shares the exact
+  strict preparation/caption frame, owns selection, retains the full-source record
+  browser under filtered views, and is not constrained by the lower live-force ceiling.
+  It is still an experimental legacy VizSpec view, not a deterministic HTML receipt,
+  evidence authenticator, complete no-JavaScript document, or accessibility
+  certification. Prefer `KnowledgeGraphAccessibleFigure` for interactive WebGL graphs:
+  it keeps the
   visible caption, legend, and paginated `KnowledgeGraphA11yList` in normal DOM flow,
   and retains the deterministic paginated source-record browser if only the visual
   region fails. Its error boundary covers descendant client render/lifecycle errors,
   not SSR, event/async errors, or unreported WebGL context loss. SSR/no-JS renders only
-  the bounded first record page; complete canonical record bytes come from the peer-free
-  serializer, which omits caption/view/host policy and is not a figure artifact. The
-  canonical composition defaults to a provisional seed fit plus at most one final
+  the bounded initial node and relationship pages; complete canonical record bytes come
+  from the peer-free serializer, which omits caption/view/host policy and is not a
+  figure artifact. The
+  canonical 3D composition defaults to a provisional seed fit plus at most one final
   settled-layout correction; the Canvas-less scene keeps camera mutation opt-in and can
   frame without controls, while fly-to still needs the host-owned controls ref. Meshes
   do not enter the browser accessibility tree. These

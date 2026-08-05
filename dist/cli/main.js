@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 import { i as canonicalize } from "../canonicalize-F75Ifelv.js";
-import { c as getBuildIdentity, r as CATALOG_DIGEST_DOMAIN } from "../identity-Bb9ALjpv.js";
-import { a as EXPERIMENTAL_CAPABILITY_IDS, c as SKILL_CATALOG, l as STABLE_SKILL_IDS, p as isStableSkillId } from "../catalog-c6PGY2YG.js";
+import { c as getBuildIdentity, r as CATALOG_DIGEST_DOMAIN } from "../identity-BD3MBqiL.js";
+import { a as EXPERIMENTAL_CAPABILITY_IDS, c as SKILL_CATALOG, l as STABLE_SKILL_IDS, p as isStableSkillId } from "../catalog-dlkIbdDJ.js";
 import { o as ERROR_STAGES } from "../registry-Cmer76Bg.js";
 import { l as safeText, o as makeError, t as UNSAFE_DISPLAY_PATTERN_SOURCE } from "../errors-CxHoMFLD.js";
-import { i as getBudgetLimits } from "../contract-identity-B13RkjwJ.js";
+import { i as getBudgetLimits } from "../contract-identity-C9g7Mgdt.js";
 import { t as parseJsonStrict } from "../parse-json-BkdHHhtc.js";
-import { t as migrateLegacyRequest } from "../migrate-v0-bUQEEeRd.js";
+import { t as migrateLegacyRequest } from "../migrate-v0-Dp6l3ZGB.js";
 import { c as SOURCE_ADAPTER_IDS, d as lookupSourceAdapterDescriptorDigest, f as AUTHORING_SCHEMA_COMPILATION_PROFILE_V1, i as SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE, l as isSourceAdapterId, m as STABLE_CATALOG_SCHEMA_RESOURCES, n as SOURCE_ADAPTER_CATALOG_DIGEST, o as SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN, p as SKILL_AUTHORING, r as SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN, s as SOURCE_ADAPTER_DISCOVERY_CATALOG, u as lookupSourceAdapter } from "../source-catalog-WL76PNwW.js";
 import { a as classifySourceAdapterExampleEnvelope, n as SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER } from "../source-example-Cx_NUpH0.js";
-import { o as nestSpikeRecorderToRaster } from "../nest-Bl3Bq3AL.js";
+import { o as nestSpikeRecorderToRaster } from "../nest-BfwCQYKG.js";
 import { parseAndValidateRequest, validateRequestValue } from "#cortexel-request-capability";
 import { buildFigureFromJson } from "#cortexel-figure-result-capability";
 import { randomBytes } from "node:crypto";

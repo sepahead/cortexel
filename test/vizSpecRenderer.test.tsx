@@ -10,9 +10,11 @@ import { KnowledgeGraphA11yList } from '../react/KnowledgeGraphA11yList';
 import {
   KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
   prepareKnowledgeGraphPresentation,
-  type KnowledgeGraph3DEdge,
-  type KnowledgeGraph3DNode,
-} from '../react/KnowledgeGraph3DScene';
+} from '../react/knowledgeGraphPresentation.internal';
+import type {
+  KnowledgeGraph3DEdge,
+  KnowledgeGraph3DNode,
+} from '../react/knowledgeGraphPresentation.types';
 import {
   NeuronA11yPager,
   PopulationA11yList,

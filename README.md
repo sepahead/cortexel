@@ -79,7 +79,7 @@ visibility, accessibility effectiveness, or artifact-bound table cells. See
 ## Additive package surfaces
 
 The installable artifact preserves every legacy entry (`cortexel`, `cortexel/core`,
-the three React subpaths, and `cortexel/skills.manifest.json`) and adds explicit
+the React subpaths, and `cortexel/skills.manifest.json`) and adds explicit
 FigureRequestV1 capabilities alongside them:
 
 - `cortexel/figure` — validation, canonicalization, identity, provenance, and migration;
@@ -299,7 +299,7 @@ an accessibility table, migration mapping, and living valid/invalid examples tha
 test suite executes.
 
 The packaged pre-1.0 React surface still contains legacy WebGL scenes, and its explicit
-`cortexel/react/knowledge-graph` subpath is experimental. No 3D, knowledge-graph,
+knowledge-graph subpaths are experimental. No 3D, knowledge-graph,
 animation, NCP-adapter, or bundle skill/compiler exists in the FigureRequestV1 catalog;
 stable validation fails closed instead of inventing those capabilities.
 
@@ -307,8 +307,16 @@ The experimental graph API is split deliberately:
 
 - `cortexel/knowledge-graph` is the agent/server boundary. It has no visualization
   peers and can strictly bind a complete corpus `VizSpec` to its derived caption and
-  one immutable presentation from either a materialized value or duplicate-safe raw
-  text.
+  one immutable presentation from either a materialized value or raw text that rejects
+  duplicate object members before materialization.
+- `cortexel/react/knowledge-graph-dom` is the low-friction React 19 DOM-only inspection
+  boundary. `KnowledgeGraphDomFigure` accepts exactly one complete `spec` or
+  duplicate-member-rejecting raw `specJson` in legacy `mode: interactive`, derives the
+  mandatory caption itself, owns selection, and keeps the
+  legend, operable query/list controls, and full-source paginated record browser in
+  ordinary DOM. It exposes no caption override, prepared token, renderer slot, or 3D
+  policy. The package runtime closure needs React but not ReactDOM, Three, R3F, or D3;
+  the consuming application still supplies its normal React renderer.
 - `cortexel/react/knowledge-graph` is the interactive host boundary. It additionally
   requires React 19, Three 0.184–0.185, R3F 9.6, and the declared compatible
   d3-force-3d 3.x range from 3.0.5. Current allocation-path evidence covers only the
@@ -330,19 +338,41 @@ npm install --save-exact d3-force-3d@3.0.6
 npm install --save-dev @types/react@^19 @types/three@">=0.184 <0.186"
 ```
 
-Every surface inside the canonical corpus composition consumes the same deeply frozen,
+In an existing React 19 host, the caption-bound DOM path needs no host-supplied Canvas
+callback or interaction state:
+
+```tsx
+import { KnowledgeGraphDomFigure } from 'cortexel/react/knowledge-graph-dom';
+
+export function CorpusGraphRecords({ text }: { text: string }) {
+  return <KnowledgeGraphDomFigure specJson={text} />;
+}
+```
+
+Use `specJson` when the original raw text is available so duplicate object members can
+still be rejected. Use `spec` only for an already materialized ordinary value; duplicate
+members are no longer observable at that boundary.
+
+Both canonical corpus compositions consume the same deeply frozen,
 runtime-branded capability across ESM and CommonJS. The peer-free entry exposes no
 corpus mapper, and the four direct React primitives runtime-reject corpus presentations;
 they remain available for separate caller-declared `generic_visual` graphs. Exact kind
-filters produce a source-bound view without copying or minting records. The visible
-caption and paginated DOM surfaces remain when the host declares the WebGL region
-unavailable or a React descendant client render/lifecycle failure is caught. The
-deterministic record browser exposes one bounded page at a time;
-SSR/no-JS contains only its initial page, while hydrated controls make all accepted
-records reachable. `serializePreparedKnowledgeGraphPresentation` returns the complete
+filters produce a source-bound view without copying or minting records. In the 3D
+composition, the visible caption and paginated DOM surfaces remain when the host
+declares the WebGL region unavailable or a React descendant client render/lifecycle
+failure is caught. The
+deterministic record browser exposes one bounded node page and one bounded relationship
+page at a time. SSR/no-JS contains only those initial pages, while successfully hydrated
+controls make all accepted records reachable.
+
+`serializePreparedKnowledgeGraphPresentation` returns the complete
 canonical *presentation inspection record*, not its bound caption, view policy, theme,
 camera, host policy, or a FigureArtifact. Its bytes carry no runtime brand and are not
 an evidence receipt or complete figure export.
+
+The DOM path is hydrated React inspection—not deterministic HTML, a FigureArtifact or
+evidence receipt, a complete no-JavaScript document, or WCAG/assistive-technology
+evidence.
 
 The canonical corpus mapper redundantly encodes node kind with three closed 3D shells
 and relationship kind with four closed stroke patterns; directed relationships retain
@@ -353,16 +383,18 @@ background behind the Canvas. These are bounded structural/contrast regressions,
 CVD, grayscale, browser, assistive-technology, or whole-view WCAG conformance evidence.
 
 Presentation preparation, the caption, legend, paginated DOM navigation, and complete
-static records admit at most 1,000 nodes and 4,000 edges. The allocating d3 live-force
-region has a separate 250-node/1,000-edge ceiling. Above the live ceiling, the canonical
-figure does not create the 3D solver or call the host visual renderer; it retains every
-non-WebGL surface and reports exact active counts and limits. An exact source-bound
-filter that falls within the live ceiling can restore the visual without sampling or
-inventing records. Cortexel schedules at most one allocating d3 tick per rendered frame,
-so settlement slows below 60 FPS and no frame-rate or latency guarantee is claimed.
+static records admit at most 1,000 nodes and 4,000 edges. The DOM entry uses that
+presentation bound and never creates a force solver. The allocating d3 live-force
+region in the 3D entry has a separate 250-node/1,000-edge ceiling. Above the live
+ceiling, the canonical 3D figure does not create the solver or call the host visual
+renderer; it retains every non-WebGL surface and reports exact active counts and limits.
+An exact source-bound filter that falls within the live ceiling can restore the visual
+without sampling or inventing records. Cortexel schedules at most one allocating d3
+tick per rendered frame, so settlement slows below 60 FPS and no frame-rate or latency
+guarantee is claimed.
 
-`prepareCorpusKnowledgeGraphFigureJson` owns the bounded duplicate-member-safe raw
-corpus-VizSpec boundary; `parseKnowledgeGraphPresentationJson` does the same for the
+`prepareCorpusKnowledgeGraphFigureJson` owns the bounded raw corpus-VizSpec boundary
+that rejects duplicate members; `parseKnowledgeGraphPresentationJson` does the same for the
 separate generic-visual presentation input. Their result assurance records the raw-text
 boundary. The materialized-value APIs honestly record that duplicates are no longer
 observable and JavaScript Proxy traps cannot be made inert. Runtime capabilities

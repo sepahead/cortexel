@@ -1,6 +1,6 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
-const require_identity = require('../identity-Q753Itj4.cjs');
-const require_catalog = require('../catalog-NfLEhJFQ.cjs');
+const require_identity = require('../identity-DvvM9pyL.cjs');
+const require_catalog = require('../catalog-B4eoXq8w.cjs');
 const require_source_catalog = require('../source-catalog-pzAwHN9x.cjs');
 const require_source_example = require('../source-example-BI6AxnSB.cjs');
 

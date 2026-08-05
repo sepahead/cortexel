@@ -1,5 +1,5 @@
-import { n as CATALOG_DIGEST, r as CATALOG_DIGEST_DOMAIN } from "../identity-Bb9ALjpv.js";
-import { c as SKILL_CATALOG, f as isCapabilityId, h as lookupSkillCatalogEntry, l as STABLE_SKILL_IDS, m as lookupCapabilityCatalogEntry, n as CAPABILITY_CATALOG, p as isStableSkillId, r as CAPABILITY_IDS, t as CAPABILITY_AVAILABILITIES } from "../catalog-c6PGY2YG.js";
+import { n as CATALOG_DIGEST, r as CATALOG_DIGEST_DOMAIN } from "../identity-BD3MBqiL.js";
+import { c as SKILL_CATALOG, f as isCapabilityId, h as lookupSkillCatalogEntry, l as STABLE_SKILL_IDS, m as lookupCapabilityCatalogEntry, n as CAPABILITY_CATALOG, p as isStableSkillId, r as CAPABILITY_IDS, t as CAPABILITY_AVAILABILITIES } from "../catalog-dlkIbdDJ.js";
 import { a as SOURCE_ADAPTER_DESCRIPTOR_DIGESTS, c as SOURCE_ADAPTER_IDS, d as lookupSourceAdapterDescriptorDigest, f as AUTHORING_SCHEMA_COMPILATION_PROFILE_V1, i as SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE, l as isSourceAdapterId, m as STABLE_CATALOG_SCHEMA_RESOURCES, n as SOURCE_ADAPTER_CATALOG_DIGEST, o as SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN, p as SKILL_AUTHORING, r as SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN, s as SOURCE_ADAPTER_DISCOVERY_CATALOG, t as SOURCE_ADAPTER_CATALOG, u as lookupSourceAdapter } from "../source-catalog-WL76PNwW.js";
 import { a as classifySourceAdapterExampleEnvelope, i as SOURCE_ADAPTER_EXAMPLE_PROTOCOL_VERSION, n as SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER, o as isSourceAdapterExampleGuard, r as SOURCE_ADAPTER_EXAMPLE_PROTOCOL, t as SOURCE_ADAPTER_EXAMPLE_ACTION } from "../source-example-Cx_NUpH0.js";
 
