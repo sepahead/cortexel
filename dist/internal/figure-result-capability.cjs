@@ -4977,19 +4977,19 @@ function compileMatrixFigure(context, spec, skillId) {
 			glyph: "band"
 		}] : [],
 		...spec.observedRows.some((observed) => !observed) ? [{
-			label: "Not observed (presence and absence unknown)",
+			label: "not_observed (presence and absence unknown)",
 			color: withOpacity(missingColor(context.themeId), .24),
 			outlineColor: missingColor(context.themeId),
 			glyph: "band"
 		}] : [],
 		...missingPartial.length > 0 ? [{
-			label: "Present; incomplete values (not aggregated)",
+			label: "Present; no partial aggregate is painted",
 			color: withOpacity(missingColor(context.themeId), .58),
 			outlineColor: accent(context.themeId),
 			glyph: "band"
 		}] : [],
 		...missingAll.length > 0 ? [{
-			label: "Present; values unmeasured (not zero)",
+			label: "Present; values missing; missing is not zero",
 			color: missingColor(context.themeId),
 			outlineColor: uncertaintyStroke(context.themeId),
 			glyph: "band"

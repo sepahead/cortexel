@@ -1754,7 +1754,7 @@ export function compileMatrixFigure(
       : []),
     ...(spec.observedRows.some((observed) => !observed)
       ? [{
-        label: 'Not observed (presence and absence unknown)',
+        label: 'not_observed (presence and absence unknown)',
         color: withOpacity(missingColor(context.themeId), 0.24),
         outlineColor: missingColor(context.themeId),
         glyph: 'band' as const,
@@ -1762,7 +1762,7 @@ export function compileMatrixFigure(
       : []),
     ...(missingPartial.length > 0
       ? [{
-        label: 'Present; incomplete values (not aggregated)',
+        label: 'Present; no partial aggregate is painted',
         color: withOpacity(missingColor(context.themeId), 0.58),
         outlineColor: accent(context.themeId),
         glyph: 'band' as const,
@@ -1770,7 +1770,7 @@ export function compileMatrixFigure(
       : []),
     ...(missingAll.length > 0
       ? [{
-        label: 'Present; values unmeasured (not zero)',
+        label: 'Present; values missing; missing is not zero',
         color: missingColor(context.themeId),
         outlineColor: uncertaintyStroke(context.themeId),
         glyph: 'band' as const,
