@@ -16,6 +16,7 @@
  *   bun run generate
  */
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   readFileSync,
@@ -191,7 +192,10 @@ function writeIfChanged(file: string, content: string): boolean {
   }
   if (existing === content) return false;
   if (!parentExists) ensureGeneratedOutputDirectory(ROOT, parent);
-  writeFileSync(file, content);
+  // Snapshot identity includes POSIX modes.  Normalize after creation so a
+  // restrictive caller umask cannot change deterministic generator output.
+  writeFileSync(file, content, { mode: 0o644 });
+  chmodSync(file, 0o644);
   return true;
 }
 

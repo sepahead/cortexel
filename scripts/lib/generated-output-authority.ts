@@ -280,7 +280,11 @@ export function ensureGeneratedOutputDirectory(
   }
 
   for (const target of missing.reverse()) {
-    mkdirSync(target);
+    // Generated output modes are part of the freshness identity.  Do not let a
+    // caller's ambient umask (the release sandbox intentionally uses 0077)
+    // make an otherwise byte-identical generation appear stale.
+    mkdirSync(target, { mode: 0o755 });
+    chmodSync(target, 0o755);
     if (!directRepositoryDirectoryExists(repositoryRoot, target)) {
       throw new Error(`generated directory was not created directly: ${target}`);
     }

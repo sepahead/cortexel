@@ -4,6 +4,7 @@ import {
   chmodSync,
   existsSync,
   linkSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -203,6 +204,23 @@ describe('closed generated-output authority', () => {
         /not an authorized generated directory/u,
       );
       expect(existsSync(manifest)).toBe(false);
+    });
+  });
+
+  it('creates generated directories with canonical modes under a restrictive umask', () => {
+    if (process.platform === 'win32') return;
+
+    withTemporaryRepository((root) => {
+      mkdirSync(path.join(root, 'src'), { recursive: true });
+      const previousUmask = process.umask(0o077);
+      try {
+        ensureGeneratedOutputDirectory(root, path.join(root, 'src', 'generated'));
+      } finally {
+        process.umask(previousUmask);
+      }
+
+      const mode = lstatSync(path.join(root, 'src', 'generated')).mode & 0o7777;
+      expect(mode).toBe(0o755);
     });
   });
 
