@@ -238,13 +238,31 @@ function processParentPid(pid: number): number {
     encoding: 'utf8',
   });
   if (result.status !== 0 || result.signal !== null) {
-    throw new Error(`could not resolve parent PID: ${result.stderr.trim()}`);
+    const diagnostic = typeof result.stderr === 'string'
+      ? result.stderr.trim()
+      : result.error?.message ?? 'no process-inspection diagnostic';
+    throw new Error(`could not resolve parent PID: ${diagnostic}`);
   }
   const parent = Number(result.stdout.trim());
   if (!Number.isSafeInteger(parent) || parent <= 1) {
     throw new Error('process parent PID is invalid');
   }
   return parent;
+}
+
+function processParentInspectionAvailable(): boolean {
+  const result = spawnSync('/bin/ps', ['-o', 'ppid=', '-p', String(process.pid)], {
+    encoding: 'utf8',
+  });
+  const code = (result.error as NodeJS.ErrnoException | undefined)?.code;
+  if (code === 'EPERM' || code === 'EACCES') return false;
+  if (result.status !== 0 || result.signal !== null || result.error !== undefined) {
+    const diagnostic = typeof result.stderr === 'string'
+      ? result.stderr.trim()
+      : result.error?.message ?? 'no process-inspection diagnostic';
+    throw new Error(`could not establish process-parent inspection: ${diagnostic}`);
+  }
+  return true;
 }
 
 function createLifecycleFifo(workspace: string, name: string, marker: string): LifecycleFifo {
@@ -1545,7 +1563,7 @@ describe('reviewed POSIX command boundary', () => {
   }, 180_000);
 
   it('fails closed at launcher, supervisor, guardian, and worker pre-GO killpoints', async () => {
-    if (workspace === '') return;
+    if (workspace === '' || !processParentInspectionAvailable()) return;
     const cases = [
       { phase: 'worker-ready-before-handshake', victim: 'launcher' },
       { phase: 'worker-ready-before-handshake', victim: 'supervisor' },
@@ -1587,7 +1605,7 @@ describe('reviewed POSIX command boundary', () => {
   }, 240_000);
 
   it('joins handled launcher cancellation and observes eventual KILL lease cleanup', async () => {
-    if (workspace === '') return;
+    if (workspace === '' || !processParentInspectionAvailable()) return;
     for (const signal of ['SIGKILL', 'SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
       const slug = signal.toLowerCase();
       const fifo = createLifecycleFifo(workspace, `launcher-${slug}-lifecycle`, slug);
@@ -1615,7 +1633,11 @@ describe('reviewed POSIX command boundary', () => {
   }, 300_000);
 
   it('does not claim a join after abrupt launcher loss while the guardian is stopped', async () => {
-    if (process.platform !== 'linux' || workspace === '') return;
+    if (
+      process.platform !== 'linux'
+      || workspace === ''
+      || !processParentInspectionAvailable()
+    ) return;
     const fifo = createLifecycleFifo(
       workspace,
       'launcher-sigkill-stopped-guardian-lifecycle',

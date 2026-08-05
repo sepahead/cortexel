@@ -483,7 +483,10 @@ describe('programmatic package build', () => {
       writeFileSync(rawPath, '');
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'EILSEQ' || code === 'ENOTSUP') return;
+      // Some reviewed sandboxes reject the byte pathname before the host
+      // filesystem can report EILSEQ. In either case this fixture cannot be
+      // materialized, so the conditional "where admitted" case is inapplicable.
+      if (code === 'EILSEQ' || code === 'ENOTSUP' || code === 'EPERM') return;
       throw error;
     }
     expect(() => assertBuildOutputBoundary(repository)).toThrow(/nonportable path segment/u);
