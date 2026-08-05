@@ -6,3 +6,10 @@ export * from './designLaws';
 export * from './vizSpec';
 export * from './provenance';
 export * from './skills';
+
+// The legacy Engram adapter needs one exact-JSON capture-and-identity path in
+// browser hosts. Keep this surface deliberately narrower than `cortexel/figure`:
+// these utilities create no validated-request capability or render authority.
+export { canonicalDigest } from '../src/core/canonicalize';
+export { getBudgetLimits } from '../src/core/limits';
+export { snapshotValue } from '../src/core/safe-snapshot';

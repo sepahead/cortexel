@@ -1,6 +1,6 @@
 import { t as CortexelError } from "../errors-DLTGhSm-.cjs";
-import { t as Disclosure } from "../disclosures-6uwXW5ys.cjs";
 import { t as JsonValue } from "../parse-json-C_C8fdK2.cjs";
+import { t as Disclosure } from "../disclosures-6uwXW5ys.cjs";
 import { ValidateOptions, ValidatedRequest } from "#cortexel-request-capability";
 import { FigureResultNominalBrand } from "#cortexel-figure-result-brand";
 //#region src/core/source-statements.d.ts

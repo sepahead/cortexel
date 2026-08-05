@@ -1,7 +1,7 @@
 import { n as canonicalDigest } from "./canonicalize-F75Ifelv.js";
 import { h as finiteBinary64ToMinSubnormalUnits, m as exactRationalToBinary64, s as exactBinary64MultiplyByRational } from "./exact-binary64-MTF5FhJ9.js";
-import { c as QUANTITY_KIND_DIMENSIONS, d as UNIT_ALIASES, u as UNITS } from "./registry-Cmer76Bg.js";
 import { c as pointer, o as makeError } from "./errors-CxHoMFLD.js";
+import { c as QUANTITY_KIND_DIMENSIONS, d as UNIT_ALIASES, u as UNITS } from "./registry-Cmer76Bg.js";
 
 //#region src/core/units.ts
 /**
@@ -1290,4 +1290,4 @@ function verifyBinnedPeakValueLattice(valuesValue, basisValue, rateUnitValue, in
 
 //#endregion
 export { dimensionOf as A, convertDifference as C, deriveExactCountRateInUnit as D, deriveExactAggregateCountRateOverIntervalsInUnit as E, normalizeDerivativeByExactAxisExtent as F, reciprocalUnit as I, resolveAlias as L, isKnownUnit as M, isQuantityKind as N, deriveExactCountRateMinusAggregateRateOverIntervalsInUnit as O, kindAcceptsDimension as P, toSeconds as R, convertCompositeDerivative as S, deriveExactAggregateCountRateInUnit as T, compareExactUnitSumToValue as _, verifyBinnedPeakValueLattice as a, conversionReceipt as b, verifyResponseRateAuthority as c, materializeWidthBins as d, axesAreCompatible as f, compareExactUnitArraySumToDifference as g, checkQuantityUnit as h, responseEventMembershipDigest as i, divideExactIntegerByConvertedDifference as j, deriveExactCountRateWithIntegerFactorsInUnit as k, MAX_MATERIALIZED_BINS as l, canonicalUnitFor as m, compareUtf16CodeUnits as n, verifyPeakBasisAgainstWindow as o, axisNormalizedDerivativeConversionReceipt as p, normalizeResponseEventMemberIds as r, verifyResponseEventScope as s, RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID as t, materializeCenteredLagBins as u, compositeDerivativeConversionReceipt as v, convertExactUnitSum as w, convert as x, conversionFactor as y, unitLabel as z };
-//# sourceMappingURL=response-curve-basis-Cly5CkFq.js.map
+//# sourceMappingURL=response-curve-basis-B3i4qGNY.js.map

@@ -7398,6 +7398,7 @@ function assertPreparedBrowserBundle(options: {
     'warnings',
   ], 'prepared browser-bundle receipt');
   const expectedPublicInputs = [
+    'node_modules/cortexel/dist/core/index.js',
     'node_modules/cortexel/dist/knowledge-graph/index.js',
     'node_modules/cortexel/dist/react/knowledge-graph.js',
   ];
@@ -8605,8 +8606,18 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   // sealed with the workspace. Execute imports only that sealed bundle under the
   // normal reviewed launch-surface/network/write guard; the guard is never weakened.
   const browserBundleEntrySource = `
+    import { canonicalDigest, getBudgetLimits, snapshotValue } from 'cortexel/core';
     import * as headless from 'cortexel/knowledge-graph';
     import * as interactive from 'cortexel/react/knowledge-graph';
+    const captured = snapshotValue(
+      { graph: 'browser-bundle', revision: 1 },
+      getBudgetLimits('standard'),
+    );
+    if (!captured.ok ||
+        canonicalDigest(captured.value) !==
+          'sha256:52d2a175a904e285e942a2a9c79cf4543c8ee1618c122335034c5e77ee99e18e') {
+      throw new Error('browser bundle omitted the exact JSON capture and digest boundary');
+    }
     const input = {
       contract: headless.KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
       profile: 'generic_visual',
@@ -8651,6 +8662,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     const expectedVersion = ${JSON.stringify(REVIEWED_ESBUILD_VERSION)};
     const receiptSchema = ${JSON.stringify(BROWSER_BUNDLE_RECEIPT_SCHEMA)};
     const expectedPublicInputs = [
+      'node_modules/cortexel/dist/core/index.js',
       'node_modules/cortexel/dist/knowledge-graph/index.js',
       'node_modules/cortexel/dist/react/knowledge-graph.js',
     ];
@@ -9860,6 +9872,9 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         type WeightRecorderTupleGroup,
         type WeightRecorderTupleSplitResult,
         type WeightMatrixParams,
+        canonicalDigest,
+        getBudgetLimits,
+        snapshotValue,
       } from 'cortexel/core';
       import * as coreSurface from 'cortexel/core';
       import {
@@ -9897,6 +9912,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         params: { times_ms: [1], senders: [1] },
         source: 'type-smoke',
       });
+      const captured = snapshotValue({ typeSmoke: true }, getBudgetLimits('standard'));
+      if (captured.ok) canonicalDigest(captured.value);
       const checkedRequest = parseAndValidateRequest('{}');
       if (checkedRequest.ok) buildFigureFromValidated(checkedRequest.request);
       const safeRepairOutcome: SafeRepairOutcome = applySafeRepairs('{}');

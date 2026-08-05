@@ -1,15 +1,16 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
 const require_canonicalize = require('../canonicalize-CM-RPRQS.cjs');
 const require_exact_binary64 = require('../exact-binary64-B9QJo1AS.cjs');
-const require_identity = require('../identity-DvvM9pyL.cjs');
 const require_deep_freeze = require('../deep-freeze-CX4sIEIO.cjs');
-const require_catalog = require('../catalog-B4eoXq8w.cjs');
+const require_limits = require('../limits-zgcdlCes.cjs');
 const require_errors = require('../errors-DaUwoa4p.cjs');
-const require_contract_identity = require('../contract-identity-C8tt01Zs.cjs');
-const require_response_curve_basis = require('../response-curve-basis-Bzq_xSZ2.cjs');
+const require_identity = require('../identity-DvvM9pyL.cjs');
+const require_catalog = require('../catalog-B4eoXq8w.cjs');
+const require_response_curve_basis = require('../response-curve-basis-BoFkbgrp.cjs');
+const require_contract_identity = require('../contract-identity-BMEyNZJi.cjs');
 const require_disclosures = require('../disclosures-KX6A7VTY.cjs');
 const require_nest_time = require('../nest-time-CaEztfRm.cjs');
-const require_structural_validator = require('../structural-validator-CThM5GMk.cjs');
+const require_structural_validator = require('../structural-validator-C5wX5pu1.cjs');
 let _cortexel_request_capability = require("#cortexel-request-capability");
 
 //#region src/core/source-statements.ts
@@ -556,7 +557,7 @@ function derivePsth(input) {
 *   honest thing to plot. It is not a correlation coefficient, and the contract refuses
 *   to let it be labelled as one without the statistics that make it one.
 */
-const DEFAULT_MAX_PAIRWISE_OPERATIONS = require_contract_identity.BUDGET_PROFILES.standard.pairwiseOperations;
+const DEFAULT_MAX_PAIRWISE_OPERATIONS = require_limits.BUDGET_PROFILES.standard.pairwiseOperations;
 /** Typed failure boundary for the exact raw-event kernel. */
 var CorrelogramDerivationError = class extends Error {
 	code;
@@ -13399,8 +13400,8 @@ function authorityEffectiveBudgetProfile(validated) {
 	const requestedProfile = (record(validated.canonicalRequest.presentation) ?? {}).budgetProfile ?? "standard";
 	const hostProfile = validated.inputAssurance.budgetProfile;
 	if (typeof requestedProfile !== "string" || typeof hostProfile !== "string") return null;
-	const requested = require_contract_identity.tryGetBudgetLimits(requestedProfile);
-	const host = require_contract_identity.tryGetBudgetLimits(hostProfile);
+	const requested = require_limits.tryGetBudgetLimits(requestedProfile);
+	const host = require_limits.tryGetBudgetLimits(hostProfile);
 	if (!requested || !host) return null;
 	const requestedKeys = Object.keys(requested).sort();
 	const hostKeys = Object.keys(host).sort();
@@ -21643,7 +21644,7 @@ function buildFigureFromValidated(validated) {
 	const catalog = require_catalog.SKILL_CATALOG[validated.skillId];
 	const presentation = rec(request.presentation) ?? {};
 	const requestedProfile = presentation.budgetProfile ?? "standard";
-	const activeBudget = require_contract_identity.trySelectTighterBudgetProfile(validated.inputAssurance.budgetProfile, requestedProfile);
+	const activeBudget = require_limits.trySelectTighterBudgetProfile(validated.inputAssurance.budgetProfile, requestedProfile);
 	if (!activeBudget) return {
 		ok: false,
 		errors: [require_errors.makeError({

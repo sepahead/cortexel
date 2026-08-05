@@ -1,6 +1,6 @@
+import { t as BudgetProfileId } from "../budgets-DXJ69wrM.cjs";
 import { t as CortexelError } from "../errors-DLTGhSm-.cjs";
 import { h as StableSkillId } from "../catalog-Dp61sMhe.cjs";
-import { t as BudgetProfileId } from "../budgets-DXJ69wrM.cjs";
 import { ValidatedRequestNominalBrand } from "#cortexel-validated-request-brand";
 //#region src/core/requestBoundary.internal.d.ts
 interface InputAssurance {

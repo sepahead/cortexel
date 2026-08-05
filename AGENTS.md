@@ -736,8 +736,13 @@ it does not convert the receipt into paper-local evidence or authenticate Engram
 upstream digest claims. Compute the snapshot id from the defensively copied raw value:
 
 ```tsx
-import { adaptEngramCorpusEntityGraph, buildVizSpec } from 'cortexel/core';
-import { canonicalDigest, getBudgetLimits, snapshotValue } from 'cortexel/figure';
+import {
+  adaptEngramCorpusEntityGraph,
+  buildVizSpec,
+  canonicalDigest,
+  getBudgetLimits,
+  snapshotValue,
+} from 'cortexel/core';
 import { KnowledgeGraphDomFigure } from 'cortexel/react/knowledge-graph-dom';
 
 const captured = snapshotValue(rawResponse, getBudgetLimits());

@@ -6,6 +6,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — browser-safe legacy Engram capture boundary
+
+- Exported `canonicalDigest`, `getBudgetLimits`, and `snapshotValue` from the
+  browser-safe `cortexel/core` subpath. This lets the legacy Engram corpus adapter
+  capture and identify one exact JSON value without importing the Node-oriented
+  `cortexel/figure` validation bundle. These three utilities do not create a
+  validated-request capability, render authority, evidence, or an NCP semantic.
+- Added a packaged browser-bundle regression that executes the public capture and
+  digest path and rejects a build that omits the `cortexel/core` input.
+
 ### Added — React-only caption-bound knowledge-graph inspection
 
 - Added the experimental `cortexel/react/knowledge-graph-dom` subpath. Its sole runtime

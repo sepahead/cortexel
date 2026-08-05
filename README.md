@@ -82,6 +82,10 @@ The installable artifact preserves every legacy entry (`cortexel`, `cortexel/cor
 the React subpaths, and `cortexel/skills.manifest.json`) and adds explicit
 FigureRequestV1 capabilities alongside them:
 
+- `cortexel/core` — the legacy VizSpec authoring and adapter surface, including
+  detached exact-JSON capture and canonical identity utilities for browser hosts.
+  Capture and identity do not validate a FigureRequest, grant render authority,
+  resolve evidence, or add an NCP semantic;
 - `cortexel/figure` — validation, canonicalization, identity, provenance, and migration;
 - `cortexel/authoring` — exact stable discovery metadata, complete offline structural
   schemas, their versioned digest-bound Ajv compile profile, and one synthetic

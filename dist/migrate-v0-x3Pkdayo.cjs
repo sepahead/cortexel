@@ -1,7 +1,8 @@
-const require_catalog = require('./catalog-B4eoXq8w.cjs');
+const require_limits = require('./limits-zgcdlCes.cjs');
 const require_errors = require('./errors-DaUwoa4p.cjs');
-const require_contract_identity = require('./contract-identity-C8tt01Zs.cjs');
 const require_safe_snapshot = require('./safe-snapshot-Bb70fzip.cjs');
+const require_catalog = require('./catalog-B4eoXq8w.cjs');
+const require_contract_identity = require('./contract-identity-BMEyNZJi.cjs');
 
 //#region src/core/migrate-v0.ts
 /**
@@ -36,7 +37,7 @@ const require_safe_snapshot = require('./safe-snapshot-Bb70fzip.cjs');
 * stand, never handed a silently half-converted request that looks complete.
 */
 function migrateLegacyRequest(input) {
-	const snapshot = require_safe_snapshot.snapshotValue(input, require_contract_identity.getBudgetLimits("standard"));
+	const snapshot = require_safe_snapshot.snapshotValue(input, require_limits.getBudgetLimits("standard"));
 	if (!snapshot.ok) return { report: {
 		legacyId: "(none)",
 		outcome: "blocked",
@@ -188,4 +189,4 @@ Object.defineProperty(exports, 'migrateLegacyRequest', {
     return migrateLegacyRequest;
   }
 });
-//# sourceMappingURL=migrate-v0-GPbesj6x.cjs.map
+//# sourceMappingURL=migrate-v0-x3Pkdayo.cjs.map

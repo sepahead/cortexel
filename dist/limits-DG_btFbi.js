@@ -1,4 +1,3 @@
-import { o as REQUEST_CONTRACT, t as ARTIFACT_CONTRACT } from "./identity-BD3MBqiL.js";
 import { n as freezeGenerated } from "./deep-freeze-CyWYjAwr.js";
 
 //#region src/generated/budgets.ts
@@ -213,21 +212,5 @@ function restrictLimits(base, overrides) {
 }
 
 //#endregion
-//#region src/core/contract-identity.ts
-/** Internal named projections of the generated registry-owned contract identities. */
-const CONTRACT_VALUE = /^([a-z][a-z0-9-]*)\/((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$/u;
-function splitContractIdentity(value, axis) {
-	const match = CONTRACT_VALUE.exec(value);
-	if (!match) throw new Error(`${axis} is not a canonical contract-name/major.minor identity`);
-	return Object.freeze({
-		value,
-		name: match[1],
-		version: match[2]
-	});
-}
-const REQUEST_CONTRACT_IDENTITY = splitContractIdentity(REQUEST_CONTRACT, "REQUEST_CONTRACT");
-const ARTIFACT_CONTRACT_IDENTITY = splitContractIdentity(ARTIFACT_CONTRACT, "ARTIFACT_CONTRACT");
-
-//#endregion
-export { restrictLimits as a, BUDGET_PROFILES as c, getBudgetLimits as i, REQUEST_CONTRACT_IDENTITY as n, tryGetBudgetLimits as o, DEFAULT_PROFILE as r, trySelectTighterBudgetProfile as s, ARTIFACT_CONTRACT_IDENTITY as t };
-//# sourceMappingURL=contract-identity-C9g7Mgdt.js.map
+export { trySelectTighterBudgetProfile as a, tryGetBudgetLimits as i, getBudgetLimits as n, BUDGET_PROFILES as o, restrictLimits as r, DEFAULT_PROFILE as t };
+//# sourceMappingURL=limits-DG_btFbi.js.map

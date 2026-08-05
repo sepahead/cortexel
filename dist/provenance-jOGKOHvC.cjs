@@ -1,7 +1,7 @@
-import { a as isSafeDisplayString, c as pointer, o as makeError, r as finalizeErrors } from "./errors-CxHoMFLD.js";
-import { o as tryGetBudgetLimits, r as DEFAULT_PROFILE, s as trySelectTighterBudgetProfile } from "./contract-identity-C9g7Mgdt.js";
-import { t as parseJsonStrict } from "./parse-json-BkdHHhtc.js";
-import { t as snapshotValue } from "./safe-snapshot-CTOnh-lg.js";
+const require_limits = require('./limits-zgcdlCes.cjs');
+const require_errors = require('./errors-DaUwoa4p.cjs');
+const require_safe_snapshot = require('./safe-snapshot-Bb70fzip.cjs');
+const require_parse_json = require('./parse-json-fREYzpvz.cjs');
 
 //#region src/core/requestBoundary.internal.ts
 /**
@@ -12,7 +12,7 @@ import { t as snapshotValue } from "./safe-snapshot-CTOnh-lg.js";
 * tighter budget to that owned JSON snapshot rather than reading the caller again.
 */
 function resolveBudgetProfile(options) {
-	let requested = DEFAULT_PROFILE;
+	let requested = require_limits.DEFAULT_PROFILE;
 	try {
 		if (options !== null && options !== void 0) {
 			if (typeof options !== "object") throw new Error("invalid options");
@@ -27,15 +27,15 @@ function resolveBudgetProfile(options) {
 	}
 	return {
 		profile: typeof requested === "string" ? requested : "<invalid>",
-		limits: tryGetBudgetLimits(requested)
+		limits: require_limits.tryGetBudgetLimits(requested)
 	};
 }
 /** Read the request profile only from an already-owned plain JSON tree. */
 function requestedBudgetProfile(value) {
-	if (value === null || typeof value !== "object" || Array.isArray(value)) return DEFAULT_PROFILE;
+	if (value === null || typeof value !== "object" || Array.isArray(value)) return require_limits.DEFAULT_PROFILE;
 	const presentation = value.presentation;
-	if (presentation === null || typeof presentation !== "object" || Array.isArray(presentation)) return DEFAULT_PROFILE;
-	return Object.prototype.hasOwnProperty.call(presentation, "budgetProfile") ? presentation.budgetProfile : DEFAULT_PROFILE;
+	if (presentation === null || typeof presentation !== "object" || Array.isArray(presentation)) return require_limits.DEFAULT_PROFILE;
+	return Object.prototype.hasOwnProperty.call(presentation, "budgetProfile") ? presentation.budgetProfile : require_limits.DEFAULT_PROFILE;
 }
 function assuranceFor(boundary, profile) {
 	return {
@@ -48,12 +48,12 @@ function assuranceFor(boundary, profile) {
 function fail(errors, assurance) {
 	return {
 		ok: false,
-		errors: finalizeErrors([...errors]),
+		errors: require_errors.finalizeErrors([...errors]),
 		assurance
 	};
 }
 function invalidBudgetProfile(assurance) {
-	return fail([makeError({
+	return fail([require_errors.makeError({
 		code: "RESOURCE_BUDGET_PROFILE_UNKNOWN",
 		stage: "budget",
 		message: "the selected budget profile is not in this build's closed registry. Unknown and inherited profile ids cannot disable resource limits."
@@ -63,19 +63,19 @@ function captureRawRequestInput(text, options = {}) {
 	const host = resolveBudgetProfile(options);
 	let assurance = assuranceFor("raw_json_text", host.profile);
 	if (!host.limits) return invalidBudgetProfile(assurance);
-	if (typeof text !== "string") return fail([makeError({
+	if (typeof text !== "string") return fail([require_errors.makeError({
 		code: "JSON_SYNTAX",
 		stage: "parse",
 		message: "the raw request boundary accepts a JSON text string only."
 	})], assurance);
-	let parsed = parseJsonStrict(text, { limits: host.limits });
+	let parsed = require_parse_json.parseJsonStrict(text, { limits: host.limits });
 	if (!parsed.ok) return fail(parsed.errors, assurance);
 	const requested = requestedBudgetProfile(parsed.value);
-	const effective = trySelectTighterBudgetProfile(host.profile, requested);
+	const effective = require_limits.trySelectTighterBudgetProfile(host.profile, requested);
 	assurance = assuranceFor("raw_json_text", effective?.profile ?? requested);
 	if (!effective) return invalidBudgetProfile(assurance);
 	if (effective.profile !== host.profile) {
-		parsed = parseJsonStrict(text, { limits: effective.limits });
+		parsed = require_parse_json.parseJsonStrict(text, { limits: effective.limits });
 		if (!parsed.ok) return fail(parsed.errors, assurance);
 	}
 	return {
@@ -88,14 +88,14 @@ function captureMaterializedRequestInput(value, options = {}) {
 	const host = resolveBudgetProfile(options);
 	let assurance = assuranceFor("materialized_value", host.profile);
 	if (!host.limits) return invalidBudgetProfile(assurance);
-	let snapshot = snapshotValue(value, host.limits);
+	let snapshot = require_safe_snapshot.snapshotValue(value, host.limits);
 	if (!snapshot.ok) return fail(snapshot.errors, assurance);
 	const requested = requestedBudgetProfile(snapshot.value);
-	const effective = trySelectTighterBudgetProfile(host.profile, requested);
+	const effective = require_limits.trySelectTighterBudgetProfile(host.profile, requested);
 	assurance = assuranceFor("materialized_value", effective?.profile ?? requested);
 	if (!effective) return invalidBudgetProfile(assurance);
 	if (effective.profile !== host.profile) {
-		snapshot = snapshotValue(snapshot.value, effective.limits);
+		snapshot = require_safe_snapshot.snapshotValue(snapshot.value, effective.limits);
 		if (!snapshot.ok) return fail(snapshot.errors, assurance);
 	}
 	return {
@@ -192,8 +192,8 @@ function findLibraryAuthoredFields(node, path, found, depth) {
 	}
 	for (const key of Object.keys(node)) {
 		if (LIBRARY_AUTHORED_FIELDS.has(key)) {
-			const at = pointer(...path, key);
-			found.push(makeError({
+			const at = require_errors.pointer(...path, key);
+			found.push(require_errors.makeError({
 				code: "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
 				stage: "provenance",
 				instancePath: at,
@@ -234,14 +234,14 @@ const provenanceNoteSafeDisplay = (context) => {
 	const errors = [];
 	const check = (value, at) => {
 		if (typeof value !== "string") return;
-		if (value.length > MAX_NOTE_LENGTH) errors.push(makeError({
+		if (value.length > MAX_NOTE_LENGTH) errors.push(require_errors.makeError({
 			code: "PROVENANCE_NOTE_TOO_LONG",
 			stage: "provenance",
 			instancePath: at,
 			validatorId: "provenance.note_safe_display",
 			message: `a declared source statement may be at most ${MAX_NOTE_LENGTH} characters; this one is ${value.length}.`
 		}));
-		if (!isSafeDisplayString(value)) errors.push(makeError({
+		if (!require_errors.isSafeDisplayString(value)) errors.push(require_errors.makeError({
 			code: "PROVENANCE_NOTE_UNSAFE_DISPLAY",
 			stage: "provenance",
 			instancePath: at,
@@ -249,14 +249,43 @@ const provenanceNoteSafeDisplay = (context) => {
 			message: "the declared source statement contains control, bidi-override, or zero-width characters. Rendered beside a mandatory disclosure, those can visually reorder or conceal it — so it is rejected rather than escaped."
 		}));
 	};
-	check(source.declaredNote, pointer("source", "declaredNote"));
+	check(source.declaredNote, require_errors.pointer("source", "declaredNote"));
 	const limitations = source.declaredLimitations;
 	if (Array.isArray(limitations)) limitations.forEach((limitation, index) => {
-		check(limitation, pointer("source", "declaredLimitations", index));
+		check(limitation, require_errors.pointer("source", "declaredLimitations", index));
 	});
 	return errors;
 };
 
 //#endregion
-export { captureRawRequestInput as a, captureMaterializedRequestInput as i, provenanceNoCallerAssurance as n, provenanceNoteSafeDisplay as r, isLibraryAuthoredField as t };
-//# sourceMappingURL=provenance-Bkl5GDJq.js.map
+Object.defineProperty(exports, 'captureMaterializedRequestInput', {
+  enumerable: true,
+  get: function () {
+    return captureMaterializedRequestInput;
+  }
+});
+Object.defineProperty(exports, 'captureRawRequestInput', {
+  enumerable: true,
+  get: function () {
+    return captureRawRequestInput;
+  }
+});
+Object.defineProperty(exports, 'isLibraryAuthoredField', {
+  enumerable: true,
+  get: function () {
+    return isLibraryAuthoredField;
+  }
+});
+Object.defineProperty(exports, 'provenanceNoCallerAssurance', {
+  enumerable: true,
+  get: function () {
+    return provenanceNoCallerAssurance;
+  }
+});
+Object.defineProperty(exports, 'provenanceNoteSafeDisplay', {
+  enumerable: true,
+  get: function () {
+    return provenanceNoteSafeDisplay;
+  }
+});
+//# sourceMappingURL=provenance-jOGKOHvC.cjs.map

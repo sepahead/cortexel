@@ -1,17 +1,18 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
 const require_canonicalize = require('../canonicalize-CM-RPRQS.cjs');
-const require_identity = require('../identity-DvvM9pyL.cjs');
 const require_deep_freeze = require('../deep-freeze-CX4sIEIO.cjs');
+const require_limits = require('../limits-zgcdlCes.cjs');
+const require_errors = require('../errors-DaUwoa4p.cjs');
+const require_safe_snapshot = require('../safe-snapshot-Bb70fzip.cjs');
+const require_identity = require('../identity-DvvM9pyL.cjs');
 const require_catalog = require('../catalog-B4eoXq8w.cjs');
 const require_registry = require('../registry-CCvLcMCj.cjs');
-const require_errors = require('../errors-DaUwoa4p.cjs');
-const require_contract_identity = require('../contract-identity-C8tt01Zs.cjs');
 const require_parse_json = require('../parse-json-fREYzpvz.cjs');
-const require_safe_snapshot = require('../safe-snapshot-Bb70fzip.cjs');
-const require_provenance = require('../provenance-DIN9L67L.cjs');
-const require_response_curve_basis = require('../response-curve-basis-Bzq_xSZ2.cjs');
+const require_provenance = require('../provenance-jOGKOHvC.cjs');
+const require_response_curve_basis = require('../response-curve-basis-BoFkbgrp.cjs');
+const require_contract_identity = require('../contract-identity-BMEyNZJi.cjs');
 const require_disclosures = require('../disclosures-KX6A7VTY.cjs');
-const require_migrate_v0 = require('../migrate-v0-GPbesj6x.cjs');
+const require_migrate_v0 = require('../migrate-v0-x3Pkdayo.cjs');
 let _cortexel_request_capability = require("#cortexel-request-capability");
 
 //#region src/core/repairs.ts
@@ -235,7 +236,7 @@ function applySafeRepairs(input, options = {}) {
 			message: "an allow-listed diagnostic did not reproduce one exact safe correction from the owned request snapshot."
 		})]);
 		if (plans.size === 0) return failure(outcome, captured.assurance, applied);
-		const repairLimit = require_contract_identity.getBudgetLimits(captured.assurance.budgetProfile).safeRepairOperations;
+		const repairLimit = require_limits.getBudgetLimits(captured.assurance.budgetProfile).safeRepairOperations;
 		if (applied.length + plans.size > repairLimit) return failure(outcome, captured.assurance, applied, [require_errors.makeError({
 			code: "RESOURCE_BUDGET_EXCEEDED",
 			stage: "budget",
@@ -289,7 +290,7 @@ exports.CATALOG_DIGEST = require_identity.CATALOG_DIGEST;
 exports.CATALOG_DIGEST_DOMAIN = require_identity.CATALOG_DIGEST_DOMAIN;
 exports.CONTRACT_DIGEST = require_identity.CONTRACT_DIGEST;
 exports.CanonicalizationError = require_canonicalize.CanonicalizationError;
-exports.DEFAULT_PROFILE = require_contract_identity.DEFAULT_PROFILE;
+exports.DEFAULT_PROFILE = require_limits.DEFAULT_PROFILE;
 exports.DISCLOSURE_RULES = require_registry.DISCLOSURE_RULES;
 exports.ERROR_CODES = require_registry.ERROR_CODES;
 exports.ERROR_CODE_META = require_registry.ERROR_CODE_META;
@@ -315,7 +316,7 @@ exports.convert = require_response_curve_basis.convert;
 exports.deriveDisclosures = require_disclosures.deriveDisclosures;
 exports.dimensionOf = require_response_curve_basis.dimensionOf;
 exports.finalizeErrors = require_errors.finalizeErrors;
-exports.getBudgetLimits = require_contract_identity.getBudgetLimits;
+exports.getBudgetLimits = require_limits.getBudgetLimits;
 exports.getBuildIdentity = require_identity.getBuildIdentity;
 exports.isCapabilityId = require_catalog.isCapabilityId;
 exports.isKnownUnit = require_response_curve_basis.isKnownUnit;
@@ -342,14 +343,14 @@ exports.parseJsonStrict = require_parse_json.parseJsonStrict;
 exports.pointer = require_errors.pointer;
 exports.resolveAlias = require_response_curve_basis.resolveAlias;
 exports.responseEventMembershipDigest = require_response_curve_basis.responseEventMembershipDigest;
-exports.restrictLimits = require_contract_identity.restrictLimits;
+exports.restrictLimits = require_limits.restrictLimits;
 exports.safeText = require_errors.safeText;
 exports.sha256Digest = require_canonicalize.sha256Digest;
 exports.sha256Hex = require_canonicalize.sha256Hex;
 exports.snapshotValue = require_safe_snapshot.snapshotValue;
 exports.toSeconds = require_response_curve_basis.toSeconds;
-exports.tryGetBudgetLimits = require_contract_identity.tryGetBudgetLimits;
-exports.trySelectTighterBudgetProfile = require_contract_identity.trySelectTighterBudgetProfile;
+exports.tryGetBudgetLimits = require_limits.tryGetBudgetLimits;
+exports.trySelectTighterBudgetProfile = require_limits.trySelectTighterBudgetProfile;
 exports.unitLabel = require_response_curve_basis.unitLabel;
 exports.utf8ByteLength = require_canonicalize.utf8ByteLength;
 Object.defineProperty(exports, 'validateRequestValue', {

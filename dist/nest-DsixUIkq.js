@@ -1,9 +1,10 @@
-const require_canonicalize = require('./canonicalize-CM-RPRQS.cjs');
-const require_errors = require('./errors-DaUwoa4p.cjs');
-const require_contract_identity = require('./contract-identity-C8tt01Zs.cjs');
-const require_safe_snapshot = require('./safe-snapshot-Bb70fzip.cjs');
-const require_source_example = require('./source-example-BI6AxnSB.cjs');
-const require_nest_time = require('./nest-time-CaEztfRm.cjs');
+import { n as canonicalDigest } from "./canonicalize-F75Ifelv.js";
+import { n as getBudgetLimits } from "./limits-DG_btFbi.js";
+import { o as makeError } from "./errors-CxHoMFLD.js";
+import { t as snapshotValue } from "./safe-snapshot-CTOnh-lg.js";
+import { n as REQUEST_CONTRACT_IDENTITY } from "./contract-identity-BBttDeUN.js";
+import { c as NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3, l as NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5, n as SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER, o as isSourceAdapterExampleGuard } from "./source-example-Cx_NUpH0.js";
+import { n as projectNestTicsToMillisecondsV310, r as projectNestWindowEndpointsV310, t as nestFiniteTimeLimitTicsV310 } from "./nest-time-HlQKV_CS.js";
 
 //#region src/adapters/nest/recorders.ts
 /**
@@ -40,21 +41,21 @@ const require_nest_time = require('./nest-time-CaEztfRm.cjs');
 *   - The complete recorded sender universe is caller-supplied. Inferring it
 *     from events would delete silent neurons and overstate activity rates.
 */
-const ADMITTED_NEST_VERSION = require_source_example.NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.nestVersion;
-const NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN_V3 = require_source_example.NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3.inputDigestDomain;
-const NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN_V5 = require_source_example.NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.inputDigestDomain;
+const ADMITTED_NEST_VERSION = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.nestVersion;
+const NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN_V3 = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3.inputDigestDomain;
+const NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN_V5 = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.inputDigestDomain;
 /** Current source-faithful revision-5 digest domain. */
 const NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN = NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN_V5;
 /** Exact PyNEST 3.10.0 millisecond serialization of positive-infinity Time. */
-const NEST_TIME_POSITIVE_INFINITY_EXPORTED_MS = require_source_example.NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.positiveInfinityExportedMs;
-const NEST_TIME_BUILD_PROFILE = require_source_example.NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.timeBuildProfile;
-const CAPTURE_AUTHORITY_PROFILE_V3 = require_source_example.NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.branches.finiteStop.captureAuthorityProfile;
-const CAPTURE_AUTHORITY_PROFILE_V4 = require_source_example.NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.branches.positiveInfinityCaptureBounded.captureAuthorityProfile;
+const NEST_TIME_POSITIVE_INFINITY_EXPORTED_MS = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.positiveInfinityExportedMs;
+const NEST_TIME_BUILD_PROFILE = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.timeBuildProfile;
+const CAPTURE_AUTHORITY_PROFILE_V3 = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.branches.finiteStop.captureAuthorityProfile;
+const CAPTURE_AUTHORITY_PROFILE_V4 = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.branches.positiveInfinityCaptureBounded.captureAuthorityProfile;
 const CAPTURE_AUTHORITY_KIND = "caller_declaration";
-const STATUS_READ_METHOD_V1 = require_source_example.NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.branches.finiteStop.statusReadMethod;
-const STATUS_READ_METHOD_V2 = require_source_example.NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.branches.positiveInfinityCaptureBounded.statusReadMethod;
+const STATUS_READ_METHOD_V1 = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.branches.finiteStop.statusReadMethod;
+const STATUS_READ_METHOD_V2 = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.branches.positiveInfinityCaptureBounded.statusReadMethod;
 const CAPTURE_BOUNDARY_V1 = "after_successful_simulate_or_run_return";
-const CAPTURE_BOUNDARY_V2 = require_source_example.NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.captureBoundary;
+const CAPTURE_BOUNDARY_V2 = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.captureBoundary;
 const RECORDING_PLAN_SCOPE = "window_backend_time_encoding_and_sender_wiring";
 const SENDER_UNIVERSE_BINDING = "recorded_sender_ids_exactly_equal_full_window_connected_source_universe";
 const CLOCK_EPOCH_CONTINUITY = "biological_time_monotonic_since_last_kernel_initialization";
@@ -72,7 +73,7 @@ function fail(errors) {
 	};
 }
 function adapterFailure(code, instancePath, message) {
-	return fail([require_errors.makeError({
+	return fail([makeError({
 		code,
 		stage: "adapter",
 		instancePath,
@@ -122,7 +123,7 @@ function parseCanonicalTics(value, instancePath, label, positive) {
 	};
 }
 function projectedMillisecondsFailure(tics, ticsPerMs, milliseconds, instancePath, label) {
-	const projected = require_nest_time.projectNestTicsToMillisecondsV310(tics, ticsPerMs);
+	const projected = projectNestTicsToMillisecondsV310(tics, ticsPerMs);
 	if (!projected.ok) return adapterFailure("ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED", instancePath, `${label} is outside the pinned source-faithful NEST 3.10.0 time profile: ${projected.message}`);
 	if (!Object.is(projected.milliseconds, milliseconds)) return adapterFailure("ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED", instancePath, `${label} must equal pinned NEST 3.10.0 Time::get_ms binary64 evaluation of its declared integer-tic preimage. Received ${milliseconds}; the source-faithful tic authority projects to ${projected.milliseconds}.`);
 }
@@ -131,9 +132,9 @@ function projectedMillisecondsFailure(tics, ticsPerMs, milliseconds, instancePat
 * spike-recorder export into a `neuro.spike_raster` request.
 */
 function nestSpikeRecorderToRaster(exported, options) {
-	const limits = require_contract_identity.getBudgetLimits("standard");
-	const exportedSnapshot = require_safe_snapshot.snapshotValue(exported, limits);
-	const optionsSnapshot = require_safe_snapshot.snapshotValue(options, limits);
+	const limits = getBudgetLimits("standard");
+	const exportedSnapshot = snapshotValue(exported, limits);
+	const optionsSnapshot = snapshotValue(options, limits);
 	if (!exportedSnapshot.ok) return snapshotFailure(exportedSnapshot.errors, "export");
 	if (!optionsSnapshot.ok) return snapshotFailure(optionsSnapshot.errors, "options");
 	const value = exportedSnapshot.value;
@@ -141,8 +142,8 @@ function nestSpikeRecorderToRaster(exported, options) {
 	if (!isPlainRecord(value)) return adapterFailure("ADAPTER_NEST_UNSUPPORTED_SHAPE", "", "expected a plain NEST spike-recorder status object.");
 	if (!isPlainRecord(optionValue)) return adapterFailure("ADAPTER_MAPPING_REQUIRED", "", "NEST adapter options must be a plain object containing a version and the complete recorded sender universe.");
 	if (Object.prototype.hasOwnProperty.call(optionValue, "cortexelSyntheticExampleGuard")) {
-		const exactGuard = require_source_example.isSourceAdapterExampleGuard(optionValue[require_source_example.SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER]);
-		return adapterFailure("ADAPTER_MAPPING_REQUIRED", `/${require_source_example.SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER}`, exactGuard ? "Cortexel's shipped source example is a synthetic, template-only shape, not a NEST capture. Replace every fixture value with caller-owned exported status and capture authority, then explicitly remove this guard before invoking the adapter. The adapter never removes it or authors simulation provenance from the unchanged fixture." : `NEST adapter options contain the reserved ${JSON.stringify(require_source_example.SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER)} member with a malformed value. Do not repair or remove an unrecognized guard at this authority boundary; start from caller-owned detached NEST data.`);
+		const exactGuard = isSourceAdapterExampleGuard(optionValue[SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER]);
+		return adapterFailure("ADAPTER_MAPPING_REQUIRED", `/${SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER}`, exactGuard ? "Cortexel's shipped source example is a synthetic, template-only shape, not a NEST capture. Replace every fixture value with caller-owned exported status and capture authority, then explicitly remove this guard before invoking the adapter. The adapter never removes it or authors simulation provenance from the unchanged fixture." : `NEST adapter options contain the reserved ${JSON.stringify(SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER)} member with a malformed value. Do not repair or remove an unrecognized guard at this authority boundary; start from caller-owned detached NEST data.`);
 	}
 	const adapterRevision = 5;
 	const optionKeysFailure = exactObjectKeysFailure(optionValue, /* @__PURE__ */ new Set([
@@ -297,7 +298,7 @@ function nestSpikeRecorderToRaster(exported, options) {
 	const beganAtBiologicalTimeTics = bufferBeganTicsResult.value;
 	const lastMutationAtBiologicalTimeTics = planMutationTicsResult.value;
 	if (ticsPerMs > MAX_SAFE_TICS) return adapterFailure("ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED", "/captureAuthority/runtimeStatus/ticsPerMs", "ticsPerMs is outside the revision-5 source-clock subset; it must be no larger than Number.MAX_SAFE_INTEGER.");
-	const finiteTimeLimitTics = require_nest_time.nestFiniteTimeLimitTicsV310(resolutionTics);
+	const finiteTimeLimitTics = nestFiniteTimeLimitTicsV310(resolutionTics);
 	if (finiteTimeLimitTics === void 0) return adapterFailure("ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED", "/captureAuthority/runtimeStatus/resolutionTics", "resolutionTics is outside the pinned LP64/int64 NEST 3.10.0 finite-Time build profile and exact-integer subset.");
 	const primitiveTics = [
 		[
@@ -338,7 +339,7 @@ function nestSpikeRecorderToRaster(exported, options) {
 	]);
 	for (const [tics, instancePath, label] of primitiveTics) {
 		if (tics > MAX_SAFE_TICS || tics >= finiteTimeLimitTics) return adapterFailure("ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED", instancePath, `${label} is outside the revision-5 conservative source-clock subset; every retained NEST Time tic must be a safe integer strictly below the pinned finite-Time limit.`);
-		const projection = require_nest_time.projectNestTicsToMillisecondsV310(tics, ticsPerMs);
+		const projection = projectNestTicsToMillisecondsV310(tics, ticsPerMs);
 		if (!projection.ok) return adapterFailure("ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED", instancePath, `${label} cannot round-trip through the pinned NEST 3.10.0 binary64 millisecond projection: ${projection.message}`);
 	}
 	const projectionEntries = [
@@ -421,10 +422,10 @@ function nestSpikeRecorderToRaster(exported, options) {
 		positiveInfinityStop ? "captureBiologicalTimeTics" : "originTics + stopTics"
 	]]) {
 		if (tics > MAX_SAFE_TICS || tics >= finiteTimeLimitTics) return adapterFailure("ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED", instancePath, `${label} is outside the revision-5 conservative source-clock subset; each combined endpoint must be a safe integer strictly below the pinned finite-Time limit.`);
-		const projection = require_nest_time.projectNestTicsToMillisecondsV310(tics, ticsPerMs);
+		const projection = projectNestTicsToMillisecondsV310(tics, ticsPerMs);
 		if (!projection.ok) return adapterFailure("ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED", instancePath, `${label} cannot round-trip through the pinned NEST 3.10.0 binary64 millisecond projection: ${projection.message}`);
 	}
-	const windowProjection = require_nest_time.projectNestWindowEndpointsV310({
+	const windowProjection = projectNestWindowEndpointsV310({
 		ticsPerMs,
 		resolutionTics,
 		retainedTics: [
@@ -506,7 +507,7 @@ function nestSpikeRecorderToRaster(exported, options) {
 		clockEpochContinuity: CLOCK_EPOCH_CONTINUITY,
 		eventCompleteness: EVENT_COMPLETENESS
 	};
-	const adapterInputDigest = require_canonicalize.canonicalDigest({
+	const adapterInputDigest = canonicalDigest({
 		domain: NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN_V5,
 		exportedStatus: value,
 		options: {
@@ -552,8 +553,8 @@ function nestSpikeRecorderToRaster(exported, options) {
 		ok: true,
 		request: {
 			contract: {
-				name: require_contract_identity.REQUEST_CONTRACT_IDENTITY.name,
-				version: require_contract_identity.REQUEST_CONTRACT_IDENTITY.version
+				name: REQUEST_CONTRACT_IDENTITY.name,
+				version: REQUEST_CONTRACT_IDENTITY.version
 			},
 			skill: { id: "neuro.spike_raster" },
 			data: {
@@ -581,47 +582,12 @@ function nestSpikeRecorderToRaster(exported, options) {
 				systemVersion: nestVersion,
 				...runId !== void 0 ? { runId } : {},
 				...recorderId !== void 0 ? { recorderId } : {},
-				sourceDigest: require_canonicalize.canonicalDigest(value)
+				sourceDigest: canonicalDigest(value)
 			}
 		}
 	};
 }
 
 //#endregion
-Object.defineProperty(exports, 'NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN', {
-  enumerable: true,
-  get: function () {
-    return NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN;
-  }
-});
-Object.defineProperty(exports, 'NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN_V3', {
-  enumerable: true,
-  get: function () {
-    return NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN_V3;
-  }
-});
-Object.defineProperty(exports, 'NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN_V5', {
-  enumerable: true,
-  get: function () {
-    return NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN_V5;
-  }
-});
-Object.defineProperty(exports, 'NEST_TIME_BUILD_PROFILE', {
-  enumerable: true,
-  get: function () {
-    return NEST_TIME_BUILD_PROFILE;
-  }
-});
-Object.defineProperty(exports, 'NEST_TIME_POSITIVE_INFINITY_EXPORTED_MS', {
-  enumerable: true,
-  get: function () {
-    return NEST_TIME_POSITIVE_INFINITY_EXPORTED_MS;
-  }
-});
-Object.defineProperty(exports, 'nestSpikeRecorderToRaster', {
-  enumerable: true,
-  get: function () {
-    return nestSpikeRecorderToRaster;
-  }
-});
-//# sourceMappingURL=nest-BKh1KMUS.cjs.map
+export { NEST_TIME_POSITIVE_INFINITY_EXPORTED_MS as a, NEST_TIME_BUILD_PROFILE as i, NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN_V3 as n, nestSpikeRecorderToRaster as o, NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN_V5 as r, NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN as t };
+//# sourceMappingURL=nest-DsixUIkq.js.map

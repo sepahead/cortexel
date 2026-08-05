@@ -1,5 +1,5 @@
-import { n as KnowledgeGraph3DNode, o as KnowledgeGraphContext, t as KnowledgeGraph3DEdge } from "../knowledgeGraphPresentation.types-B_2wcZ1W.cjs";
 import { t as CortexelError } from "../errors-DLTGhSm-.cjs";
+import { n as KnowledgeGraph3DNode, o as KnowledgeGraphContext, t as KnowledgeGraph3DEdge } from "../knowledgeGraphPresentation.types-B_2wcZ1W.cjs";
 import { PreparedKnowledgeGraphNominalBrand, PreparedKnowledgeGraphViewNominalBrand } from "#cortexel-knowledge-graph-presentation-brand";
 //#region react/knowledgeGraphPresentationBudget.internal.d.ts
 interface KnowledgeGraphPresentationBudgetReceiptV1 {
