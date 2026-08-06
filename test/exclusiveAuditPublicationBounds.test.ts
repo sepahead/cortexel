@@ -136,11 +136,37 @@ function runBoundFixture(mode: string): BoundFixtureResult {
         },
         maxBuffer: 64 * 1024,
         stdio: ['ignore', 'pipe', 'pipe'],
-        timeout: 5_000,
+        // A sealed full-suite run can briefly saturate process startup while the
+        // package/runtime smoke tests execute in neighboring workers. The fixture
+        // itself is synchronous and bounded; allow startup headroom without making
+        // a hung child unbounded.
+        timeout: 30_000,
       },
     );
-    expect(result.error).toBeUndefined();
-    expect(result.status, result.stderr).toBe(0);
+    if (result.error !== undefined) {
+      throw new Error(
+        `publication-bound fixture spawn failed: ${JSON.stringify({
+          code:
+            'code' in result.error && typeof result.error.code === 'string'
+              ? result.error.code
+              : null,
+          message: result.error.message.slice(0, 512),
+          name: result.error.name,
+        })}`,
+      );
+    }
+    if (result.status !== 0) {
+      // Keep child output on one JSON-escaped line. Passing raw stderr as an
+      // assertion annotation lets stack-like or non-UTF-8 child diagnostics enter
+      // Vitest's source-map parser, obscuring the actual fixture failure.
+      throw new Error(
+        `publication-bound fixture exited unsuccessfully: ${JSON.stringify({
+          signal: result.signal,
+          status: result.status,
+          stderr: result.stderr.slice(0, 2_048),
+        })}`,
+      );
+    }
     return JSON.parse(result.stdout) as BoundFixtureResult;
   } finally {
     rmSync(fixture, { force: true, recursive: true });
