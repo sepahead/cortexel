@@ -41,6 +41,12 @@ smoke = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(smoke)
 
 
+def _private_temp_environment(directory: Path) -> dict[str, str]:
+    directory.mkdir(mode=0o700)
+    value = os.fspath(directory)
+    return {"TEMP": value, "TMP": value, "TMPDIR": value}
+
+
 class PythonPackageSmokeBoundaryTest(unittest.TestCase):
     VERSION = "1.2.3"
     HATCHLING_VERSION = "1.31.0"
@@ -796,16 +802,20 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             import pathlib
             import subprocess
             import sys
+            import tempfile
             from unittest.mock import patch
 
             smoke_path = pathlib.Path(sys.argv[1])
             repository = pathlib.Path(sys.argv[2])
             resource = sys.argv[3]
             close_order = sys.argv[4]
-            guardian_lifetime = pathlib.Path(sys.argv[5])
-            guardian_ready = pathlib.Path(sys.argv[6])
-            target_lifetime = pathlib.Path(sys.argv[7])
-            target_ready = pathlib.Path(sys.argv[8])
+            expected_tempdir = pathlib.Path(sys.argv[5])
+            guardian_lifetime = pathlib.Path(sys.argv[6])
+            guardian_ready = pathlib.Path(sys.argv[7])
+            target_lifetime = pathlib.Path(sys.argv[8])
+            target_ready = pathlib.Path(sys.argv[9])
+            if pathlib.Path(tempfile.gettempdir()) != expected_tempdir:
+                raise AssertionError("sacrificial temp authority drifted")
             spec = importlib.util.spec_from_file_location(
                 "cortexel_smoke_python_package_sacrificial",
                 smoke_path,
@@ -920,6 +930,8 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as temporary:
             temporary_root = Path(temporary)
+            subprocess_temp = temporary_root / "subprocess-temp"
+            subprocess_environment = _private_temp_environment(subprocess_temp)
             guardian_lifetime = temporary_root / "guardian-lifetime.fifo"
             guardian_ready = temporary_root / "guardian-ready"
             target_lifetime = temporary_root / "target-lifetime.fifo"
@@ -947,6 +959,7 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                         str(ROOT),
                         resource,
                         close_order,
+                        str(subprocess_temp),
                         str(guardian_lifetime),
                         str(guardian_ready),
                         str(target_lifetime),
@@ -956,7 +969,7 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     close_fds=True,
-                    env={},
+                    env=subprocess_environment,
                     start_new_session=True,
                 )
             except BaseException as launch_error:
@@ -1413,10 +1426,14 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             import pathlib
             import signal
             import sys
+            import tempfile
             from unittest.mock import patch
 
             smoke_path = pathlib.Path(sys.argv[1])
             repository = pathlib.Path(sys.argv[2])
+            expected_tempdir = pathlib.Path(sys.argv[3])
+            if pathlib.Path(tempfile.gettempdir()) != expected_tempdir:
+                raise AssertionError("raw-reap temp authority drifted")
             spec = importlib.util.spec_from_file_location(
                 "cortexel_smoke_python_package_reap_fail_stop",
                 smoke_path,
@@ -1469,24 +1486,28 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             raise AssertionError("ambiguous raw reap returned")
             '''
         )
-        completed = subprocess.run(
-            [
-                sys.executable,
-                "-I",
-                "-B",
-                "-S",
-                "-c",
-                fixture,
-                str(ROOT / "scripts" / "smoke-python-package.py"),
-                str(ROOT),
-            ],
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            close_fds=True,
-            env={},
-            timeout=8,
-            check=False,
-        )
+        with tempfile.TemporaryDirectory() as temporary:
+            subprocess_temp = Path(temporary) / "subprocess-temp"
+            subprocess_environment = _private_temp_environment(subprocess_temp)
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-B",
+                    "-S",
+                    "-c",
+                    fixture,
+                    str(ROOT / "scripts" / "smoke-python-package.py"),
+                    str(ROOT),
+                    str(subprocess_temp),
+                ],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                close_fds=True,
+                env=subprocess_environment,
+                timeout=8,
+                check=False,
+            )
         self.assertEqual(completed.returncode, 70, completed.stderr.decode())
         self.assertEqual(completed.stdout, b"")
         self.assertEqual(completed.stderr, b"")
