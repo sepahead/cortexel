@@ -1055,10 +1055,16 @@ For an Engram `CorpusEntityGraphResponse`, use
 `adaptEngramCorpusEntityGraph` as shown above. The adapter is a no-throw JSON
 boundary: it checks array/property budgets, exact response fields, redundant
 counts/kind tallies, conservative flags, finite metric domains and options before
-mapping any record. Every node and assertion must supply at least one structurally
-valid evidence reference, which is retained rather than inferred. Legacy edges
-without ids receive a collision-free canonical tuple id; indistinguishable legacy
-duplicates fail instead of collapsing.
+mapping any record. Its current receipt-bound branch accepts the exact
+`engram.corpus-derivation-receipt.v2` response and requires the caller-supplied
+snapshot id to equal the canonical digest of that complete captured response.
+Cortexel creates only presentation-local `graph_snapshot_record` references for
+that branch; it neither authenticates the receipt nor promotes its claims to
+paper-local evidence. The historical branch still requires at least one
+structurally valid evidence reference on every node and assertion, which Cortexel
+retains rather than infers. Historical edges without ids receive a collision-free
+canonical tuple id; indistinguishable historical duplicates fail instead of
+collapsing.
 
 ## Non-TypeScript hosts
 

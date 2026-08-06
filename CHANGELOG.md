@@ -6,6 +6,19 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — receipt-bound legacy Engram corpus graphs
+
+- Added a closed `CorpusEntityGraphResponse` branch for Engram's exact
+  `engram.corpus-derivation-receipt.v2` entity response. The adapter validates the
+  complete source roster, identity-derivation profile, canonical node and assertion
+  order, endpoint membership, redundant summaries, conservative authority flags, and
+  receipt equality before mapping a graph.
+- Required `graphSnapshotId` to equal the RFC 8785 SHA-256 digest of the complete
+  defensively captured response. Cortexel creates only presentation-local
+  `graph_snapshot_record` references into that snapshot; it does not authenticate the
+  receipt, promote upstream claims to paper-local evidence, or alter the historical
+  per-element-evidence branch.
+
 ### Fixed — deterministic stable-figure layout
 
 - Stable SVG legends now use deterministic, host-font-independent wrapping,

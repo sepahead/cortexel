@@ -460,13 +460,17 @@ The machine-readable state of every release gate is in
 - **No Engram integration is accepted yet.** Cortexel has not received a durable
   cross-repository receipt binding an Engram commit, Cortexel package bytes, a closed
   evidence-graph snapshot, prepare/inspect/execute state, Python wheelhouse authority,
-  result receipt, recovery history, and rendered artifact. Engram must supply element
-  evidence arrays, stable assertion ids, discriminated scores, a closed evidence-record
-  inventory and immutable snapshot identity; Cortexel must never synthesize those from
-  entity ids. Any UI integration must keep the bound honesty caption visibly expanded
-  adjacent to the graph. Until clean-checkout joint verification passes without ambient
-  credentials or package configuration, source compatibility and a legacy adapter do not
-  constitute integration evidence.
+  result receipt, recovery history, and rendered artifact. The current receipt-bound
+  adapter accepts only the exact `engram.corpus-derivation-receipt.v2` response with
+  stable assertion ids, discriminated scores, closed source and identity records, and a
+  snapshot id equal to the canonical digest of the complete captured response. Cortexel
+  creates presentation-local `graph_snapshot_record` references for that branch; these
+  references do not authenticate Engram's upstream digest claims or become paper-local
+  evidence. The historical adapter branch still requires element evidence arrays and
+  never synthesizes their source anchors. Any UI integration must keep the bound honesty
+  caption visibly expanded adjacent to the graph. Until clean-checkout joint verification
+  passes without ambient credentials or package configuration, source compatibility and
+  a legacy adapter do not constitute integration evidence.
 - **Legacy connection model semantics remain a host-authored source claim.** The
   legacy `core/nest` connection graph, weight/delay matrix, delay-distribution,
   and SceneData adapter paths now require complete synapse-model rows and an
