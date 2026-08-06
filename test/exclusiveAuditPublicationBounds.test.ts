@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import {
+  mkdirSync,
   mkdtempSync,
   realpathSync,
   rmSync,
@@ -20,6 +21,7 @@ const MODULE_PATH = path.join(
 
 interface BoundFixtureResult {
   readonly finalEntries: readonly string[];
+  readonly loaderTemporaryDirectory: string;
   readonly message: string;
   readonly mutationCalls: readonly string[];
   readonly requestedPathCodeUnits: number;
@@ -29,11 +31,14 @@ function runBoundFixture(mode: string): BoundFixtureResult {
   const fixture = realpathSync(
     mkdtempSync(path.join(tmpdir(), 'cortexel-publication-bound-')),
   );
+  const loaderTemporaryDirectory = path.join(fixture, 'loader-temp');
+  mkdirSync(loaderTemporaryDirectory, { mode: 0o700 });
   const script = path.join(fixture, 'fixture.mjs');
   try {
     writeFileSync(script, String.raw`
       import fs from 'node:fs';
       import { syncBuiltinESMExports } from 'node:module';
+      import { tmpdir } from 'node:os';
       import path from 'node:path';
       import { pathToFileURL } from 'node:url';
 
@@ -118,6 +123,7 @@ function runBoundFixture(mode: string): BoundFixtureResult {
       if (!message) throw new Error('over-bound publication path was accepted');
       process.stdout.write(JSON.stringify({
         finalEntries: fs.readdirSync(fixture).sort(),
+        loaderTemporaryDirectory: tmpdir(),
         message,
         mutationCalls,
         requestedPathCodeUnits: requestedPath.length,
@@ -133,6 +139,13 @@ function runBoundFixture(mode: string): BoundFixtureResult {
           LANG: 'C',
           LC_ALL: 'C',
           PATH: process.env.PATH,
+          // The tsx loader performs a temporary case-sensitivity probe before
+          // this fixture module runs. Keep that loader-owned I/O inside the
+          // fixture's already-authorized private directory so sealed sandboxes
+          // need not grant ambient /tmp write authority.
+          TEMP: loaderTemporaryDirectory,
+          TMP: loaderTemporaryDirectory,
+          TMPDIR: loaderTemporaryDirectory,
         },
         maxBuffer: 64 * 1024,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -167,7 +180,9 @@ function runBoundFixture(mode: string): BoundFixtureResult {
         })}`,
       );
     }
-    return JSON.parse(result.stdout) as BoundFixtureResult;
+    const parsed = JSON.parse(result.stdout) as BoundFixtureResult;
+    expect(parsed.loaderTemporaryDirectory).toBe(loaderTemporaryDirectory);
+    return parsed;
   } finally {
     rmSync(fixture, { force: true, recursive: true });
   }
@@ -180,7 +195,7 @@ describe('exclusive audit publication resolved-path bounds', () => {
       expect(result.requestedPathCodeUnits).toBe('r.json'.length);
       expect(result.message).toMatch(/resolved audit output target exceeds/u);
       expect(result.mutationCalls).toEqual([]);
-      expect(result.finalEntries).toEqual(['fixture.mjs']);
+      expect(result.finalEntries).toEqual(['fixture.mjs', 'loader-temp']);
     }
   });
 
@@ -189,7 +204,7 @@ describe('exclusive audit publication resolved-path bounds', () => {
       const result = runBoundFixture(mode);
       expect(result.message).toMatch(/canonical audit output parent exceeds/u);
       expect(result.mutationCalls).toEqual([]);
-      expect(result.finalEntries).toEqual(['fixture.mjs']);
+      expect(result.finalEntries).toEqual(['fixture.mjs', 'loader-temp']);
     }
   });
 
@@ -197,6 +212,6 @@ describe('exclusive audit publication resolved-path bounds', () => {
     const result = runBoundFixture('staged');
     expect(result.message).toMatch(/resolved audit staging path exceeds/u);
     expect(result.mutationCalls).toEqual([]);
-    expect(result.finalEntries).toEqual(['fixture.mjs']);
+    expect(result.finalEntries).toEqual(['fixture.mjs', 'loader-temp']);
   });
 });
