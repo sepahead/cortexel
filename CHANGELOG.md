@@ -35,11 +35,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed — browser-safe legacy Engram capture boundary
 
-- Exported `canonicalDigest`, `getBudgetLimits`, and `snapshotValue` from the
-  browser-safe `cortexel/core` subpath. This lets the legacy Engram corpus adapter
-  capture and identify one exact JSON value without importing the Node-oriented
-  `cortexel/figure` validation bundle. These three utilities do not create a
-  validated-request capability, render authority, evidence, or an NCP semantic.
+- Exported `canonicalize`, `canonicalDigest`, `getBudgetLimits`, and
+  `snapshotValue` from the browser-safe `cortexel/core` subpath. This lets the
+  legacy Engram corpus adapter capture, serialize, and identify one exact JSON
+  value without importing the Node-oriented `cortexel/figure` validation bundle.
+  These four utilities do not
+  create a validated-request capability, render authority, evidence, or an NCP
+  semantic. The package root also carries the additive export because `cortexel`
+  re-exports the complete legacy core surface.
 - Added a packaged browser-bundle regression that executes the public capture and
   digest path and rejects a build that omits the `cortexel/core` input.
 

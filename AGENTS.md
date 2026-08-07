@@ -444,6 +444,18 @@ export function prepareCorpusGraphJson(text: string) {
 }
 ```
 
+When a browser host must create its own bounded inspection envelope, capture the
+materialized value before serialization. `canonicalize` produces canonical text; it is
+not itself an input-budget, validation, provenance, or render-authority gate:
+
+```ts
+import { canonicalize, getBudgetLimits, snapshotValue } from 'cortexel/core';
+
+const captured = snapshotValue(callerValue, getBudgetLimits('standard'));
+if (!captured.ok) throw new Error('inspection input rejected');
+const canonicalInspectionJson = canonicalize(captured.value);
+```
+
 `prepareCorpusKnowledgeGraphFigureJson` bounds the decoded string's UTF-8 encoded
 length, depth, nodes, member/array
 counts, string and number tokens, rejects malformed JSON/BOM/dangerous keys/duplicate

@@ -7924,7 +7924,12 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         const contractRoot = dirname(fileURLToPath(import.meta.resolve(
           'cortexel/contract/manifest.json',
         )));
+        const canonicalCoreText = core.canonicalize({ browserCore: true, revision: 1 });
         if (typeof root.buildVizSpec !== 'function' || typeof core.validateSpec !== 'function' ||
+            canonicalCoreText !== '{"browserCore":true,"revision":1}' ||
+            root.canonicalize({ browserCore: true, revision: 1 }) !== canonicalCoreText ||
+            'parseAndValidateRequest' in core || 'validateRequestValue' in core ||
+            'buildFigure' in core || 'buildFigureFromValidated' in core ||
             typeof core.spikeRecorderToPopulationRateParams !== 'function' ||
             typeof core.correlationDetectorToCorrelogramParams !== 'function' ||
             typeof core.normalizeSynapseCollectionSnapshot !== 'function' ||
@@ -7991,7 +7996,12 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         const { readFileSync } = require('node:fs');
         const { dirname, join } = require('node:path');
         const contractRoot = dirname(require.resolve('cortexel/contract/manifest.json'));
+        const canonicalCoreText = core.canonicalize({ browserCore: true, revision: 1 });
         if (typeof root.buildVizSpec !== 'function' || typeof core.validateSpec !== 'function' ||
+            canonicalCoreText !== '{"browserCore":true,"revision":1}' ||
+            root.canonicalize({ browserCore: true, revision: 1 }) !== canonicalCoreText ||
+            'parseAndValidateRequest' in core || 'validateRequestValue' in core ||
+            'buildFigure' in core || 'buildFigureFromValidated' in core ||
             typeof core.spikeRecorderToPopulationRateParams !== 'function' ||
             typeof core.correlationDetectorToCorrelogramParams !== 'function' ||
             typeof core.normalizeSynapseCollectionSnapshot !== 'function' ||
@@ -8606,7 +8616,12 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   // sealed with the workspace. Execute imports only that sealed bundle under the
   // normal reviewed launch-surface/network/write guard; the guard is never weakened.
   const browserBundleEntrySource = `
-    import { canonicalDigest, getBudgetLimits, snapshotValue } from 'cortexel/core';
+    import {
+      canonicalDigest,
+      canonicalize,
+      getBudgetLimits,
+      snapshotValue,
+    } from 'cortexel/core';
     import * as headless from 'cortexel/knowledge-graph';
     import * as interactive from 'cortexel/react/knowledge-graph';
     const captured = snapshotValue(
@@ -8614,6 +8629,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       getBudgetLimits('standard'),
     );
     if (!captured.ok ||
+        canonicalize(captured.value) !== '{"graph":"browser-bundle","revision":1}' ||
         canonicalDigest(captured.value) !==
           'sha256:52d2a175a904e285e942a2a9c79cf4543c8ee1618c122335034c5e77ee99e18e') {
       throw new Error('browser bundle omitted the exact JSON capture and digest boundary');
@@ -9873,6 +9889,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         type WeightRecorderTupleSplitResult,
         type WeightMatrixParams,
         canonicalDigest,
+        canonicalize,
         getBudgetLimits,
         snapshotValue,
       } from 'cortexel/core';
@@ -9913,7 +9930,10 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         source: 'type-smoke',
       });
       const captured = snapshotValue({ typeSmoke: true }, getBudgetLimits('standard'));
-      if (captured.ok) canonicalDigest(captured.value);
+      if (captured.ok) {
+        canonicalize(captured.value);
+        canonicalDigest(captured.value);
+      }
       const checkedRequest = parseAndValidateRequest('{}');
       if (checkedRequest.ok) buildFigureFromValidated(checkedRequest.request);
       const safeRepairOutcome: SafeRepairOutcome = applySafeRepairs('{}');
@@ -10178,6 +10198,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       import graph = require('cortexel/react/knowledge-graph');
       import headlessGraph = require('cortexel/knowledge-graph');
       const build: typeof cortexel.buildVizSpec = core.buildVizSpec;
+      const canonicalCoreText: string = core.canonicalize({ browserCore: true, revision: 1 });
       const graphOptions = {} as core.ConnectionGraphOptions;
       const delayOptions = {} as core.DelayDistributionOptions;
       const connectionSceneOptions = {} as core.GetConnectionsSceneOptions;
@@ -10334,6 +10355,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         authoring.lookupCapabilityCatalogEntry('not.a.capability');
       void [
         build,
+        canonicalCoreText,
         safeRepairOutcome,
         safeRepairAudit,
         figure.applySafeRepairs,

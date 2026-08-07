@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { canonicalDigest, getBudgetLimits, snapshotValue } from '../core/index.js';
+import {
+  canonicalDigest,
+  canonicalize,
+  getBudgetLimits,
+  snapshotValue,
+} from '../core/index.js';
 
 describe('browser-safe core exact-JSON exports', () => {
   it('captures one detached JSON value and computes its canonical identity', () => {
@@ -11,6 +16,7 @@ describe('browser-safe core exact-JSON exports', () => {
     if (!captured.ok) return;
 
     expect(captured.value).not.toBe(source);
+    expect(canonicalize(captured.value)).toBe('{"graph":"browser-bundle","revision":1}');
     expect(canonicalDigest(captured.value)).toBe(
       'sha256:52d2a175a904e285e942a2a9c79cf4543c8ee1618c122335034c5e77ee99e18e',
     );

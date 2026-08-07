@@ -115,6 +115,7 @@ exports.adaptEngramCorpusEntityGraph = require_core.adaptEngramCorpusEntityGraph
 exports.buildHostRendererInvocation = require_authoring.buildHostRendererInvocation;
 exports.buildVizSpec = require_authoring.buildVizSpec;
 exports.canonicalDigest = require_canonicalize.canonicalDigest;
+exports.canonicalize = require_canonicalize.canonicalize;
 exports.categorical = require_authoring.categorical;
 exports.colormapGradient = require_authoring.colormapGradient;
 exports.colormapHex = require_authoring.colormapHex;
