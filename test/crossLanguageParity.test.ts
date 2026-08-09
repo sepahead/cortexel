@@ -220,7 +220,11 @@ for index, value in enumerate(values):
             mismatches.append({'index': index, 'actual': actual})
 print(json.dumps({'mismatchCount': mismatch_count, 'mismatches': mismatches}))
 `;
-  const out = python(['-c', script], JSON.stringify(values));
+  const out = python(
+    ['-c', script],
+    JSON.stringify(values),
+    EXHAUSTIVE_DIMENSION_PARITY_TIMEOUT_MS,
+  );
   return JSON.parse(out) as PythonUnitDimensionComparison;
 }
 

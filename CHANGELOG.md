@@ -902,9 +902,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed — bounded cross-language parity subprocesses
 
-- Cross-language parity tests now give each direct Python child a 60-second
-  timeout. A stalled synchronous child can no longer bypass Vitest's test timeout
-  and block the release gate indefinitely.
+- Cross-language parity tests now give each ordinary direct Python child a
+  60-second timeout and the finite exhaustive unit-dimension batch its existing
+  120-second proof budget. A stalled synchronous child can no longer bypass
+  Vitest's test timeout and block the release gate indefinitely, while the
+  measured cold exhaustive batch is not accidentally forced through the shorter
+  ordinary-child bound.
 - The Python parity child runs with `-B`, and the harness no longer creates an
   unused cache directory. Read-only parity checks therefore leave no ambient
   bytecode or directory state behind.
