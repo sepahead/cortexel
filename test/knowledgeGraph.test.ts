@@ -2260,12 +2260,18 @@ describe('graph helpers', () => {
     expect(second).toBe(out);
   });
 
-  it('avoids redundant static-particle uploads under reduced motion', () => {
+  it('keeps static flow markers idle unless the host explicitly enables motion', () => {
     const source = readFileSync(
       new URL('../react/KnowledgeGraph3DScene.tsx', import.meta.url),
       'utf8',
     );
-    expect(source).toContain('(positionsChanged || !reducedMotion)');
+    expect(source).toContain("flowMotion = 'static'");
+    expect(source).toContain(
+      "const flowAnimated = flowMotion === 'animated' && !reducedMotion",
+    );
+    expect(source).toContain('(positionsChanged || flowAnimated)');
+    expect(source).toContain('(flowAnimated && particleCount > 0)');
+    expect(source).not.toContain('(!reducedMotion && particleCount > 0)');
     expect(source).toContain('advanceGraphLayoutClockInto(');
     expect(source).toContain('_layoutClockResult');
     expect(source.match(/visibleLineSegmentCount \* 6/g)).toHaveLength(2);

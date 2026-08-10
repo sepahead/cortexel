@@ -6,6 +6,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — lean agent discovery and idle knowledge graphs
+
+- Reduced `cortexel catalog --json` to the 19-skill routing projection. Adapter
+  status remains available on the selected skill through `describe`, avoiding
+  transfer of every historical mapping on each agent discovery turn.
+- Made citation-flow markers static by default in the canonical 3D knowledge
+  graph. A settled demand-rendered scene now becomes idle; hosts may explicitly
+  request `flowMotion="animated"`, while static arrowheads continue to encode
+  direction and reduced-motion always remains static.
+
 ### Added — receipt-bound legacy Engram corpus graphs
 
 - Added a closed `CorpusEntityGraphResponse` branch for Engram's exact

@@ -240,8 +240,8 @@ describe('cli — identity, catalog, and direct execution', () => {
       revision: expect.any(Number),
       availability: 'packaged',
       releaseReady: false,
-      adapters: expect.any(Array),
     }));
+    expect(stablePayload.skills[0]).not.toHaveProperty('adapters');
 
     const all = capture(() => run(['catalog', '--include-experimental', '--json']));
     expect(all.code).toBe(0);

@@ -629,13 +629,7 @@ function cmdCatalog(args) {
 			title: SKILL_CATALOG[id].title,
 			question: SKILL_CATALOG[id].canonicalQuestion,
 			availability: SKILL_CATALOG[id].availability,
-			releaseReady: SKILL_CATALOG[id].releaseReady,
-			adapters: SKILL_CATALOG[id].adapters.map((adapter) => ({
-				mappingId: adapter.mappingId,
-				feasibilityStatus: adapter.feasibilityStatus,
-				definitionStatus: adapter.definitionStatus,
-				implementationAvailability: adapter.implementationAvailability
-			}))
+			releaseReady: SKILL_CATALOG[id].releaseReady
 		}));
 		const payload = {
 			protocol: "cortexel-cli-catalog",

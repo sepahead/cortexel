@@ -387,6 +387,12 @@ node and edge colors against the exact light/dark `hostPolicy.backgroundColor` a
 discloses both source and intended undimmed scene colors in the DOM legend. The host must paint that
 background behind the Canvas. These are bounded structural/contrast regressions, not
 CVD, grayscale, browser, assistive-technology, or whole-view WCAG conformance evidence.
+Flow markers are static by default, so a settled demand-rendered graph becomes idle;
+hosts can explicitly request animated markers as a redundant cue, while arrowheads
+remain the direction-bearing encoding and reduced-motion always remains static.
+
+The stable CLI catalog is intentionally only a routing list. Adapter status belongs
+to the selected skill's `describe` response, keeping the normal agent loop compact.
 
 Presentation preparation, the caption, legend, paginated DOM navigation, and complete
 static records admit at most 1,000 nodes and 4,000 edges. The DOM entry uses that

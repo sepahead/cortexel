@@ -107,6 +107,8 @@ export interface KnowledgeGraphAccessibleFigureCommonProps {
   readonly flyToSelection?: boolean;
   readonly labelColor?: string;
   readonly particleColor?: string;
+  /** Static by default; opt into continuous flow-marker motion explicitly. */
+  readonly flowMotion?: 'static' | 'animated';
   readonly reducedMotion?: boolean;
   readonly nodePageSize?: number;
   readonly recordNodePageSize?: number;
@@ -140,6 +142,7 @@ interface KnowledgeGraphInteractiveRegionProps {
   readonly flyToSelection: boolean | undefined;
   readonly labelColor: string | undefined;
   readonly particleColor: string | undefined;
+  readonly flowMotion: 'static' | 'animated' | undefined;
   readonly reducedMotion: boolean | undefined;
   readonly query: string;
 }
@@ -154,6 +157,7 @@ function KnowledgeGraphInteractiveRegion({
   flyToSelection,
   labelColor,
   particleColor,
+  flowMotion,
   reducedMotion,
   query,
 }: KnowledgeGraphInteractiveRegionProps) {
@@ -205,6 +209,7 @@ function KnowledgeGraphInteractiveRegion({
       flyToSelection={flyToSelection}
       labelColor={labelColor}
       particleColor={particleColor}
+      flowMotion={flowMotion}
       themeMode={hostPolicy.themeMode}
       reducedMotion={reducedMotion}
     />
@@ -249,6 +254,7 @@ export function KnowledgeGraphAccessibleFigure(
     flyToSelection,
     labelColor,
     particleColor,
+    flowMotion,
     reducedMotion,
     nodePageSize,
     recordNodePageSize,
@@ -281,6 +287,7 @@ export function KnowledgeGraphAccessibleFigure(
           flyToSelection={flyToSelection}
           labelColor={labelColor}
           particleColor={particleColor}
+          flowMotion={flowMotion}
           reducedMotion={reducedMotion}
           query={query}
         />

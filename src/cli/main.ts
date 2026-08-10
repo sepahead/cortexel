@@ -861,12 +861,6 @@ function cmdCatalog(args: readonly string[]): number {
       question: SKILL_CATALOG[id].canonicalQuestion,
       availability: SKILL_CATALOG[id].availability,
       releaseReady: SKILL_CATALOG[id].releaseReady,
-      adapters: SKILL_CATALOG[id].adapters.map((adapter) => ({
-        mappingId: adapter.mappingId,
-        feasibilityStatus: adapter.feasibilityStatus,
-        definitionStatus: adapter.definitionStatus,
-        implementationAvailability: adapter.implementationAvailability,
-      })),
     }));
     const payload: Record<string, unknown> = {
       protocol: 'cortexel-cli-catalog',

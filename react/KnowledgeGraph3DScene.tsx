@@ -179,6 +179,10 @@ interface KnowledgeGraph3DSceneCommonProps {
   labelColor?: string;
   /** Citation-flow particle color (a single visual language for flow). */
   particleColor?: string;
+  /** Flow markers are static by default so a settled demand-rendered graph is
+   *  genuinely idle. Hosts may opt into continuous motion as a redundant cue;
+   *  static arrowheads remain the direction-bearing encoding either way. */
+  flowMotion?: 'static' | 'animated';
   /** Controls light-safe dimming/blending; defaults to the legacy dark surface. */
   themeMode?: 'dark' | 'light';
   /** Host-detected `prefers-reduced-motion` (same contract as the Expandable*
@@ -525,6 +529,7 @@ function KnowledgeGraph3DSceneInstance({
   flyToSelection = false,
   labelColor,
   particleColor,
+  flowMotion = 'static',
   themeMode = 'dark',
   reducedMotion = false,
 }: KnowledgeGraph3DSceneInstanceProps) {
@@ -549,6 +554,7 @@ function KnowledgeGraph3DSceneInstance({
   const resolvedParticleColor = particleColor ?? (
     themeMode === 'light' ? '#0369a1' : '#8fd3ff'
   );
+  const flowAnimated = flowMotion === 'animated' && !reducedMotion;
   const resolvedGlyphColor = themeMode === 'light' ? '#0f172a' : '#f8fafc';
   useEffect(() => {
     if (autoFrame && cameraProjectionKind === null) {
@@ -686,7 +692,7 @@ function KnowledgeGraph3DSceneInstance({
     };
   }, [gl, hoverId, index]);
 
-  // The (few) edges that carry animated flow particles.
+  // The (few) edges that carry redundant citation-flow markers.
   const flowEdges = useMemo(
     () => edgeLanes.filter(({ edge }) => edge.particles),
     [edgeLanes],
@@ -870,6 +876,14 @@ function KnowledgeGraph3DSceneInstance({
       },
     );
   }, [graphKey, reducedMotion, invalidate]);
+
+  // Changing only the redundant flow cue must not restart D3 or remount the
+  // camera. Rebuild existing matrices once; animated mode then keeps the demand
+  // loop alive, while static mode becomes completely idle after settlement.
+  useLayoutEffect(() => {
+    geometryDirtyRef.current = true;
+    invalidate();
+  }, [flowAnimated, invalidate]);
 
   // Emphasis: bake node + link colors on discrete focus/query changes (not per frame).
   const applyEmphasis = useCallback(() => {
@@ -1213,20 +1227,22 @@ function KnowledgeGraph3DSceneInstance({
       }
     }
 
-    // Citation flow particles gliding along their edges.
+    // Citation-flow markers. Motion is an explicit host opt-in; the default
+    // places markers at stable interior curve parameters and performs no work
+    // once layout, focus, and camera state have settled.
     const pmesh = particlesRef.current;
-    if (pmesh && particleCount > 0 && (positionsChanged || !reducedMotion)) {
+    if (pmesh && particleCount > 0 && (positionsChanged || flowAnimated)) {
       _dummy.quaternion.identity();
-      // Reduced motion: hold markers at strictly interior curve parameters.
+      // Static/reduced motion: hold markers at strictly interior parameters.
       // Layout geometry can still occlude a marker; direction remains redundant
       // in the arrowhead and DOM relationship text.
-      if (!reducedMotion) {
+      if (flowAnimated) {
         flowPhaseRef.current = advanceKnowledgeGraphFlowPhase(
           flowPhaseRef.current,
           delta,
         );
       }
-      const base = reducedMotion ? 0 : flowPhaseRef.current;
+      const base = flowAnimated ? flowPhaseRef.current : 0;
       let p = 0;
       for (let fe = 0; fe < flowEdges.length && p < particleCount; fe++) {
         const lane = flowEdges[fe];
@@ -1253,9 +1269,9 @@ function KnowledgeGraph3DSceneInstance({
         const edgeParticleCount = particleDistribution.basePerEdge +
           (fe < particleDistribution.extraEdgeCount ? 1 : 0);
         for (let q = 0; q < edgeParticleCount && p < particleCount; q++) {
-          const frac = reducedMotion
-            ? reducedMotionFlowParticleFraction(q, edgeParticleCount)
-            : (base + phase + q / edgeParticleCount) % 1;
+          const frac = flowAnimated
+            ? (base + phase + q / edgeParticleCount) % 1
+            : reducedMotionFlowParticleFraction(q, edgeParticleCount);
           graphEdgeCurvePointInto(_a, _curveControl, _b, frac, _dummy.position);
           _dummy.scale.setScalar(size);
           _dummy.updateMatrix();
@@ -1519,7 +1535,7 @@ function KnowledgeGraph3DSceneInstance({
 
     if (
       sim.alpha() > GRAPH_LAYOUT_SETTLED_ALPHA ||
-      (!reducedMotion && particleCount > 0) ||
+      (flowAnimated && particleCount > 0) ||
       flyToIdRef.current !== null
     ) {
       invalidate();

@@ -1084,6 +1084,7 @@ describe('coherent knowledge-graph surfaces', () => {
         hoverId={null}
         onHover={() => {}}
         reducedMotion
+        flowMotion="animated"
         label={'Graph\u202e'}
       />,
     );
@@ -1103,6 +1104,7 @@ describe('coherent knowledge-graph surfaces', () => {
     expect(observedContext?.themeMode).toBe(gated.spec.themeMode);
     expect(observedContext?.backgroundColor).toBe('#f8fafc');
     expect((observedScene?.props as { themeMode?: string }).themeMode).toBe('light');
+    expect((observedScene?.props as { flowMotion?: string }).flowMotion).toBe('animated');
     expect(Object.isFrozen(observedContext)).toBe(true);
   });
 

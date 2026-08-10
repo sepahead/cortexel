@@ -647,7 +647,7 @@ function renderKnowledgeGraph3DScene(props) {
 		edges
 	}, graphIdentity);
 }
-function KnowledgeGraph3DSceneInstance({ graphIdentity, nodes, edges, selectedId, query, onSelect, hoverId, onHover, controlsRef, autoFrame = false, flyToSelection = false, labelColor, particleColor, themeMode = "dark", reducedMotion = false }) {
+function KnowledgeGraph3DSceneInstance({ graphIdentity, nodes, edges, selectedId, query, onSelect, hoverId, onHover, controlsRef, autoFrame = false, flyToSelection = false, labelColor, particleColor, flowMotion = "static", themeMode = "dark", reducedMotion = false }) {
 	const meshRef = (0, react.useRef)(null);
 	const linesRef = (0, react.useRef)(null);
 	const particlesRef = (0, react.useRef)(null);
@@ -665,6 +665,7 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, nodes, edges, selectedId
 	const orthographicCamera = camera;
 	const resolvedLabelColor = labelColor ?? (themeMode === "light" ? "#0f172a" : "#e2e8f0");
 	const resolvedParticleColor = particleColor ?? (themeMode === "light" ? "#0369a1" : "#8fd3ff");
+	const flowAnimated = flowMotion === "animated" && !reducedMotion;
 	const resolvedGlyphColor = themeMode === "light" ? "#0f172a" : "#f8fafc";
 	(0, react.useEffect)(() => {
 		if (autoFrame && cameraProjectionKind === null) devWarn("knowledge-graph auto-frame supports only perspective and orthographic cameras");
@@ -841,6 +842,10 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, nodes, edges, selectedId
 		reducedMotion,
 		invalidate
 	]);
+	(0, react.useLayoutEffect)(() => {
+		geometryDirtyRef.current = true;
+		invalidate();
+	}, [flowAnimated, invalidate]);
 	const applyEmphasis = (0, react.useCallback)(() => {
 		const mesh = meshRef.current;
 		const raw = hoverId ?? selectedId;
@@ -1014,10 +1019,10 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, nodes, edges, selectedId
 			}
 		}
 		const pmesh = particlesRef.current;
-		if (pmesh && particleCount > 0 && (positionsChanged || !reducedMotion)) {
+		if (pmesh && particleCount > 0 && (positionsChanged || flowAnimated)) {
 			_dummy.quaternion.identity();
-			if (!reducedMotion) flowPhaseRef.current = advanceKnowledgeGraphFlowPhase(flowPhaseRef.current, delta);
-			const base = reducedMotion ? 0 : flowPhaseRef.current;
+			if (flowAnimated) flowPhaseRef.current = advanceKnowledgeGraphFlowPhase(flowPhaseRef.current, delta);
+			const base = flowAnimated ? flowPhaseRef.current : 0;
 			let p = 0;
 			for (let fe = 0; fe < flowEdges.length && p < particleCount; fe++) {
 				const lane = flowEdges[fe];
@@ -1033,7 +1038,7 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, nodes, edges, selectedId
 				const phase = fe * .618034;
 				const edgeParticleCount = particleDistribution.basePerEdge + (fe < particleDistribution.extraEdgeCount ? 1 : 0);
 				for (let q = 0; q < edgeParticleCount && p < particleCount; q++) {
-					const frac = reducedMotion ? reducedMotionFlowParticleFraction(q, edgeParticleCount) : (base + phase + q / edgeParticleCount) % 1;
+					const frac = flowAnimated ? (base + phase + q / edgeParticleCount) % 1 : reducedMotionFlowParticleFraction(q, edgeParticleCount);
 					require_knowledgeGraphFigure.graphEdgeCurvePointInto(_a, _curveControl, _b, frac, _dummy.position);
 					_dummy.scale.setScalar(size);
 					_dummy.updateMatrix();
@@ -1147,7 +1152,7 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, nodes, edges, selectedId
 				if (controls.target.distanceTo(_a) < .5) flyToIdRef.current = null;
 			} else flyToIdRef.current = null;
 		}
-		if (sim.alpha() > GRAPH_LAYOUT_SETTLED_ALPHA || !reducedMotion && particleCount > 0 || flyToIdRef.current !== null) invalidate();
+		if (sim.alpha() > GRAPH_LAYOUT_SETTLED_ALPHA || flowAnimated && particleCount > 0 || flyToIdRef.current !== null) invalidate();
 		if (positionsChanged) {
 			publishGraphLayoutCache(posMap, runtime, completedCacheBufferIndex);
 			geometryDirtyRef.current = false;
@@ -1360,7 +1365,7 @@ var KnowledgeGraphVisualBoundary = class extends react.Component {
 function KnowledgeGraphVisualMount({ renderVisual, scene, context }) {
 	return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(react_jsx_runtime.Fragment, { children: renderVisual(scene, context) });
 }
-function KnowledgeGraphInteractiveRegion({ context, renderVisual, visualAvailable, visualRetryKey, controlsRef, autoFrame, flyToSelection, labelColor, particleColor, reducedMotion, query }) {
+function KnowledgeGraphInteractiveRegion({ context, renderVisual, visualAvailable, visualRetryKey, controlsRef, autoFrame, flyToSelection, labelColor, particleColor, flowMotion, reducedMotion, query }) {
 	const { presentation, view, hostPolicy, activeToken, selectedId, onSelect, hoverId, onHover } = context;
 	if (onHover === void 0) throw new Error("interactive knowledge-graph hover controller invariant failed");
 	const visualUnavailableStatus = /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
@@ -1400,6 +1405,7 @@ function KnowledgeGraphInteractiveRegion({ context, renderVisual, visualAvailabl
 		flyToSelection,
 		labelColor,
 		particleColor,
+		flowMotion,
 		themeMode: hostPolicy.themeMode,
 		reducedMotion
 	}) : null;
@@ -1422,7 +1428,7 @@ function KnowledgeGraphInteractiveRegion({ context, renderVisual, visualAvailabl
 * assistive-technology conformance.
 */
 function KnowledgeGraphAccessibleFigure(props) {
-	const { renderVisual, selectedId, onSelect, hoverId, onHover, visualAvailable = true, visualRetryKey, viewPolicy, query = "", controlsRef, autoFrame = true, flyToSelection, labelColor, particleColor, reducedMotion, nodePageSize, recordNodePageSize, recordEdgePageSize, activePalette, className, label = "Interactive knowledge graph" } = props;
+	const { renderVisual, selectedId, onSelect, hoverId, onHover, visualAvailable = true, visualRetryKey, viewPolicy, query = "", controlsRef, autoFrame = true, flyToSelection, labelColor, particleColor, flowMotion, reducedMotion, nodePageSize, recordNodePageSize, recordEdgePageSize, activePalette, className, label = "Interactive knowledge graph" } = props;
 	return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(require_KnowledgeGraphCorpusFrame_internal.KnowledgeGraphCorpusFrameInternal, {
 		sourceInput: props,
 		selectionController: {
@@ -1451,6 +1457,7 @@ function KnowledgeGraphAccessibleFigure(props) {
 			flyToSelection,
 			labelColor,
 			particleColor,
+			flowMotion,
 			reducedMotion,
 			query
 		})

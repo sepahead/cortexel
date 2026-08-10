@@ -44,6 +44,10 @@ interface KnowledgeGraph3DSceneCommonProps {
   labelColor?: string;
   /** Citation-flow particle color (a single visual language for flow). */
   particleColor?: string;
+  /** Flow markers are static by default so a settled demand-rendered graph is
+   *  genuinely idle. Hosts may opt into continuous motion as a redundant cue;
+   *  static arrowheads remain the direction-bearing encoding either way. */
+  flowMotion?: 'static' | 'animated';
   /** Controls light-safe dimming/blending; defaults to the legacy dark surface. */
   themeMode?: 'dark' | 'light';
   /** Host-detected `prefers-reduced-motion` (same contract as the Expandable*
@@ -144,6 +148,8 @@ interface KnowledgeGraphAccessibleFigureCommonProps {
   readonly flyToSelection?: boolean;
   readonly labelColor?: string;
   readonly particleColor?: string;
+  /** Static by default; opt into continuous flow-marker motion explicitly. */
+  readonly flowMotion?: 'static' | 'animated';
   readonly reducedMotion?: boolean;
   readonly nodePageSize?: number;
   readonly recordNodePageSize?: number;

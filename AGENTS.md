@@ -63,6 +63,9 @@ Structural success is not acceptance—always call `validate`.
 The `summary`, `example`, and `schema` sections carry only compact skill identity,
 renderer, availability, and adapter-status metadata; only `all` includes the full
 scientific/evidence/authority catalog record.
+The top-level `catalog` is deliberately lean routing metadata; select a skill there,
+then use `describe` for its adapter status instead of paying for every historical
+mapping on every discovery turn.
 
 Skill adapter metadata is not an invocation surface. `cortexel source catalog --json`
 is the closed digest-bound list of adapters the installed package can actually execute.
@@ -532,7 +535,10 @@ when retaining the host's existing zoom and clipping policy is required. The val
 light/dark theme selects the exact `hostPolicy.backgroundColor`, contrast-normalized
 undimmed node/edge colors, three closed node glyph shells, four closed relationship
 stroke patterns, contrast-paired label defaults, and safe dim/flow-marker defaults.
-Directed edges retain static arrowheads, so direction does not depend on motion. The
+Directed edges retain static arrowheads, so direction does not depend on motion. Flow
+markers are static by default so a settled demand-rendered graph becomes idle; pass
+`flowMotion="animated"` only when continuous redundant motion is worth its frame cost.
+Reduced-motion always remains static. The
 host must actually paint `hostPolicy.backgroundColor`; transparency over an unrelated
 page background invalidates the mark-contrast premise. A custom label color makes label
 contrast against that background the host's responsibility. The minimal
