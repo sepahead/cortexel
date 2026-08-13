@@ -6,6 +6,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — development dependency audit
+
+- Pinned the transitive `nanoid` build/test dependency to patched version 3.3.18,
+  closing GHSA-2v37-7h3g-55p8 without adding it to Cortexel's published runtime
+  dependencies.
+
 ### Changed — lean agent discovery and idle knowledge graphs
 
 - Reduced `cortexel catalog --json` to the 19-skill routing projection. Adapter
