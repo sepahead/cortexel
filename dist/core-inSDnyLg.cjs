@@ -248,7 +248,7 @@ function compareTuple(left, right) {
 	}
 	return left.length - right.length;
 }
-function receiptGraphErrors(graph, graphSnapshotId) {
+function receiptGraphErrors(graph, rawSnapshot, graphSnapshotId) {
 	const errors = [];
 	const receipt = graph.derivation_receipt;
 	if (receipt.source_revision_created_at !== graph.generated_at || receipt.eligible_paper_count !== graph.paper_count || require_canonicalize.canonicalize(receipt.identity_derivation) !== require_canonicalize.canonicalize(graph.identity_derivation)) errors.push("derivation receipt does not match the graph summary or identity derivation");
@@ -267,7 +267,7 @@ function receiptGraphErrors(graph, graphSnapshotId) {
 	if (edgeKeys.some((key, index) => index > 0 && compareTuple(edgeKeys[index - 1], key) >= 0) || graph.edges.some((edge) => edge.source === edge.target || !nodeIdSet.has(edge.source) || !nodeIdSet.has(edge.target))) errors.push("receipt-bound graph edges must be unique, canonical, non-self, and non-dangling");
 	if (graph.identity_derivation.status === "abstained" && (graph.nodes.some((node) => node.kind !== "paper") || graph.edges.some((edge) => edge.kind !== "cites"))) errors.push("an abstained identity derivation cannot emit identity entities");
 	if (graph.edges.some((edge) => edge.confidence != null && edge.kind !== "cites" && edge.kind !== "variant_of")) errors.push("membership edges cannot carry an undeclared confidence meaning");
-	if (require_canonicalize.canonicalDigest(graph) !== graphSnapshotId) errors.push("graphSnapshotId does not bind the complete receipt-bound response");
+	if (require_canonicalize.canonicalDigest(rawSnapshot) !== graphSnapshotId) errors.push("graphSnapshotId does not bind the complete receipt-bound response");
 	return errors;
 }
 function adaptEngramCorpusEntityGraph(graph, options) {
@@ -329,7 +329,7 @@ function adaptEngramCorpusEntityGraph(graph, options) {
 		};
 		const receiptBound = isReceiptBoundGraph(graphValue);
 		if (receiptBound) {
-			const receiptErrors = receiptGraphErrors(graphValue, optionValue.graphSnapshotId);
+			const receiptErrors = receiptGraphErrors(graphValue, graphSnapshot.data, optionValue.graphSnapshotId);
 			if (receiptErrors.length > 0) return {
 				ok: false,
 				errors: receiptErrors
@@ -3349,4 +3349,4 @@ Object.defineProperty(exports, 'weightRecorderToSceneData', {
     return weightRecorderToSceneData;
   }
 });
-//# sourceMappingURL=core-D01umxG7.cjs.map
+//# sourceMappingURL=core-inSDnyLg.cjs.map

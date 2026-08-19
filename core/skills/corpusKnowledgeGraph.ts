@@ -471,6 +471,7 @@ function compareTuple(
 
 function receiptGraphErrors(
   graph: z.infer<typeof ReceiptBoundEngramGraphSchema>,
+  rawSnapshot: Record<string, unknown>,
   graphSnapshotId: string,
 ): string[] {
   const errors: string[] = [];
@@ -538,7 +539,7 @@ function receiptGraphErrors(
   ) {
     errors.push('membership edges cannot carry an undeclared confidence meaning');
   }
-  if (canonicalDigest(graph) !== graphSnapshotId) {
+  if (canonicalDigest(rawSnapshot) !== graphSnapshotId) {
     errors.push('graphSnapshotId does not bind the complete receipt-bound response');
   }
   return errors;
@@ -608,7 +609,11 @@ export function adaptEngramCorpusEntityGraph(
     if (summaries.length > 0) return { ok: false, errors: summaries };
     const receiptBound = isReceiptBoundGraph(graphValue);
     if (receiptBound) {
-      const receiptErrors = receiptGraphErrors(graphValue, optionValue.graphSnapshotId);
+      const receiptErrors = receiptGraphErrors(
+        graphValue,
+        graphSnapshot.data,
+        optionValue.graphSnapshotId,
+      );
       if (receiptErrors.length > 0) return { ok: false, errors: receiptErrors };
     }
 
