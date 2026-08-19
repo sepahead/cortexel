@@ -62,7 +62,10 @@ theorem classify_from_saturation (limit count : Nat) :
         then .overBudget
         else .exact (saturate limit count) := by
   simp only [classify, saturate]
-  split <;> split <;> simp_all <;> omega
+  by_cases bounded : count ≤ limit <;>
+    by_cases sentinel : min count (limit + 1) = limit + 1 <;>
+    simp_all <;>
+    omega
 
 theorem saturate_add_left (limit left right : Nat) :
     saturate limit (left + right) =

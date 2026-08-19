@@ -15,6 +15,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   documented contract that the snapshot id equals the RFC 8785 SHA-256 digest
   of the complete captured response.
 
+### Changed — Lean toolchain pinned to v4.33.0
+
+- Bumped the repository `lean-toolchain` pin from v4.32.2 to v4.33.0 and ported
+  `WeightRowSaturation.classify_from_saturation` to explicit `by_cases` splits,
+  since Lean 4.33's `split` no longer splits a right-hand-side `if` in an
+  equality goal. `lake build --wfail` is green under the new toolchain; CI's
+  `lean-action` follows the pin.
+
 ### Changed — rotated reviewed source-map closure digest
 
 - Rotated `REVIEWED_PACKAGE_SOURCE_MAP_INPUT_CLOSURE_DIGEST` in
