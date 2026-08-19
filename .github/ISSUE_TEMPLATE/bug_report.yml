@@ -6,14 +6,14 @@ body:
     id: what
     attributes:
       label: What happened?
-      description: A clear description of the bug, including the scene and VizSpec involved.
+      description: A clear description of the bug, including the scene/VizSpec or FigureRequestV1 skill id involved.
     validations:
       required: true
   - type: textarea
     id: repro
     attributes:
       label: Reproduction
-      description: Minimal steps or a VizSpec JSON that triggers it.
+      description: Minimal steps, or a VizSpec / FigureRequestV1 JSON that triggers it.
     validations:
       required: true
   - type: textarea

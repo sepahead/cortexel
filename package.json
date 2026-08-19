@@ -24,7 +24,15 @@
     "llm",
     "webgl",
     "spiking-neural-network",
-    "nest"
+    "nest",
+    "nest-simulator",
+    "provenance",
+    "data-provenance",
+    "reproducibility",
+    "scientific-figures",
+    "figure-contracts",
+    "svg",
+    "deterministic-rendering"
   ],
   "files": [
     "dist",

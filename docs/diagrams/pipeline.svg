@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1240" width="1080" height="1240" role="img" aria-labelledby="cx-pipeline-title cx-pipeline-desc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+  <title id="cx-pipeline-title">Cortexel pipeline: from raw request to honest figure artifact</title>
+  <desc id="cx-pipeline-desc">Twelve ordered stages transform a raw JSON request into a deterministic SVG figure and a digest-bound FigureArtifactV1. Every validation gate fails closed into one structured-error channel that feeds the agent repair loop. No stage can be skipped or reordered.</desc>
+  <defs>
+    <marker id="cxArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <marker id="cxArrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#983307"/>
+    </marker>
+    <style>
+      .h1 { font-size: 25px; font-weight: 650; fill: #e2e8f0; letter-spacing: 0.2px; }
+      .sub { font-size: 13.5px; fill: #94a3b8; }
+      .stageName { font-size: 15px; font-weight: 600; fill: #e2e8f0; }
+      .stageDetail { font-size: 11.5px; fill: #94a3b8; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .num { font-size: 13px; font-weight: 700; fill: #050816; }
+      .lane { font-size: 12px; font-weight: 650; fill: #dba584; letter-spacing: 1.6px; }
+      .laneDetail { font-size: 11px; fill: #94a3b8; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .foot { font-size: 10.5px; fill: #64748b; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .box { fill: #0b1220; stroke: #1e293b; stroke-width: 1.2; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="1240" fill="#050816"/>
+  <text x="40" y="52" class="h1">The Cortexel pipeline — raw request to honest figure artifact</text>
+  <text x="40" y="78" class="sub">FigureRequestV1 surface. Every gate is fail-closed: any failure returns structured errors, never a partial figure.</text>
+
+  <!-- Rejection / repair lane -->
+  <rect x="40" y="112" width="184" height="1032" rx="12" fill="#0b1220" stroke="#983307" stroke-width="1.2" stroke-dasharray="5 5"/>
+  <text x="132" y="140" class="lane" text-anchor="middle">FAIL CLOSED</text>
+  <text x="52" y="166" class="laneDetail">structured errors:</text>
+  <text x="52" y="184" class="laneDetail">  code + path + hint</text>
+  <text x="52" y="202" class="laneDetail">  didYouMean match</text>
+  <text x="52" y="220" class="laneDetail">  copyable example</text>
+  <text x="52" y="252" class="laneDetail">formatInvocation-</text>
+  <text x="52" y="268" class="laneDetail">Errors() renders a</text>
+  <text x="52" y="284" class="laneDetail">prompt-safe block:</text>
+  <text x="52" y="302" class="laneDetail">  untrustedData:true</text>
+  <text x="52" y="318" class="laneDetail">  sanitized text</text>
+  <text x="52" y="352" class="laneDetail">The agent repair</text>
+  <text x="52" y="368" class="laneDetail">loop retries with</text>
+  <text x="52" y="384" class="laneDetail">the fixed request.</text>
+  <text x="52" y="416" class="laneDetail">applySafeRepairs is</text>
+  <text x="52" y="432" class="laneDetail">narrow: adds absent</text>
+  <text x="52" y="448" class="laneDetail">identity, canonical</text>
+  <text x="52" y="464" class="laneDetail">unit aliases only.</text>
+  <text x="52" y="496" class="laneDetail">It never migrates a</text>
+  <text x="52" y="512" class="laneDetail">skill, deletes data,</text>
+  <text x="52" y="528" class="laneDetail">or grants render</text>
+  <text x="52" y="544" class="laneDetail">authority.</text>
+  <path d="M 224 1090 L 132 1090 L 132 576" fill="none" stroke="#983307" stroke-width="1.4" stroke-dasharray="4 4" marker-end="url(#cxArrowRed)"/>
+
+  <!-- Stage 1 -->
+  <g>
+    <rect x="252" y="112" width="788" height="66" rx="12" class="box"/>
+    <rect x="252" y="112" width="5" height="66" rx="2.5" fill="#136697"/>
+    <circle cx="288" cy="145" r="14" fill="#136697"/><text x="288" y="150" class="num" text-anchor="middle">1</text>
+    <text x="316" y="140" class="stageName">Raw JSON text</text>
+    <text x="316" y="162" class="stageDetail">caller, CLI, or source adapter output — accepted only as text or detached snapshot</text>
+  </g>
+  <path d="M 646 178 L 646 196" stroke="#64748b" stroke-width="1.4" marker-end="url(#cxArrow)"/>
+
+  <!-- Stage 2 -->
+  <g>
+    <rect x="252" y="196" width="788" height="66" rx="12" class="box"/>
+    <rect x="252" y="196" width="5" height="66" rx="2.5" fill="#c09036"/>
+    <circle cx="288" cy="229" r="14" fill="#c09036"/><text x="288" y="234" class="num" text-anchor="middle">2</text>
+    <text x="316" y="224" class="stageName">Strict parse</text>
+    <text x="316" y="246" class="stageDetail">rejects duplicate object members and BOM before materialization; exact-JSON budgets enforced first</text>
+  </g>
+  <path d="M 646 262 L 646 280" stroke="#64748b" stroke-width="1.4" marker-end="url(#cxArrow)"/>
+
+  <!-- Stage 3 -->
+  <g>
+    <rect x="252" y="280" width="788" height="66" rx="12" class="box"/>
+    <rect x="252" y="280" width="5" height="66" rx="2.5" fill="#c09036"/>
+    <circle cx="288" cy="313" r="14" fill="#c09036"/><text x="288" y="318" class="num" text-anchor="middle">3</text>
+    <text x="316" y="308" class="stageName">Caller-authority check</text>
+    <text x="316" y="330" class="stageDetail">library-generated facts (digests, disclosures, validation results) cannot be forged by a request</text>
+  </g>
+  <path d="M 646 346 L 646 364" stroke="#64748b" stroke-width="1.4" marker-end="url(#cxArrow)"/>
+
+  <!-- Stage 4 -->
+  <g>
+    <rect x="252" y="364" width="788" height="66" rx="12" class="box"/>
+    <rect x="252" y="364" width="5" height="66" rx="2.5" fill="#c09036"/>
+    <circle cx="288" cy="397" r="14" fill="#c09036"/><text x="288" y="402" class="num" text-anchor="middle">4</text>
+    <text x="316" y="392" class="stageName">Contract identity</text>
+    <text x="316" y="414" class="stageDetail">exact skill id + revision from the closed catalog; unknown or unexecutable identities fail closed</text>
+  </g>
+  <path d="M 646 430 L 646 448" stroke="#64748b" stroke-width="1.4" marker-end="url(#cxArrow)"/>
+
+  <!-- Stage 5 -->
+  <g>
+    <rect x="252" y="448" width="788" height="66" rx="12" class="box"/>
+    <rect x="252" y="448" width="5" height="66" rx="2.5" fill="#c09036"/>
+    <circle cx="288" cy="481" r="14" fill="#c09036"/><text x="288" y="486" class="num" text-anchor="middle">5</text>
+    <text x="316" y="476" class="stageName">Structural validation</text>
+    <text x="316" y="498" class="stageDetail">JSON Schema 2020-12 via digest-bound Ajv profile; no coercion, no defaults, no removeAdditional</text>
+  </g>
+  <path d="M 646 514 L 646 532" stroke="#64748b" stroke-width="1.4" marker-end="url(#cxArrow)"/>
+
+  <!-- Stage 6 -->
+  <g>
+    <rect x="252" y="532" width="788" height="66" rx="12" class="box"/>
+    <rect x="252" y="532" width="5" height="66" rx="2.5" fill="#c09036"/>
+    <circle cx="288" cy="565" r="14" fill="#c09036"/><text x="288" y="570" class="num" text-anchor="middle">6</text>
+    <text x="316" y="560" class="stageName">Semantic validation</text>
+    <text x="316" y="582" class="stageDetail">closed, named scientific rules: units, bins, sender universes, time windows, capture authority</text>
+  </g>
+  <path d="M 646 598 L 646 616" stroke="#64748b" stroke-width="1.4" marker-end="url(#cxArrow)"/>
+
+  <!-- Stage 7 -->
+  <g>
+    <rect x="252" y="616" width="788" height="66" rx="12" class="box"/>
+    <rect x="252" y="616" width="5" height="66" rx="2.5" fill="#3a6b54"/>
+    <circle cx="288" cy="649" r="14" fill="#3a6b54"/><text x="288" y="654" class="num" text-anchor="middle">7</text>
+    <text x="316" y="644" class="stageName">Canonicalize — RFC 8785</text>
+    <text x="316" y="666" class="stageDetail">canonical JSON + SHA-256; a branded ValidatedRequest token is issued, never re-parsed</text>
+  </g>
+  <path d="M 646 682 L 646 700" stroke="#64748b" stroke-width="1.4" marker-end="url(#cxArrow)"/>
+
+  <!-- Stage 8 -->
+  <g>
+    <rect x="252" y="700" width="788" height="66" rx="12" class="box"/>
+    <rect x="252" y="700" width="5" height="66" rx="2.5" fill="#3a6b54"/>
+    <circle cx="288" cy="733" r="14" fill="#3a6b54"/><text x="288" y="738" class="num" text-anchor="middle">8</text>
+    <text x="316" y="728" class="stageName">Deterministic derivation</text>
+    <text x="316" y="750" class="stageDetail">analysis computed from the validated request alone: counts, rates, bins, matrices — no hidden state</text>
+  </g>
+  <path d="M 646 766 L 646 784" stroke="#64748b" stroke-width="1.4" marker-end="url(#cxArrow)"/>
+
+  <!-- Stage 9 -->
+  <g>
+    <rect x="252" y="784" width="788" height="66" rx="12" class="box"/>
+    <rect x="252" y="784" width="5" height="66" rx="2.5" fill="#ed9a62"/>
+    <circle cx="288" cy="817" r="14" fill="#ed9a62"/><text x="288" y="822" class="num" text-anchor="middle">9</text>
+    <text x="316" y="812" class="stageName">Compile pure render plan</text>
+    <text x="316" y="834" class="stageDetail">layout, scales, marks, legend, table rows; plan is closed and deeply frozen before serialization</text>
+  </g>
+  <path d="M 646 850 L 646 868" stroke="#64748b" stroke-width="1.4" marker-end="url(#cxArrow)"/>
+
+  <!-- Stage 10 -->
+  <g>
+    <rect x="252" y="868" width="788" height="66" rx="12" class="box"/>
+    <rect x="252" y="868" width="5" height="66" rx="2.5" fill="#ed9a62"/>
+    <circle cx="288" cy="901" r="14" fill="#ed9a62"/><text x="288" y="906" class="num" text-anchor="middle">10</text>
+    <text x="316" y="896" class="stageName">OutputAuthority translation gate</text>
+    <text x="316" y="918" class="stageDetail">independent plan-level check of table rows, summary, disclosures, and carrier identities</text>
+  </g>
+  <path d="M 646 934 L 646 952" stroke="#64748b" stroke-width="1.4" marker-end="url(#cxArrow)"/>
+
+  <!-- Stage 11 -->
+  <g>
+    <rect x="252" y="952" width="788" height="66" rx="12" class="box"/>
+    <rect x="252" y="952" width="5" height="66" rx="2.5" fill="#ed9a62"/>
+    <circle cx="288" cy="985" r="14" fill="#ed9a62"/><text x="288" y="990" class="num" text-anchor="middle">11</text>
+    <text x="316" y="980" class="stageName">Deterministic SVG + exact-value table</text>
+    <text x="316" y="1002" class="stageDetail">byte-stable SVG with distinct title/desc references; complete returned in-memory table, no excerpt</text>
+  </g>
+  <path d="M 646 1018 L 646 1036" stroke="#64748b" stroke-width="1.4" marker-end="url(#cxArrow)"/>
+
+  <!-- Stage 12 -->
+  <g>
+    <rect x="252" y="1036" width="788" height="66" rx="12" class="box"/>
+    <rect x="252" y="1036" width="5" height="66" rx="2.5" fill="#faccfa"/>
+    <circle cx="288" cy="1069" r="14" fill="#faccfa"/><text x="288" y="1074" class="num" text-anchor="middle">12</text>
+    <text x="316" y="1064" class="stageName">FigureArtifactV1</text>
+    <text x="316" y="1086" class="stageDetail">artifact binds the SVG bytes by SHA-256 and the table shape; honest caption travels with the figure</text>
+  </g>
+
+  <text x="40" y="1186" class="foot">cortexel 0.10.0-dev.0 — docs/diagrams/pipeline.svg — every stage independently testable; no stage optional</text>
+</svg>

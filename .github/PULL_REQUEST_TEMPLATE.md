@@ -8,5 +8,5 @@
 
 - [ ] `bun run check` passes (typecheck + tests)
 - [ ] New behavior is covered by a test
-- [ ] Design laws upheld — honesty fails closed, bloom-safe emissive, allocation-free `useFrame`, host-agnostic
+- [ ] Design laws upheld — honesty fails closed, host-agnostic core, deterministic output bytes (react/3D scene changes only: bloom-safe emissive, allocation-free `useFrame`)
 - [ ] `CHANGELOG.md` updated under `Unreleased`

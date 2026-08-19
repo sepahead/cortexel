@@ -1123,3 +1123,4 @@ as `cortexel/skills.manifest.json`.
 - [README.md](./README.md) — what Cortexel is, install, the honesty model, design laws.
 - [SECURITY.md](./SECURITY.md) — the honesty boundary as a security property.
 - [CLAUDE.md](./CLAUDE.md) — for changing Cortexel itself.
+- [docs/diagrams/](./docs/diagrams/) — custom SVG architecture diagrams: the fail-closed pipeline, the honesty contract, the NEST surfaces, and the Engram corpus flow.

@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 960" width="1080" height="960" role="img" aria-labelledby="cx-honesty-title cx-honesty-desc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+  <title id="cx-honesty-title">The Cortexel honesty contract: a caption that cannot be suppressed</title>
+  <desc id="cx-honesty-desc">Provenance starts at a fail-closed baseline and can only gain rigor. The honesty caption is composed in one fixed order: contract-owned weak-skill disclosure, contract-owned external-provenance disclosure, flag-derived mandatory disclosure, then a sanitized explicitly unverified caller note. calibrated_posterior true is rejected at every entrypoint, and caller text can never replace or reorder a contract segment.</desc>
+  <defs>
+    <marker id="hcArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <style>
+      .h1 { font-size: 25px; font-weight: 650; fill: #e2e8f0; }
+      .sub { font-size: 13.5px; fill: #94a3b8; }
+      .panelTitle { font-size: 15px; font-weight: 650; fill: #e2e8f0; }
+      .code { font-size: 12px; fill: #e2e8f0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .codeDim { font-size: 11.5px; fill: #94a3b8; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .note { font-size: 12px; fill: #94a3b8; }
+      .segTitle { font-size: 13.5px; font-weight: 650; fill: #e2e8f0; }
+      .segDetail { font-size: 11.5px; fill: #94a3b8; }
+      .order { font-size: 12px; font-weight: 700; fill: #050816; }
+      .lock { font-size: 12.5px; font-weight: 600; fill: #dba584; }
+      .foot { font-size: 10.5px; fill: #64748b; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .box { fill: #0b1220; stroke: #1e293b; stroke-width: 1.2; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="960" fill="#050816"/>
+  <text x="40" y="52" class="h1">The honesty contract — a caption that cannot be suppressed</text>
+  <text x="40" y="78" class="sub">Provenance fails closed; captions derive from machine-checkable flags, never from caller claims.</text>
+
+  <!-- Fail-closed baseline panel -->
+  <rect x="40" y="108" width="380" height="392" rx="12" class="box"/>
+  <rect x="40" y="108" width="380" height="4" rx="2" fill="#3a6b54"/>
+  <text x="60" y="142" class="panelTitle">Fail-closed provenance baseline</text>
+  <text x="60" y="164" class="codeDim">conservativeProvenance(source, declaredInputs)</text>
+  <text x="60" y="196" class="code">calibrated_posterior : false</text>
+  <text x="60" y="218" class="codeDim">  true is rejected at every entrypoint</text>
+  <text x="60" y="248" class="code">advisory_only        : true</text>
+  <text x="60" y="278" class="code">is_paper_local_evidence : false</text>
+  <text x="60" y="308" class="code">synthetic            : false</text>
+  <text x="60" y="338" class="code">declared_inputs      : strict claims</text>
+  <text x="60" y="360" class="codeDim">  required keys checked, unknown keys rejected</text>
+  <line x1="60" y1="382" x2="400" y2="382" stroke="#1e293b" stroke-width="1"/>
+  <text x="60" y="410" class="note">A caller can only ever ADD rigor.</text>
+  <text x="60" y="430" class="note">Any non-rigorous flag forces the caption on:</text>
+  <text x="60" y="452" class="codeDim">requiresHonestyCaption = synthetic</text>
+  <text x="60" y="470" class="codeDim">  || !calibrated_posterior || advisory_only</text>
+  <text x="60" y="488" class="codeDim">  || !is_paper_local_evidence</text>
+
+  <!-- Caption composition -->
+  <rect x="470" y="108" width="570" height="540" rx="12" class="box"/>
+  <rect x="470" y="108" width="570" height="4" rx="2" fill="#c09036"/>
+  <text x="490" y="142" class="panelTitle">Caption composition — one fixed order, no reordering</text>
+
+  <rect x="490" y="162" width="530" height="86" rx="10" fill="#0b1220" stroke="#3a6b54" stroke-width="1.4"/>
+  <circle cx="516" cy="205" r="13" fill="#3a6b54"/><text x="516" y="210" class="order" text-anchor="middle">1</text>
+  <text x="540" y="196" class="segTitle">Contract-owned weak-skill disclosure</text>
+  <text x="540" y="216" class="segDetail">derived for weak skills: schematic topology positions, astrocyte signals are</text>
+  <text x="540" y="232" class="segDetail">not membrane voltage; corpus assertions are derived/advisory</text>
+
+  <rect x="490" y="260" width="530" height="86" rx="10" fill="#0b1220" stroke="#3a6b54" stroke-width="1.4"/>
+  <circle cx="516" cy="303" r="13" fill="#3a6b54"/><text x="516" y="308" class="order" text-anchor="middle">2</text>
+  <text x="540" y="294" class="segTitle">Contract-owned external-provenance disclosure</text>
+  <text x="540" y="314" class="segDetail">declared external sources and population labels remain contract-disclosed</text>
+  <text x="540" y="330" class="segDetail">claims — Cortexel does not authenticate the producing simulator</text>
+
+  <rect x="490" y="358" width="530" height="86" rx="10" fill="#0b1220" stroke="#c09036" stroke-width="1.4"/>
+  <circle cx="516" cy="401" r="13" fill="#c09036"/><text x="516" y="406" class="order" text-anchor="middle">3</text>
+  <text x="540" y="392" class="segTitle">Flag-derived mandatory disclosure</text>
+  <text x="540" y="412" class="segDetail">"Schematic — illustrative synthetic data, not measured." /</text>
+  <text x="540" y="428" class="segDetail">"Advisory — not paper-local evidence; candidate ranking only."</text>
+
+  <rect x="490" y="456" width="530" height="98" rx="10" fill="#0b1220" stroke="#136697" stroke-width="1.4"/>
+  <circle cx="516" cy="505" r="13" fill="#136697"/><text x="516" y="510" class="order" text-anchor="middle">4</text>
+  <text x="540" y="490" class="segTitle">Caller note (unverified) — appended last, always</text>
+  <text x="540" y="510" class="segDetail">free-text capped at 500 chars; C0/C1 controls, bidi overrides and isolates,</text>
+  <text x="540" y="526" class="segDetail">zero-width marks and BOM escaped; isolated so it cannot visually reorder text</text>
+  <text x="540" y="542" class="segDetail">a caption is bound to every accepted spec — composeHonestyCaption never null</text>
+
+  <path d="M 420 300 L 470 300" stroke="#64748b" stroke-width="1.4" marker-end="url(#hcArrow)"/>
+  <text x="755" y="612" class="note" text-anchor="middle">Both strict gates (scene-backed and host-renderer) use this single composition rule.</text>
+  <text x="755" y="632" class="note" text-anchor="middle">ReferenceVizSpecFigure and VizSpecRenderer keep the caption below the figure.</text>
+
+  <!-- Locks -->
+  <rect x="40" y="676" width="1000" height="216" rx="12" class="box"/>
+  <rect x="40" y="676" width="1000" height="4" rx="2" fill="#983307"/>
+  <text x="60" y="710" class="panelTitle">Invariants enforced in code, not convention</text>
+
+  <text x="60" y="744" class="lock">calibrated_posterior: true is rejected at every entrypoint</text>
+  <text x="60" y="764" class="codeDim">buildVizSpec, validateSkillInvocation, validateHostRendererInvocation — early raw-payload check + z.literal(false)</text>
+
+  <text x="60" y="796" class="lock">Caller text cannot suppress or reorder contract segments</text>
+  <text x="60" y="816" class="codeDim">provenance.caption is only ever appended as "Caller note (unverified): …" after all contract-owned segments</text>
+
+  <text x="60" y="848" class="lock">No figure without a caption</text>
+  <text x="60" y="868" class="codeDim">every ok result of both gates carries the bound caption; rejected states render an explicit alert, never a silent figure</text>
+
+  <text x="40" y="930" class="foot">cortexel 0.10.0-dev.0 — docs/diagrams/honesty-contract.svg — core/provenance.ts, core/skills/validateSkillInvocation.ts, src/core/errors.ts</text>
+</svg>

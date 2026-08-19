@@ -7,7 +7,9 @@
 
 # Cortexel
 
-<!-- CI badge activates once the tiered workflow is in place; see ROADMAP.md -->
+<!-- CI, npm, and PyPI badges are intentionally inactive by design until the
+     protected release workflow exists; the tiered CI itself already runs in
+     .github/workflows/ci.yml. See ROADMAP.md. -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![types: TypeScript](https://img.shields.io/badge/types-TypeScript-3178c6.svg)](#)
 <!-- npm and PyPI badges are intentionally inactive: no package is published yet. -->
@@ -75,6 +77,17 @@ and role-tagged carrier identities immediately before serialization. It is delib
 plan-level, non-persisted, and carrier-only; it does not establish SVG bytes, coordinates,
 visibility, accessibility effectiveness, or artifact-bound table cells. See
 [`docs/OUTPUT_AUTHORITY.md`](./docs/OUTPUT_AUTHORITY.md).
+
+<p align="center">
+  <img alt="Diagram of the Cortexel pipeline: twelve fail-closed stages from raw JSON request to deterministic SVG and a digest-bound FigureArtifactV1, with one structured-error channel feeding the agent repair loop" src="docs/diagrams/pipeline.svg" width="760">
+</p>
+
+Architecture diagrams (custom SVG, brand palette):
+
+- [`docs/diagrams/pipeline.svg`](./docs/diagrams/pipeline.svg) — the twelve fail-closed stages from raw request to honest figure artifact;
+- [`docs/diagrams/honesty-contract.svg`](./docs/diagrams/honesty-contract.svg) — the fail-closed provenance baseline and the fixed caption composition order;
+- [`docs/diagrams/nest-surfaces.svg`](./docs/diagrams/nest-surfaces.svg) — how NEST captures reach figures through the stable FigureRequestV1 lane and the legacy VizSpec lane;
+- [`docs/diagrams/engram-corpus-flow.svg`](./docs/diagrams/engram-corpus-flow.svg) — the receipt-bound Engram (Paper2Brain) corpus entity-graph flow.
 
 ## Additive package surfaces
 

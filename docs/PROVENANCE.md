@@ -16,6 +16,10 @@ model is not a metadata convenience — it is a security boundary (see
 [SECURITY.md](../SECURITY.md)), and a change that lets a caller author a Cortexel
 conclusion, or that lets a disclosure be suppressed, is treated as a defect.
 
+> Visual companion: [`docs/diagrams/honesty-contract.svg`](./diagrams/honesty-contract.svg)
+> shows the fail-closed provenance baseline and the single fixed caption composition
+> order described below.
+
 ---
 
 ## 1. The authority boundary

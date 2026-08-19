@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1060" width="1080" height="1060" role="img" aria-labelledby="cx-engram-title cx-engram-desc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">
+  <title id="cx-engram-title">The Engram (Paper2Brain) corpus entity-graph flow through Cortexel</title>
+  <desc id="cx-engram-desc">An Engram corpus-derivation receipt is budget-captured, digested with RFC 8785 SHA-256, and adapted through the receipt-bound branch, which verifies roster, ordering, endpoint membership, receipt equality and digest binding. The mapped graph passes the strict corpus.knowledge_graph gate with fail-closed provenance, then reaches the caption-bound DOM or 3D composition. Any mismatch fails closed with structured errors and no figure. Cortexel never authenticates the receipt or promotes its claims to paper-local evidence.</desc>
+  <defs>
+    <marker id="egArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <marker id="egArrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#983307"/>
+    </marker>
+    <style>
+      .h1 { font-size: 25px; font-weight: 650; fill: #e2e8f0; }
+      .sub { font-size: 13.5px; fill: #94a3b8; }
+      .stepName { font-size: 14.5px; font-weight: 600; fill: #e2e8f0; }
+      .code { font-size: 11.5px; fill: #e2e8f0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .codeDim { font-size: 11px; fill: #94a3b8; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .note { font-size: 12px; fill: #94a3b8; }
+      .panelTitle { font-size: 14.5px; font-weight: 650; fill: #e2e8f0; }
+      .num { font-size: 12.5px; font-weight: 700; fill: #050816; }
+      .foot { font-size: 10.5px; fill: #64748b; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .box { fill: #0b1220; stroke: #1e293b; stroke-width: 1.2; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="1060" fill="#050816"/>
+  <text x="40" y="52" class="h1">Engram (Paper2Brain) corpus graph → caption-bound inspection figure</text>
+  <text x="40" y="78" class="sub">Receipt-bound branch: engram.corpus-derivation-receipt.v2. Evidence points into the verified snapshot — never invented, never promoted.</text>
+
+  <!-- Step 1 -->
+  <rect x="40" y="106" width="660" height="76" rx="12" class="box"/>
+  <rect x="40" y="106" width="5" height="76" rx="2.5" fill="#136697"/>
+  <circle cx="74" cy="144" r="13" fill="#136697"/><text x="74" y="149" class="num" text-anchor="middle">1</text>
+  <text x="100" y="138" class="stepName">Engram corpus entity-graph response</text>
+  <text x="100" y="158" class="codeDim">nodes · edges · kinds · redundant counts · identity_derivation · derivation_receipt</text>
+  <text x="100" y="174" class="codeDim">honesty flags fixed conservative: advisory_only true · calibrated_posterior false</text>
+  <path d="M 370 182 L 370 204" stroke="#64748b" stroke-width="1.3" marker-end="url(#egArrow)"/>
+
+  <!-- Step 2 -->
+  <rect x="40" y="204" width="660" height="76" rx="12" class="box"/>
+  <rect x="40" y="204" width="5" height="76" rx="2.5" fill="#3a6b54"/>
+  <circle cx="74" cy="242" r="13" fill="#3a6b54"/><text x="74" y="247" class="num" text-anchor="middle">2</text>
+  <text x="100" y="236" class="stepName">Budget-capture the raw value</text>
+  <text x="100" y="256" class="code">snapshotValue(rawResponse, getBudgetLimits())</text>
+  <text x="100" y="272" class="codeDim">exact-JSON boundary: accessors rejected, budgets enforced before traversal</text>
+  <path d="M 370 280 L 370 302" stroke="#64748b" stroke-width="1.3" marker-end="url(#egArrow)"/>
+
+  <!-- Step 3 -->
+  <rect x="40" y="302" width="660" height="76" rx="12" class="box"/>
+  <rect x="40" y="302" width="5" height="76" rx="2.5" fill="#3a6b54"/>
+  <circle cx="74" cy="340" r="13" fill="#3a6b54"/><text x="74" y="345" class="num" text-anchor="middle">3</text>
+  <text x="100" y="334" class="stepName">Digest the complete captured response</text>
+  <text x="100" y="354" class="code">graphSnapshotId = canonicalDigest(captured.value)   // RFC 8785 + SHA-256</text>
+  <text x="100" y="370" class="codeDim">the digest binds the raw response bytes — not a normalized clone</text>
+  <path d="M 370 378 L 370 400" stroke="#64748b" stroke-width="1.3" marker-end="url(#egArrow)"/>
+
+  <!-- Step 4 -->
+  <rect x="40" y="400" width="660" height="118" rx="12" class="box"/>
+  <rect x="40" y="400" width="5" height="118" rx="2.5" fill="#c09036"/>
+  <circle cx="74" cy="459" r="13" fill="#c09036"/><text x="74" y="464" class="num" text-anchor="middle">4</text>
+  <text x="100" y="432" class="stepName">adaptEngramCorpusEntityGraph — receipt-bound checks</text>
+  <text x="100" y="452" class="codeDim">closed receipt identity · roster consistency (paths, binding id, strict order)</text>
+  <text x="100" y="468" class="codeDim">nodes unique + canonically ordered · edges unique, canonical, non-self, non-dangling</text>
+  <text x="100" y="484" class="codeDim">receipt == top-level identity_derivation · abstained ⇒ paper nodes + cites only</text>
+  <text x="100" y="500" class="codeDim">canonicalDigest(raw snapshot) === graphSnapshotId · final params revalidated</text>
+  <path d="M 370 518 L 370 540" stroke="#64748b" stroke-width="1.3" marker-end="url(#egArrow)"/>
+
+  <!-- Step 5 -->
+  <rect x="40" y="540" width="660" height="92" rx="12" class="box"/>
+  <rect x="40" y="540" width="5" height="92" rx="2.5" fill="#c09036"/>
+  <circle cx="74" cy="586" r="13" fill="#c09036"/><text x="74" y="591" class="num" text-anchor="middle">5</text>
+  <text x="100" y="572" class="stepName">buildVizSpec — strict corpus.knowledge_graph gate</text>
+  <text x="100" y="592" class="codeDim">declaredInputs: graph_source · graph_snapshot_id · graph_scope · identity_advisory: true</text>
+  <text x="100" y="608" class="codeDim">fail-closed provenance baseline · bound honesty caption ("Advisory — …")</text>
+  <text x="100" y="624" class="codeDim">self-describing spec: skill + specVersion, safe to serialize and re-validate</text>
+  <path d="M 370 632 L 370 654" stroke="#64748b" stroke-width="1.3" marker-end="url(#egArrow)"/>
+
+  <!-- Step 6 -->
+  <rect x="40" y="654" width="660" height="118" rx="12" class="box"/>
+  <rect x="40" y="654" width="5" height="118" rx="2.5" fill="#ed9a62"/>
+  <circle cx="74" cy="713" r="13" fill="#ed9a62"/><text x="74" y="718" class="num" text-anchor="middle">6</text>
+  <text x="100" y="686" class="stepName">Caption-bound inspection surfaces</text>
+  <text x="100" y="706" class="codeDim">KnowledgeGraphDomFigure — peer-free DOM: caption, legend, paginated operable</text>
+  <text x="100" y="722" class="codeDim">node list, complete source-record browser (≤ 1,000 nodes / 4,000 relationships)</text>
+  <text x="100" y="738" class="codeDim">KnowledgeGraphAccessibleFigure — canonical 3D composition (live force ≤ 250 / 1,000)</text>
+  <text x="100" y="754" class="codeDim">prepareCorpusKnowledgeGraphFigureJson — duplicate-safe raw-text boundary for hosts</text>
+
+  <!-- Fail-closed channel -->
+  <rect x="740" y="204" width="300" height="314" rx="12" fill="#0b1220" stroke="#983307" stroke-width="1.2" stroke-dasharray="5 5"/>
+  <text x="890" y="236" class="panelTitle" text-anchor="middle" fill="#dba584">Any mismatch fails closed</text>
+  <text x="760" y="268" class="codeDim">digest does not bind the response</text>
+  <text x="760" y="292" class="codeDim">receipt disagrees with the summary</text>
+  <text x="760" y="316" class="codeDim">roster ≠ paper-node roster</text>
+  <text x="760" y="340" class="codeDim">dangling or self edge</text>
+  <text x="760" y="364" class="codeDim">abstained derivation with entities</text>
+  <text x="760" y="388" class="codeDim">missing direct evidence anchor</text>
+  <text x="760" y="412" class="codeDim">naked or calibrated score</text>
+  <text x="760" y="436" class="codeDim">budgets exceeded</text>
+  <line x1="760" y1="456" x2="1020" y2="456" stroke="#983307" stroke-width="1" stroke-dasharray="3 3"/>
+  <text x="760" y="482" class="note">→ structured errors, no params,</text>
+  <text x="772" y="500" class="note">no VizSpec, no figure, no caption.</text>
+  <path d="M 700 459 L 740 420" fill="none" stroke="#983307" stroke-width="1.3" stroke-dasharray="4 4" marker-end="url(#egArrowRed)"/>
+
+  <!-- Honesty note -->
+  <rect x="40" y="800" width="1000" height="170" rx="12" class="box"/>
+  <rect x="40" y="800" width="1000" height="4" rx="2" fill="#983307"/>
+  <text x="60" y="834" class="panelTitle">What this flow does NOT establish</text>
+  <text x="60" y="864" class="codeDim">Cortexel creates presentation-local graph_snapshot_record references into the verified snapshot. It does not authenticate</text>
+  <text x="60" y="882" class="codeDim">Engram's upstream digest claims, resolve evidence, or convert the receipt into paper-local evidence.</text>
+  <text x="60" y="912" class="codeDim">Node and edge scores keep their declared discriminator (citation_resolution_confidence / structural_similarity) and are</text>
+  <text x="60" y="930" class="codeDim">never calibrated posteriors. All corpus-entity assertions remain advisory; identity edges and force geometry are not</text>
+  <text x="60" y="948" class="codeDim">certified quantitative evidence.</text>
+
+  <text x="40" y="1008" class="foot">cortexel 0.10.0-dev.0 — docs/diagrams/engram-corpus-flow.svg — core/skills/corpusKnowledgeGraph.ts, react/KnowledgeGraphDomFigure.tsx</text>
+</svg>

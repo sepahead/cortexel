@@ -6,6 +6,40 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — receipt-bound snapshot digest binds the raw response
+
+- The receipt-bound Engram adapter verified `graphSnapshotId` against the
+  semantically normalized Zod clone of the response, whose string fields can be
+  trimmed, instead of the defensively captured raw response. The digest check
+  now binds the detached exact-JSON snapshot byte-for-byte, matching the
+  documented contract that the snapshot id equals the RFC 8785 SHA-256 digest
+  of the complete captured response.
+
+### Changed — rotated reviewed source-map closure digest
+
+- Rotated `REVIEWED_PACKAGE_SOURCE_MAP_INPUT_CLOSURE_DIGEST` in
+  `scripts/lib/package-source-map-authority.ts` after reviewing the mapped-source
+  closure change introduced by the receipt-bound digest fix; the observed digest
+  was independently recomputed from the working tree before blessing.
+
+### Added — Engram (Paper2Brain) end-to-end integration coverage
+
+- Added `test/engramPaper2BrainIntegration.test.ts`: dedicated negative-path
+  coverage for the receipt-bound branch (duplicate/unsorted nodes and edges,
+  self and dangling edges, inconsistent source rosters, divergent identity
+  derivations, abstained derivations emitting identity entities, wrong receipt
+  identity literals, raw-bytes digest binding) plus the complete
+  adapter → strict gate → caption-bound presentation preparation flow.
+
+### Added — architecture diagrams and documentation polish
+
+- Added custom SVG architecture diagrams under `docs/diagrams/` explaining the
+  validation pipeline, the honesty contract, the NEST adapter paths, and the
+  Engram corpus flow; embedded the pipeline diagram in the README.
+- Corrected the stale README badge comment, refreshed the PR checklist and bug
+  report template for the dual-surface reality, and extended the package
+  keywords to cover the provenance-first contract surface.
+
 ### Fixed — development dependency audit
 
 - Pinned the transitive `nanoid` build/test dependency to patched version 3.3.18,
