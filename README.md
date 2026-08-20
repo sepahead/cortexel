@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.svg">
-    <img alt="Cortexel logo: declared neural data crosses a validation lattice and becomes a deterministic figure with an attached exact-value disclosure table." src="assets/logo-light.svg" width="200">
+    <img alt="Cortexel logo: a neuron-seeded population voxel crosses a validation bracket into one deterministic digest-bound figure artifact." src="assets/logo-light.svg" width="200">
   </picture>
 </p>
 
