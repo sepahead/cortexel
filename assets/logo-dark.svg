@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="64 314 92 92" width="92" height="92" role="img" aria-label="Cortexel logo: a neuron-seeded population voxel crosses a validation bracket into one deterministic neural spike-raster artifact">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="64 314 92 92" width="92" height="92" role="img" aria-label="Cortexel logo: a neuron-seeded population voxel crosses a validation bracket into one deterministic neuronal action-potential figure artifact">
   <defs>
     <radialGradient id="hubGrad" cx="50%" cy="42%" r="65%">
       <stop offset="0%" stop-color="#06281d"/>
@@ -149,9 +149,7 @@
     .ctx-min-intake-lane   { fill: none; stroke: #c4b5fd; stroke-width: 0.8; stroke-opacity: 0.55; stroke-dasharray: 2 2.2; stroke-linecap: round; }
     .ctx-min-boundary      { fill: none; stroke: #fdf4ff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
     .ctx-min-artifact      { fill: none; stroke: url(#ctxArtifactEdge); stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
-    .ctx-min-raster        { fill: none; stroke: #ffffff; stroke-width: 1.25; stroke-linecap: round; }
-    .ctx-min-raster-b      { stroke-opacity: 0.92; }
-    .ctx-min-raster-c      { stroke-opacity: 0.84; }
+    .ctx-min-action-potential { fill: none; stroke: #ffffff; stroke-width: 1.45; stroke-linecap: round; stroke-linejoin: round; }
     .ctx-min-token         { fill: #fdf4ff; stroke: #e879f9; stroke-width: 0.45; filter: url(#edgeGlow); }
     .ctx-min-scan          { stroke: #ffffff; stroke-width: 1.2; stroke-linecap: round; filter: url(#edgeGlow); }
     .seat-creb     { fill: url(#crebGrad); }
@@ -281,14 +279,8 @@
     <defs>
       <radialGradient id="ctxWell" cx="42%" cy="36%" r="74%"><stop offset="0%" stop-color="#291132"/><stop offset="68%" stop-color="#110a1a"/><stop offset="100%" stop-color="#05070c"/></radialGradient>
       <linearGradient id="ctxArtifactEdge" x1="0" y1="342" x2="0" y2="378" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#fdf4ff"/><stop offset="38%" stop-color="#e879f9"/><stop offset="100%" stop-color="#86198f"/></linearGradient>
-      <clipPath id="ctxRasterClipA"><rect x="114" y="347" width="14" height="6">
-        <animate attributeName="width" values="14;14;0;0;14;14" keyTimes="0;0.02;0.05;0.42;0.52;1" dur="8.4s" repeatCount="indefinite"/>
-      </rect></clipPath>
-      <clipPath id="ctxRasterClipB"><rect x="114" y="357" width="14" height="6">
-        <animate attributeName="width" values="14;14;0;0;14;14" keyTimes="0;0.02;0.05;0.48;0.58;1" dur="8.4s" repeatCount="indefinite"/>
-      </rect></clipPath>
-      <clipPath id="ctxRasterClipC"><rect x="114" y="366" width="14" height="6">
-        <animate attributeName="width" values="14;14;0;0;14;14" keyTimes="0;0.02;0.05;0.54;0.64;1" dur="8.4s" repeatCount="indefinite"/>
+      <clipPath id="ctxActionPotentialClip"><rect x="113.5" y="346" width="15.5" height="29">
+        <animate attributeName="width" values="15.5;15.5;0;0;15.5;15.5" keyTimes="0;0.02;0.05;0.43;0.61;1" dur="8.4s" repeatCount="indefinite"/>
       </rect></clipPath>
     </defs>
     <circle cx="110" cy="360" r="30.2" class="ctx-well"/>
@@ -303,9 +295,14 @@
     <path d="M107 342H103V378H107" class="ctx-min-boundary"/>
 
     <path d="M111 344H130V376H111" class="ctx-min-artifact"/>
-    <path d="M116 348V352 M120.5 348V352 M127 348V352" class="ctx-min-raster ctx-min-raster-a" clip-path="url(#ctxRasterClipA)"/>
-    <path d="M118 358V362 M124.5 358V362" class="ctx-min-raster ctx-min-raster-b" clip-path="url(#ctxRasterClipB)"/>
-    <path d="M115.5 367V371 M120 367V371 M124 367V371 M127 367V371" class="ctx-min-raster ctx-min-raster-c" clip-path="url(#ctxRasterClipC)"/>
+    <path d="M114 367
+             C115.6 367 116.7 367 117.4 366.7
+             C118.1 366.2 118.5 351.2 119.5 348.5
+             C119.8 347.3 120.3 347.9 120.8 350.6
+             C121.5 355.8 121.8 364.4 122.9 369.4
+             C123.5 372.3 124.5 373.1 125.2 370.5
+             C126 367.9 127 367 128.5 367"
+          class="ctx-min-action-potential" clip-path="url(#ctxActionPotentialClip)"/>
 
     <polygon points="88,362 91,360 94,362 91,364" class="ctx-min-token" opacity="0">
       <animateTransform attributeName="transform" type="translate" values="0 0;0 0;12 0;12 0;0 0" keyTimes="0;0.10;0.27;0.90;1" dur="8.4s" repeatCount="indefinite"/>

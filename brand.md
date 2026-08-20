@@ -1,6 +1,6 @@
 # Brand — Cortexel
 
-_Status: accepted mark v3 · 2026-08-20_
+_Status: accepted mark v4 · 2026-08-20_
 
 Cortexel's identity is the **evidence fold**: caller-declared neural data crosses
 a fail-closed authorship and validation boundary and becomes one deterministic,
@@ -15,10 +15,13 @@ inspectable figure artifact. The mark encodes the contract, not a charting UI.
   input passes.
 - The open, C-shaped magenta frame is the Cortexel-authored artifact. Its shape is
   both a folded output boundary and an ownable initial without using a wordmark.
-- The three irregular rows of white event ticks are a neural spike raster: the
-  canonical computational-neuroscience output compiled inside the artifact.
-  They are deliberately axis-free and neutral so contract-selected scientific
-  palettes retain their meaning.
+- The white electrophysiology curve is one neuronal action potential: resting
+  baseline, rapid depolarization and overshoot, repolarization,
+  afterhyperpolarization, then recovery. It is a canonical computational-
+  neuroscience motif compiled inside the artifact, deliberately axis-free and
+  neutral so contract-selected scientific palettes retain their meaning. It
+  symbolizes a validated neural figure; it does not claim Cortexel simulates the
+  membrane dynamics.
 - The lower terminal rail completes the returned inspectable value and disclosure
   surface. No decorative digest dot is used. The implementation's artifact
   bindings remain contract facts rather than a certification symbol in the mark.
@@ -36,20 +39,21 @@ misstate what the library owns.
 ## Motion contract
 
 The loop illustrates one valid request only. A population token reaches and stops
-at the boundary, the bracket scans, and three spike-event rows resolve from left
-to right. The animation must never imply that every request passes, that Cortexel
-authored the caller's declarations, or that a rendered figure proves scientific
-truth.
+at the boundary, the bracket scans, and one complete action-potential waveform
+resolves from left to right. The animation must never imply that every request
+passes, that Cortexel authored the caller's declarations, that it simulated the
+membrane event, or that a rendered figure proves scientific truth.
 
 The non-animated and reduced-motion state is the complete evidence fold, never an
 empty loading state.
 
 ## Geometry and reduction
 
-The core silhouette is **voxel + bracket + open C + spike raster**. Keep those
-masses and their left-to-right authorship order intact. Event ticks may reduce at
-very small sizes, but the boundary must remain open and the caller-owned voxel
-must never move inside it in the static mark.
+The core silhouette is **voxel + bracket + open C + action potential**. Keep those
+masses and their left-to-right authorship order intact. At very small sizes,
+preserve the waveform's resting segment, steep overshoot and undershoot rather
+than adding axes or labels. The boundary must remain open and the caller-owned
+voxel must never move inside it in the static mark.
 
 The design is tuned to remain recognizable at 24–32 px, to match the machined
 standalone project badges in the portfolio graph, and to work without a wordmark.
