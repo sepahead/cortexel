@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.svg">
-    <img alt="Cortexel logo: a neuron-seeded population voxel crosses a validation bracket into one deterministic digest-bound figure artifact." src="assets/logo-light.svg" width="200">
+    <img alt="Cortexel logo: a neuron-seeded population voxel crosses a validation bracket into one deterministic neural spike-raster artifact." src="assets/logo-light.svg" width="200">
   </picture>
 </p>
 
