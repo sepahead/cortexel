@@ -1,21 +1,60 @@
 # Brand — Cortexel
 
-_Status: deferred_
+_Status: accepted mark v1 · 2026-08-20_
 
-The user chose to defer a separate product-brand exercise. Cortexel is a library,
-not a shadcn application: it has no `app/globals.css` and no global typography
-surface. Its current visual source of truth is the scientific Crameri palette in
-`core/colormaps.ts`, with host-owned typography and UI chrome.
+Cortexel's identity is the **two-author evidence artifact**: caller-declared
+neural data crosses a fail-closed validation boundary and becomes a deterministic,
+inspectable figure whose exact-value and disclosure surface cannot be detached.
 
-To set up a real brand palette, typography, and voice at any time, run:
+## Mark anatomy
 
-    /brand-design
+- The sphere is one caller-declared neuron; the voxel is a caller-declared
+  population. They remain visibly outside Cortexel's authority boundary.
+- The white bracket and magenta teeth are the strict validation lattice. They are
+  a boundary, not a checkmark, certification seal, or claim that arbitrary input
+  passes.
+- The chamfered cassette is the library-authored `FigureArtifactV1`: a
+  deterministic figure field above an inseparable exact-value/disclosure strip.
+- The white digest point represents the artifact binding and provenance digest.
+  It does not certify scientific truth.
+- The left and right halves deliberately have different visual authors. Callers
+  declare what data is; Cortexel owns validation conclusions, disclosures, and
+  artifact bytes.
 
-or say: "pick brand colors"
+## Motion contract
 
-When `brand-design` runs, it should treat this deferred marker as permission to
-start the full exercise, preserve the scientific color/honesty constraints, and
-target Cortexel's exported palette/documentation rather than assuming an app-level
-CSS file. This file can then be replaced with the accepted brand specification.
+The loop illustrates one valid request. Declared neuron and population tokens
+reach the lattice, the boundary scans, the deterministic trace resolves, and the
+attached disclosure/digest surface completes the artifact. The motion must never
+suggest that all inputs pass, that Cortexel inferred the caller's declarations, or
+that a rendered figure is a scientific certification.
 
-_Deferred at: 2026-07-10T00:00:00+02:00_
+The non-animated and reduced-motion state is the complete artifact, not an empty
+loading state.
+
+## Color governance
+
+Brand magenta, violet, white, and black are **identity chrome only**. They must
+never replace or reinterpret the contract-selected scientific palettes in
+`core/colormaps.ts`.
+
+Scientific color remains data-semantic and fail-closed:
+
+- Crameri palettes remain the source of truth for quantitative fields.
+- Signed fields continue to use the declared diverging map.
+- Categorical identity never relies on hue alone.
+- Rainbow/jet defaults and arbitrary caller CSS remain out of contract.
+
+Typography and host UI remain host-owned; this logo specification does not invent
+an app-level theme or global CSS surface for the library.
+
+## Delivery and accessibility
+
+The canonical README assets are `assets/logo-dark.svg` and
+`assets/logo-light.svg`, both exported from the same shared portfolio generator.
+The mark is transparent, theme-explicit through `<picture>`, usable without its
+wordmark, legible at README scale, and complete when animation is unavailable.
+
+Do not detach the disclosure strip, replace the mark with a generic brain/network
+icon, add a checkmark or shield, or use scientific data colors as decorative
+brand gradients.
