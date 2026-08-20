@@ -306,7 +306,7 @@
     <defs>
       <radialGradient id="ctxWell" cx="42%" cy="36%" r="74%"><stop offset="0%" stop-color="#291132"/><stop offset="68%" stop-color="#110a1a"/><stop offset="100%" stop-color="#05070c"/></radialGradient>
       <linearGradient id="ctxArtifactEdge" x1="0" y1="342" x2="0" y2="378" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#fdf4ff"/><stop offset="38%" stop-color="#e879f9"/><stop offset="100%" stop-color="#86198f"/></linearGradient>
-      <clipPath id="ctxActionPotentialClip"><rect x="113.5" y="346" width="15.5" height="29">
+      <clipPath id="ctxActionPotentialClip"><rect x="112.7" y="346" width="15.5" height="29">
         <animate attributeName="width" values="15.5;15.5;0;0;15.5;15.5" keyTimes="0;0.02;0.05;0.43;0.61;1" dur="8.4s" repeatCount="indefinite"/>
       </rect></clipPath>
     </defs>
@@ -322,13 +322,13 @@
     <path d="M107 342H103V378H107" class="ctx-min-boundary"/>
 
     <path d="M111 344H130V376H111" class="ctx-min-artifact"/>
-    <path d="M114 367
-             C115.6 367 116.7 367 117.4 366.7
-             C118.1 366.2 118.5 351.2 119.5 348.5
-             C119.8 347.3 120.3 347.9 120.8 350.6
-             C121.5 355.8 121.8 364.4 122.9 369.4
-             C123.5 372.3 124.5 373.1 125.2 370.5
-             C126 367.9 127 367 128.5 367"
+    <path d="M113.2 367
+             C114.8 367 115.9 367 116.6 366.7
+             C117.3 366.2 117.8 351.2 118.7 348.5
+             C119 347.3 119.5 347.9 120 350.6
+             C120.7 355.8 121 364.4 122.1 369.4
+             C122.8 372.3 123.7 373.1 124.4 370.5
+             C125.2 367.9 126.2 367 127.7 367"
           class="ctx-min-action-potential" clip-path="url(#ctxActionPotentialClip)"/>
 
     <polygon points="88,362 91,360 94,362 91,364" class="ctx-min-token" opacity="0">
