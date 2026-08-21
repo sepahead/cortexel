@@ -1,4 +1,4 @@
-const require_identity = require('./identity-DvvM9pyL.cjs');
+const require_identity = require('./identity-Dt42RQe6.cjs');
 
 //#region src/core/contract-identity.ts
 /** Internal named projections of the generated registry-owned contract identities. */
@@ -28,4 +28,4 @@ Object.defineProperty(exports, 'REQUEST_CONTRACT_IDENTITY', {
     return REQUEST_CONTRACT_IDENTITY;
   }
 });
-//# sourceMappingURL=contract-identity-BMEyNZJi.cjs.map
+//# sourceMappingURL=contract-identity-Cna7a4hn.cjs.map

@@ -1,10 +1,11 @@
 # Cortexel 0.9.0 — release record
 
-**0.9.0 is a pre-1.0 development preview.** It is published so a supervisor and
-collaborators can review the design and implementation. It makes **no stable-contract
-claim**, publishes **no package** to npm or PyPI, and mints **no DOI**. The full 1.0
-release process (immutable build, trusted publishing, three-pass certification,
-external scientific review) is deliberately *not* run here; see
+**0.9.0 is a tagged pre-1.0 development preview.** Its annotated Git tag was shared so
+a supervisor and collaborators could review the design and implementation; no GitHub
+Release object or registry package was published. It makes **no stable-contract claim**,
+publishes **no package** to npm or PyPI, and mints **no DOI**. The full 1.0 release process
+(immutable build, trusted publishing, three-pass certification, external scientific
+review) was deliberately *not* run here; see
 the [0.9.0 roadmap](https://github.com/sepahead/cortexel/blob/v0.9.0/ROADMAP.md).
 
 ## What this release is

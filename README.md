@@ -8,17 +8,15 @@
 
 # Cortexel
 
-<!-- CI, npm, and PyPI badges are intentionally inactive by design until the
-     protected release workflow exists; the tiered CI itself already runs in
-     .github/workflows/ci.yml. See ROADMAP.md. -->
+[![CI](https://github.com/sepahead/cortexel/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sepahead/cortexel/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![types: TypeScript](https://img.shields.io/badge/types-TypeScript-3178c6.svg)](#)
 <!-- npm and PyPI badges are intentionally inactive: no package is published yet. -->
 
-> **Status: `0.9.0` is the last tagged pre-1.0 development release. This working tree
-> identifies itself as the private, unreleased `0.10.0-dev.0`; it is not a release. There
-> is no stable release, published package, or DOI.** `main` may still change. Do not cite
-> HEAD or the development version as a released product.
+> **Status: `0.9.0` is the last tagged pre-1.0 development release. The unreleased
+> `0.10.0-dev.0` working-tree identity is intentionally non-publishable (`private: true`);
+> it is not a release. There is no stable release, published package, or DOI.** `main`
+> may still change. Do not cite HEAD or the development version as a released product.
 >
 > The honest, gate-by-gate state of the release is in
 > [`docs/KNOWN_LIMITATIONS.md`](./docs/KNOWN_LIMITATIONS.md) and the machine-readable
@@ -27,13 +25,16 @@
 
 **Cortexel** turns a strict request into a canonical, inspectable **figure artifact**
 for neural-simulation data. An agent, an adapter, or a person emits a declarative
-JSON request; Cortexel validates its shape and its *scientific meaning*, canonicalizes
-it, records honest provenance that **fails closed**, and renders deterministic SVG with
+JSON request; Cortexel validates its structure and the internal consistency of its
+caller-declared scientific semantics, canonicalizes it, records honest provenance that
+**fails closed**, and renders deterministic SVG with
 distinct programmatic title and description references. The development API also
 returns an exact-value in-memory table and a FigureArtifactV1 whose output inventory
 binds the SVG by SHA-256. A canonical,
 digest-bound table sidecar and detached output verifier are not implemented yet; the
 render boundary refuses any result that would require an incomplete table excerpt.
+Cortexel does not authenticate simulator output, the truth of caller declarations, or
+scientific conclusions.
 
 The value is in the **contract and its invariants**, not in a pile of chart code.
 Cortexel refuses to make a plausible-looking figure from an ambiguous input, and every

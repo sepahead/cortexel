@@ -3,9 +3,9 @@
 The independent Python reader for [Cortexel](https://github.com/sepahead/cortexel)
 scientific figure contracts.
 
-> **0.9.0 is the last tagged pre-1.0 development release. The working wheel metadata is
-> the private, unreleased PEP 440 version `0.10.0.dev0`, paired with npm
-> `0.10.0-dev.0`.** Not published to PyPI.
+> **0.9.0 is the last tagged pre-1.0 development release. The unreleased wheel metadata
+> is PEP 440 version `0.10.0.dev0`, paired with the intentionally non-publishable
+> (`private: true`) npm working-tree identity `0.10.0-dev.0`.** Not published to PyPI.
 
 This package strictly parses, canonicalizes, digests, structurally checks, and applies
 an explicitly partial semantic port to Cortexel requests **without invoking Node and
@@ -21,7 +21,11 @@ digest of every contract example.
 - **Strict parsing** (`parse_json_strict`) — rejects duplicate object members (which
   `json.loads` would silently resolve), prototype-polluting keys, non-finite numbers,
   unsafe bare-integer aliases that would round to a different binary64 value, and
-  ill-formed Unicode (including lone surrogates in either member names or values).
+  ill-formed Unicode (including lone surrogates in either member names or values). Its
+  independent recursive-descent scanner applies the generated standard raw-byte,
+  depth, node, decoded UTF-16 string, number-token, object-member, and array-item limits
+  before an unbounded tree can be materialized. A host must still bound byte acquisition
+  and strict UTF-8 decoding before it owns the Python string passed to this API.
 - **RFC 8785 canonicalization** (`canonicalize`, `canonical_digest`) — implemented from the
   scheme's rules, including ECMAScript number formatting and UTF-16 code-unit key ordering,
   so it matches the TypeScript canonicalizer to the byte. SHA-256 via the standard library.
@@ -39,7 +43,13 @@ digest of every contract example.
   rate-denominator authority, exact mean-rate and raw peak-count audits, count-level raw
   peak estimators, aggregate peak lattices, latency-window binding, kernel identity, and
   peak-grid geometry. Renderer-only geometry and artifact/table budgets are not Python
-  request-validation claims. Other semantic validators are ported incrementally. The
+  request-validation claims. The partial spike-raster evaluator independently covers
+  generic event-window membership plus both revision-5 NEST finite-stop and
+  positive-infinity/capture-bounded clock profiles: exact integer-tic/grid domains,
+  the pinned stored-reciprocal `Time::get_ms()` projection, history chronology, and
+  open-start/closed-end membership. It validates internal declarations but does not
+  authenticate NEST, a producing process, capture timing, or export custody. Other
+  semantic validators are ported incrementally. The
   current development reader therefore returns `SEMANTIC_VALIDATOR_UNAVAILABLE` after an otherwise clean
   request rather than falsely certifying a skill whose complete semantic-validator set is
   not yet ported. `validate_request_partial` exposes the implemented subset explicitly for
@@ -114,8 +124,10 @@ standard library.
 ## Not yet done in the current development reader
 
 Rendering stays with the Node reference implementation (this package emits and checks the
-contract, not the SVG). The scientific adapters (Neo, Elephant, PyNWB, NEST) are not yet
-implemented and therefore are not advertised as installable extras. The full
+contract, not the SVG). Producer-side scientific adapters (Neo, Elephant, PyNWB, NEST)
+are not implemented in Python and therefore are not advertised as installable extras;
+the partial NEST spike-window evaluator described above checks an already-authored stable
+request but does not acquire or adapt simulator output. The full
 semantic-validator port is incremental;
 full Python validation therefore fails closed with `SEMANTIC_VALIDATOR_UNAVAILABLE`, and
 the TypeScript runtime remains the full validation authority.

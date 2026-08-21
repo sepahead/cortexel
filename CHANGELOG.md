@@ -6,6 +6,29 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — bounded Python parsing and branch-scoped NEST capture authority
+
+- Replaced the Python reader's post-materialization `json.loads` boundary with an
+  independent recursive-descent parser that enforces raw bytes, depth, total nodes,
+  decoded UTF-16 string length, number-token length, object-member count, and array-item
+  count while scanning. Pathological depth and numeric inputs now fail with stable
+  `JsonParseError` codes instead of leaking interpreter exceptions.
+- Moved revision-5 NEST capture-boundary identity into its two branch records. Finite-stop
+  authority permits a status capture at or after `origin + stop` following successful
+  return; only the positive-infinity branch requires capture immediately after the
+  advancing return and before any further advance or mutation.
+
+### Changed — repository and downstream-consumer metadata reconciled
+
+- Reconciled the public Engram consumer record with its observed package/lock revision
+  and its older retained receipt, marking the relationship `stale` without implying a
+  cross-repository integration run.
+- Standardized pre-release wording, activated the development-CI badge, corrected the
+  spike-raster revision reference, and aligned security, conduct, issue, and pull-request
+  guidance with the repository's actual reporting and validation paths.
+- Rotated the reviewed source-map input-closure digest after independently recomputing
+  the exact closure represented by the NEST metadata and generated identity changes.
+
 ### Fixed — receipt-bound snapshot digest binds the raw response
 
 - The receipt-bound Engram adapter verified `graphSnapshotId` against the
@@ -30,14 +53,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   closure change introduced by the receipt-bound digest fix; the observed digest
   was independently recomputed from the working tree before blessing.
 
-### Added — Engram (Paper2Brain) end-to-end integration coverage
+### Added — Cortexel-local Engram (Paper2Brain) contract-flow coverage
 
-- Added `test/engramPaper2BrainIntegration.test.ts`: dedicated negative-path
+- Added `test/engramPaper2BrainIntegration.test.ts`: in-repository negative-path
   coverage for the receipt-bound branch (duplicate/unsorted nodes and edges,
   self and dangling edges, inconsistent source rosters, divergent identity
   derivations, abstained derivations emitting identity entities, wrong receipt
   identity literals, raw-bytes digest binding) plus the complete
-  adapter → strict gate → caption-bound presentation preparation flow.
+  adapter → strict gate → caption-bound presentation preparation flow. This is not a
+  clean cross-repository Engram integration run or consumer receipt.
 
 ### Added — architecture diagrams and documentation polish
 

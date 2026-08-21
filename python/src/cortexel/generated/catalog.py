@@ -21,8 +21,8 @@ PACKAGE_VERSION: str = "0.10.0-dev.0"
 PYTHON_DISTRIBUTION_VERSION: str = "0.10.0.dev0"
 REQUEST_CONTRACT: str = "cortexel-figure-request/1.0"
 ARTIFACT_CONTRACT: str = "cortexel-figure-artifact/1.0"
-CONTRACT_DIGEST: str = "sha256:c5ae167f1d7f07650eb240750abd78bae7453940ae21d4d50e4ecb56b0c7681f"
-CATALOG_DIGEST: str = "sha256:e6ef9014ca56f4bd159f8b3545ba8d7cf0241550ff25b9de44b05fde826f0dd5"
+CONTRACT_DIGEST: str = "sha256:ed43aea88c88af84c0e327e6441ecba8cdf6024e499d84b24748946b22af0475"
+CATALOG_DIGEST: str = "sha256:7e52385ef9fe7e58e94c5e005d4239c5ecb7575bb0e09a170e46758a190571b3"
 CATALOG_DIGEST_DOMAIN: str = "cortexel-public-stable-catalog.v2"
 AUTHORING_SCHEMA_COMPILATION_PROFILE_V1: Final[Mapping[str, Any]] = _freeze({
     "id": "cortexel-authoring-schema-compilation-profile.v1",
@@ -10354,7 +10354,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
                         "registry": "cortexel-adapter-conformance-profiles.v1",
                         "id": "nest-spike-recorder.v5",
                         "digestAlgorithm": "cortexel_adapter_conformance_profile_rfc8785_sha256_v1",
-                        "digest": "sha256:d6026b042cca0f58e0104962f946410cae3becff1d4a675b52f25e2e23ffc75a"
+                        "digest": "sha256:53e8ad548ec61526b77a9be3635402e7147fece7cd457fa67d8b3820a600bbcc"
                     }
                 },
                 "notes": "Executable revision-5 code exists for finite-stop and positive-infinity/capture-bounded branches under one source-faithful build/clock profile, but Cortexel does not yet publish a separate closed machine-readable source-to-request mapping definition. The implementation inventory, request schema, source identity, conformance-profile identity, and R049 requirement establish different boundaries and must not be relabelled as an independent normative mapping specification."
@@ -14247,7 +14247,7 @@ SKILL_ADAPTERS: Final[Mapping[str, tuple[Mapping[str, Any], ...]]] = _freeze({
                     "registry": "cortexel-adapter-conformance-profiles.v1",
                     "id": "nest-spike-recorder.v5",
                     "digestAlgorithm": "cortexel_adapter_conformance_profile_rfc8785_sha256_v1",
-                    "digest": "sha256:d6026b042cca0f58e0104962f946410cae3becff1d4a675b52f25e2e23ffc75a"
+                    "digest": "sha256:53e8ad548ec61526b77a9be3635402e7147fece7cd457fa67d8b3820a600bbcc"
                 }
             },
             "notes": "Executable revision-5 code exists for finite-stop and positive-infinity/capture-bounded branches under one source-faithful build/clock profile, but Cortexel does not yet publish a separate closed machine-readable source-to-request mapping definition. The implementation inventory, request schema, source identity, conformance-profile identity, and R049 requirement establish different boundaries and must not be relabelled as an independent normative mapping specification."

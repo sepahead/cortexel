@@ -27,6 +27,7 @@ import { describe, expect, it, beforeAll } from 'vitest';
 
 import { canonicalDigest } from '../src/core/canonicalize.js';
 import { getBudgetLimits } from '../src/core/limits.js';
+import { parseJsonStrict, type JsonParseLimits } from '../src/core/parse-json.js';
 import { parseAndValidateRequest, validateRequestValue } from '../src/core/request.js';
 import { validateStructure } from '../src/core/structural-validator.js';
 import { deriveExactAggregateCountRateInUnit } from '../src/core/units.js';
@@ -306,6 +307,31 @@ print(json.dumps(results))
 `;
   const out = python(['-c', script], JSON.stringify(texts));
   return JSON.parse(out) as boolean[];
+}
+
+interface RawParserCase {
+  readonly text: string;
+  readonly limits: JsonParseLimits;
+}
+
+/** Return the first stable strict-parser code, or null on acceptance. */
+function pythonTextParseCodes(cases: readonly RawParserCase[]): Array<string | null> {
+  const script = `
+import sys, json
+sys.path.insert(0, 'python/src')
+from cortexel.parse_json import JsonParseError, _parse_json_strict_with_limits
+cases = json.load(sys.stdin)
+results = []
+for case in cases:
+    try:
+        _parse_json_strict_with_limits(case['text'], case['limits'])
+        results.append(None)
+    except JsonParseError as error:
+        results.append(error.code)
+print(json.dumps(results))
+`;
+  const out = python(['-c', script], JSON.stringify(cases));
+  return JSON.parse(out) as Array<string | null>;
 }
 
 describe('cross-language parity — TypeScript vs Python', () => {
@@ -1274,6 +1300,59 @@ describe('cross-language parity — TypeScript vs Python', () => {
       expect(py[index], `Python decision for ${name}`).toBe(expected);
       expect(py[index], `raw-text cross-language mismatch for ${name}`).toBe(ts[index]);
     });
+  }, PARITY_PROOF_TIMEOUT_MS);
+
+  it('agrees at every raw-parser budget boundary before materialization', () => {
+    if (!pythonAvailable) return;
+    const limits = (overrides: Partial<JsonParseLimits> = {}): JsonParseLimits => ({
+      rawInputBytes: 1024,
+      jsonDepth: 8,
+      jsonTotalNodes: 32,
+      jsonStringLength: 32,
+      jsonNumberTokenLength: 32,
+      jsonObjectKeys: 8,
+      jsonArrayItems: 8,
+      ...overrides,
+    });
+    const cases: RawParserCase[] = [
+      { text: '[]', limits: limits({ rawInputBytes: 2 }) },
+      { text: '[]', limits: limits({ rawInputBytes: 1 }) },
+      { text: '[[]]', limits: limits({ jsonDepth: 1 }) },
+      { text: '[[0]]', limits: limits({ jsonDepth: 1 }) },
+      { text: '[0,1]', limits: limits({ jsonTotalNodes: 3 }) },
+      { text: '[0,1,2]', limits: limits({ jsonTotalNodes: 3 }) },
+      { text: '"😀"', limits: limits({ jsonStringLength: 2 }) },
+      { text: '"😀x"', limits: limits({ jsonStringLength: 2 }) },
+      { text: '12', limits: limits({ jsonNumberTokenLength: 2 }) },
+      { text: '123', limits: limits({ jsonNumberTokenLength: 2 }) },
+      { text: '{"a":1}', limits: limits({ jsonObjectKeys: 1 }) },
+      { text: '{"a":1,"b":2}', limits: limits({ jsonObjectKeys: 1 }) },
+      { text: '[1]', limits: limits({ jsonArrayItems: 1 }) },
+      { text: '[1,2]', limits: limits({ jsonArrayItems: 1 }) },
+      { text: '{"a":1,"\\u0061":2}', limits: limits() },
+    ];
+    const typescript = cases.map(({ text, limits: activeLimits }) => {
+      const result = parseJsonStrict(text, { limits: activeLimits });
+      return result.ok ? null : result.errors[0]?.code ?? null;
+    });
+    expect(pythonTextParseCodes(cases)).toEqual(typescript);
+    expect(typescript).toEqual([
+      null,
+      'JSON_BYTES_EXCEEDED',
+      null,
+      'JSON_DEPTH_EXCEEDED',
+      null,
+      'JSON_TOKENS_EXCEEDED',
+      null,
+      'JSON_STRING_TOO_LONG',
+      null,
+      'JSON_NUMBER_TOKEN_TOO_LONG',
+      null,
+      'JSON_TOO_MANY_KEYS',
+      null,
+      'JSON_ARRAY_TOO_LONG',
+      'JSON_DUPLICATE_KEY',
+    ]);
   }, PARITY_PROOF_TIMEOUT_MS);
 
   it('independently agrees on response-rate authority, exact audits, and peak bases', () => {

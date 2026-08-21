@@ -1,7 +1,8 @@
 # Cortexel — Normative scope
 
 > **Status: `0.9.0` is the last tagged pre-1.0 release; this document tracks the
-> private, unreleased `0.10.0-dev.0` source tree.** It describes the boundary Cortexel
+> unreleased `0.10.0-dev.0` working-tree identity, which is intentionally
+> non-publishable (`private: true`).** It describes the boundary Cortexel
 > is being built toward. Neither identity makes a stable-contract claim,
 > no package is published to npm or PyPI, and no DOI has been minted. Where a claim
 > below depends on evidence that has not yet been executed, this document says so and
@@ -415,15 +416,20 @@ was never earned, the evidence boundary is stated plainly:
   executed receipt** in the current development tree (the SVG serializer is designed to be deterministic; the
   cross-platform certification is pending). See [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md).
 - **The independent second reader is implemented but scientifically partial.** The
-  standard-library Python package parses, canonicalizes, hashes, structurally validates,
+  standard-library Python package parses under the generated standard in-scan raw limits,
+  canonicalizes, hashes, structurally validates,
   and independently evaluates the caller-authority, registered quantity-unit,
   numeric-policy, and response-curve rules covered by its parity suite. Response curves
   include their contextual time-window dimension/order check; this does not imply that
   every other skill's `window.valid` binding has a Python implementation. Generated
   registries keep its closed vocabulary aligned with TypeScript; the evaluator itself is
-  separately implemented. Deeper validators outside that implemented subset remain
-  TypeScript-only, so this is cross-language evidence for named decisions rather than a
-  claim that every scientific validator has two implementations.
+  separately implemented. Its partial spike-raster evaluator also checks generic window
+  membership and the declared revision-5 NEST finite-stop and capture-bounded integer-tic,
+  grid, stored-reciprocal projection, history, and boundary relations. It does not adapt
+  output or authenticate NEST, capture timing, or custody. Deeper validators outside
+  that implemented subset remain TypeScript-only, so this is cross-language evidence
+  for named decisions rather than a claim that every scientific validator has two
+  implementations.
 
 ## 9. Governance reality and the standard for stable science
 

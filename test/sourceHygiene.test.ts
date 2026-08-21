@@ -103,7 +103,7 @@ describe('source hygiene', () => {
     const runnerLabels = [...workflow.matchAll(/^\s+runs-on:\s+(\S+)\s*$/gmu)].map(
       (match) => match[1],
     );
-    expect(runnerLabels).toEqual(Array.from({ length: 5 }, () => 'ubuntu-24.04'));
+    expect(runnerLabels).toEqual(Array.from({ length: 6 }, () => 'ubuntu-24.04'));
     expect(workflow).not.toContain('ubuntu-latest');
   });
 

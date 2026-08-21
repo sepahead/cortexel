@@ -73,7 +73,6 @@
       },
       "inputDigestDomain": "cortexel.nest-spike-recorder-adapter-input.v5",
       "timeBuildProfile": "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1",
-      "captureBoundary": "after_successful_advancing_simulate_or_run_return_at_exact_capture_biological_time_before_any_further_advance_or_mutation",
       "positiveInfinityExportedMs": 1.7976931348623157e+308,
       "branches": {
         "finiteStop": {
@@ -84,7 +83,8 @@
           "statusReadMethod": "pynest_single_spike_recorder_get_status_plain_projection_v1",
           "executionScope": "single_process",
           "eventBoundary": "(origin+start,origin+stop]",
-          "captureHorizon": "origin+stop_after_successful_return"
+          "captureHorizon": "origin+stop_after_successful_return",
+          "captureBoundary": "after_successful_simulate_or_run_return"
         },
         "positiveInfinityCaptureBounded": {
           "stopKind": "nest_time_positive_infinity",
@@ -94,7 +94,8 @@
           "statusReadMethod": "pynest_single_spike_recorder_get_status_plain_projection_v2",
           "executionScope": "single_process",
           "eventBoundary": "(origin+start,capture]",
-          "captureHorizon": "capture_after_successful_advancing_return_before_further_advance_or_mutation"
+          "captureHorizon": "capture_after_successful_advancing_return_before_further_advance_or_mutation",
+          "captureBoundary": "after_successful_advancing_simulate_or_run_return_at_exact_capture_biological_time_before_any_further_advance_or_mutation"
         }
       },
       "authorityFields": [
@@ -126,7 +127,8 @@
         "NumPy sender/time arrays projected to dense plain arrays with identical length, order, multiplicity, and finite scalar values"
       ],
       "negativeCases": [
-        "capture at or before origin plus start, capture before successful advancing return, capture after a further advance or mutation, or capture on a non-resolution-grid tic",
+        "finite-stop capture before origin plus stop, before the Simulate or Run call returned successfully, or on a non-resolution-grid tic",
+        "positive-infinity capture at or before origin plus start, before the advancing Simulate or Run call returned successfully, after a further advance or mutation, or on a non-resolution-grid tic",
         "origin, start, capture, or resolution millisecond value without the declared source-faithful integer-tic preimage, or any finite endpoint off the runtime resolution grid",
         "an ideally rounded rational quotient where pinned Time::get_ms emits a different binary64 value, addition of separately serialized millisecond fields, inverse-roundtrip failure, or adjacent-resolution projection aliasing",
         "a tic count above 2^53-1, a combined endpoint at or beyond the resolution-adjusted finite-Time ceiling, signed-64-bit overflow, or a projection whose finite bounds collapse or reverse",

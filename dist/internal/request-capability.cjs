@@ -3,12 +3,12 @@ const require_canonicalize = require('../canonicalize-CM-RPRQS.cjs');
 const require_exact_binary64 = require('../exact-binary64-B9QJo1AS.cjs');
 const require_deep_freeze = require('../deep-freeze-CX4sIEIO.cjs');
 const require_errors = require('../errors-DaUwoa4p.cjs');
-const require_identity = require('../identity-DvvM9pyL.cjs');
-const require_catalog = require('../catalog-B4eoXq8w.cjs');
+const require_identity = require('../identity-Dt42RQe6.cjs');
+const require_catalog = require('../catalog-DG5yXxju.cjs');
 const require_registry = require('../registry-CCvLcMCj.cjs');
 const require_provenance = require('../provenance-jOGKOHvC.cjs');
 const require_response_curve_basis = require('../response-curve-basis-BoFkbgrp.cjs');
-const require_contract_identity = require('../contract-identity-BMEyNZJi.cjs');
+const require_contract_identity = require('../contract-identity-Cna7a4hn.cjs');
 const require_nest_time = require('../nest-time-CaEztfRm.cjs');
 const require_structural_validator = require('../structural-validator-C5wX5pu1.cjs');
 
@@ -6347,7 +6347,7 @@ function checkIdentity(request) {
 		message: `this build implements ${require_identity.REQUEST_CONTRACT}. Compare with getBuildIdentity(), then use migrateLegacyRequest() for a supported pre-1.0 request. The packaged CLI equivalents are \`cortexel identity --json\` and \`cortexel migrate ...\`; a repository checkout may run the same implementation through \`bun src/cli/main.ts ...\`.`
 	}));
 	const digest = request.contractDigest;
-	if (typeof digest === "string" && digest !== "sha256:c5ae167f1d7f07650eb240750abd78bae7453940ae21d4d50e4ecb56b0c7681f") errors.push(require_errors.makeError({
+	if (typeof digest === "string" && digest !== "sha256:ed43aea88c88af84c0e327e6441ecba8cdf6024e499d84b24748946b22af0475") errors.push(require_errors.makeError({
 		code: "CONTRACT_DIGEST_MISMATCH",
 		stage: "identity",
 		instancePath: "/contractDigest",

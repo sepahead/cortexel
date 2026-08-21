@@ -286,8 +286,11 @@ const STATUS_READ_METHOD_V1 =
 const STATUS_READ_METHOD_V2 =
   NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.branches.positiveInfinityCaptureBounded
     .statusReadMethod;
-const CAPTURE_BOUNDARY_V1 = 'after_successful_simulate_or_run_return';
-const CAPTURE_BOUNDARY_V2 = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.captureBoundary;
+const CAPTURE_BOUNDARY_V1 =
+  NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.branches.finiteStop.captureBoundary;
+const CAPTURE_BOUNDARY_V2 =
+  NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.branches.positiveInfinityCaptureBounded
+    .captureBoundary;
 const RECORDING_PLAN_SCOPE = 'window_backend_time_encoding_and_sender_wiring';
 const SENDER_UNIVERSE_BINDING =
   'recorded_sender_ids_exactly_equal_full_window_connected_source_universe';

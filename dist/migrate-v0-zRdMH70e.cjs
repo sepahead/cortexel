@@ -1,8 +1,8 @@
-import { n as getBudgetLimits } from "./limits-DG_btFbi.js";
-import { o as makeError } from "./errors-CxHoMFLD.js";
-import { t as snapshotValue } from "./safe-snapshot-CTOnh-lg.js";
-import { o as LEGACY_SKILL_MAP } from "./catalog-dlkIbdDJ.js";
-import { n as REQUEST_CONTRACT_IDENTITY } from "./contract-identity-BBttDeUN.js";
+const require_limits = require('./limits-zgcdlCes.cjs');
+const require_errors = require('./errors-DaUwoa4p.cjs');
+const require_safe_snapshot = require('./safe-snapshot-Bb70fzip.cjs');
+const require_catalog = require('./catalog-DG5yXxju.cjs');
+const require_contract_identity = require('./contract-identity-Cna7a4hn.cjs');
 
 //#region src/core/migrate-v0.ts
 /**
@@ -37,7 +37,7 @@ import { n as REQUEST_CONTRACT_IDENTITY } from "./contract-identity-BBttDeUN.js"
 * stand, never handed a silently half-converted request that looks complete.
 */
 function migrateLegacyRequest(input) {
-	const snapshot = snapshotValue(input, getBudgetLimits("standard"));
+	const snapshot = require_safe_snapshot.snapshotValue(input, require_limits.getBudgetLimits("standard"));
 	if (!snapshot.ok) return { report: {
 		legacyId: "(none)",
 		outcome: "blocked",
@@ -54,7 +54,7 @@ function migrateLegacyRequest(input) {
 		operations: [],
 		unresolved: [],
 		warnings: [],
-		errors: [makeError({
+		errors: [require_errors.makeError({
 			code: "MIGRATION_INFORMATION_MISSING",
 			stage: "migrate",
 			message: "a legacy request must be a JSON object."
@@ -70,13 +70,13 @@ function migrateLegacyRequest(input) {
 		operations: [],
 		unresolved: [],
 		warnings: [],
-		errors: [makeError({
+		errors: [require_errors.makeError({
 			code: "MIGRATION_UNKNOWN_LEGACY_ID",
 			stage: "migrate",
 			message: "the legacy request does not name a skill id."
 		})]
 	} };
-	const entry = LEGACY_SKILL_MAP[legacyId];
+	const entry = require_catalog.LEGACY_SKILL_MAP[legacyId];
 	if (!entry) return { report: {
 		legacyId,
 		outcome: "blocked",
@@ -84,7 +84,7 @@ function migrateLegacyRequest(input) {
 		operations: [],
 		unresolved: [],
 		warnings: [],
-		errors: [makeError({
+		errors: [require_errors.makeError({
 			code: "MIGRATION_UNKNOWN_LEGACY_ID",
 			stage: "migrate",
 			message: `"${legacyId}" is not a recognized pre-1.0 id. See MIGRATION.md for every recognized id.`
@@ -102,7 +102,7 @@ function migrateLegacyRequest(input) {
 			operations: [],
 			unresolved: [],
 			warnings: [],
-			errors: [makeError({
+			errors: [require_errors.makeError({
 				code: entry.errorCode ?? "MIGRATION_INFORMATION_MISSING",
 				stage: "migrate",
 				message: entry.notes
@@ -113,7 +113,7 @@ function migrateLegacyRequest(input) {
 			operations: [],
 			unresolved: [],
 			warnings: [],
-			errors: [makeError({
+			errors: [require_errors.makeError({
 				code: entry.errorCode ?? "CAPABILITY_EXPERIMENTAL",
 				stage: "migrate",
 				message: entry.targetId === null ? `${entry.notes} No FigureRequestV1 target is emitted.` : `${entry.notes} Target: ${entry.targetId}.`
@@ -124,7 +124,7 @@ function migrateLegacyRequest(input) {
 			operations: [],
 			unresolved: entry.alternatives ? [...entry.alternatives] : [],
 			warnings: [],
-			errors: [makeError({
+			errors: [require_errors.makeError({
 				code: entry.errorCode ?? "MIGRATION_NO_STABLE_REPLACEMENT",
 				stage: "migrate",
 				message: entry.notes
@@ -134,7 +134,7 @@ function migrateLegacyRequest(input) {
 		case "migrate_conditional": {
 			const unresolved = entry.requires ? [...entry.requires] : [];
 			const warnings = [];
-			if (entry.outcome === "migrate_conditional") warnings.push(makeError({
+			if (entry.outcome === "migrate_conditional") warnings.push(require_errors.makeError({
 				code: "MIGRATION_AMBIGUOUS",
 				stage: "migrate",
 				severity: "warning",
@@ -143,8 +143,8 @@ function migrateLegacyRequest(input) {
 			return {
 				request: {
 					contract: {
-						name: REQUEST_CONTRACT_IDENTITY.name,
-						version: REQUEST_CONTRACT_IDENTITY.version
+						name: require_contract_identity.REQUEST_CONTRACT_IDENTITY.name,
+						version: require_contract_identity.REQUEST_CONTRACT_IDENTITY.version
 					},
 					skill: { id: entry.targetId },
 					...entry.materializedParameters ? { parameters: { ...entry.materializedParameters } } : {}
@@ -160,7 +160,7 @@ function migrateLegacyRequest(input) {
 					}] : []],
 					unresolved,
 					warnings,
-					errors: unresolved.length > 0 ? [makeError({
+					errors: unresolved.length > 0 ? [require_errors.makeError({
 						code: "MIGRATION_INFORMATION_MISSING",
 						stage: "migrate",
 						message: `this migration path to ${entry.targetId} requires information the legacy payload did not carry or cannot safely establish: ${unresolved.join(", ")}. Supply it and revalidate. Migration will not guess it.`
@@ -173,7 +173,7 @@ function migrateLegacyRequest(input) {
 			operations: [],
 			unresolved: [],
 			warnings: [],
-			errors: [makeError({
+			errors: [require_errors.makeError({
 				code: "MIGRATION_UNKNOWN_LEGACY_ID",
 				stage: "migrate",
 				message: `no migration path is defined for outcome "${entry.outcome}".`
@@ -183,5 +183,10 @@ function migrateLegacyRequest(input) {
 }
 
 //#endregion
-export { migrateLegacyRequest as t };
-//# sourceMappingURL=migrate-v0-CQ6c9Zq_.js.map
+Object.defineProperty(exports, 'migrateLegacyRequest', {
+  enumerable: true,
+  get: function () {
+    return migrateLegacyRequest;
+  }
+});
+//# sourceMappingURL=migrate-v0-zRdMH70e.cjs.map

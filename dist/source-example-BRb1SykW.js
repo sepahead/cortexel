@@ -36,7 +36,8 @@ const NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5 = Object.freeze({
 			statusReadMethod: "pynest_single_spike_recorder_get_status_plain_projection_v1",
 			executionScope: "single_process",
 			eventBoundary: "(origin+start,origin+stop]",
-			captureHorizon: "origin+stop_after_successful_return"
+			captureHorizon: "origin+stop_after_successful_return",
+			captureBoundary: "after_successful_simulate_or_run_return"
 		}),
 		positiveInfinityCaptureBounded: Object.freeze({
 			stopKind: "nest_time_positive_infinity",
@@ -46,11 +47,11 @@ const NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5 = Object.freeze({
 			statusReadMethod: "pynest_single_spike_recorder_get_status_plain_projection_v2",
 			executionScope: "single_process",
 			eventBoundary: "(origin+start,capture]",
-			captureHorizon: "capture_after_successful_advancing_return_before_further_advance_or_mutation"
+			captureHorizon: "capture_after_successful_advancing_return_before_further_advance_or_mutation",
+			captureBoundary: "after_successful_advancing_simulate_or_run_return_at_exact_capture_biological_time_before_any_further_advance_or_mutation"
 		})
 	}),
 	timeBuildProfile: "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1",
-	captureBoundary: "after_successful_advancing_simulate_or_run_return_at_exact_capture_biological_time_before_any_further_advance_or_mutation",
 	positiveInfinityExportedMs: Number.MAX_VALUE
 });
 
@@ -147,4 +148,4 @@ function isSourceAdapterExampleGuard(value) {
 
 //#endregion
 export { classifySourceAdapterExampleEnvelope as a, NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3 as c, SOURCE_ADAPTER_EXAMPLE_PROTOCOL_VERSION as i, NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5 as l, SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER as n, isSourceAdapterExampleGuard as o, SOURCE_ADAPTER_EXAMPLE_PROTOCOL as r, makeSourceAdapterExampleEnvelope as s, SOURCE_ADAPTER_EXAMPLE_ACTION as t };
-//# sourceMappingURL=source-example-Cx_NUpH0.js.map
+//# sourceMappingURL=source-example-BRb1SykW.js.map

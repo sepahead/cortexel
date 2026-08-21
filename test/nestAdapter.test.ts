@@ -48,6 +48,7 @@ function captureAuthorityFor(
   start: number,
   stop: number,
   localNumThreads = 1,
+  captureBiologicalTime = origin + stop,
 ): NestSpikeCaptureAuthorityInputV3 {
   return {
     kind: 'caller_declaration',
@@ -65,7 +66,7 @@ function captureAuthorityFor(
       resolutionMs: 0.125,
       ticsPerMs: '1000',
       resolutionTics: '125',
-      captureBiologicalTimeTics: ticsForMilliseconds(origin + stop),
+      captureBiologicalTimeTics: ticsForMilliseconds(captureBiologicalTime),
       captureBoundary: 'after_successful_simulate_or_run_return',
     },
     recordingGrid: {
@@ -659,6 +660,18 @@ describe('NEST spike-recorder adapter', () => {
       validExport.start,
       validExport.stop,
       8,
+    );
+    const result = withRuntimeOptions({ ...options, captureAuthority });
+    expect(result.ok).toBe(true);
+  });
+
+  it('accepts a finite-stop status capture after the configured closed stop', () => {
+    const captureAuthority = captureAuthorityFor(
+      validExport.origin,
+      validExport.start,
+      validExport.stop,
+      1,
+      validExport.origin + validExport.stop + 0.125,
     );
     const result = withRuntimeOptions({ ...options, captureAuthority });
     expect(result.ok).toBe(true);

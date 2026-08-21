@@ -502,12 +502,20 @@ describe('adapter evidence axes', () => {
     const implementationProfile = ADAPTER_IMPLEMENTATIONS_V1[0].adapterProfile;
     expect(projection.profile).toMatchObject({
       timeBuildProfile: implementationProfile.timeBuildProfile,
-      captureBoundary: implementationProfile.captureBoundary,
       positiveInfinityExportedMs: implementationProfile.positiveInfinityExportedMs,
+      branches: {
+        finiteStop: {
+          captureBoundary: implementationProfile.branches.finiteStop.captureBoundary,
+        },
+        positiveInfinityCaptureBounded: {
+          captureBoundary:
+            implementationProfile.branches.positiveInfinityCaptureBounded.captureBoundary,
+        },
+      },
     });
+    expect(projection.profile).not.toHaveProperty('captureBoundary');
     for (const [field, mutation] of [
       ['timeBuildProfile', `${implementationProfile.timeBuildProfile}.drift`],
-      ['captureBoundary', `${implementationProfile.captureBoundary}.drift`],
       ['positiveInfinityExportedMs', Number.MAX_VALUE / 2],
     ] as const) {
       const driftedMachineProfile = structuredClone(registry);
@@ -518,6 +526,17 @@ describe('adapter evidence axes', () => {
       if (!profile) continue;
       profile[field] = mutation;
       expect(validate(driftedMachineProfile), field).toBe(false);
+    }
+    for (const branch of ['finiteStop', 'positiveInfinityCaptureBounded'] as const) {
+      const driftedMachineProfile = structuredClone(registry);
+      const profile = driftedMachineProfile.profiles.find(
+        ({ id }: JsonRecord) => id === identity.id,
+      );
+      expect(profile).toBeDefined();
+      if (!profile) continue;
+      profile.branches[branch].captureBoundary =
+        `${implementationProfile.branches[branch].captureBoundary}.drift`;
+      expect(validate(driftedMachineProfile), `${branch}.captureBoundary`).toBe(false);
     }
     expect(
       registry.profiles.find(({ id }: JsonRecord) => id === 'nest-spike-recorder.v3'),
@@ -1270,7 +1289,8 @@ describe('pinned NEST official-example coverage ledger', () => {
     expect(nestEntry).not.toMatch(/lives in the Python package/iu);
     expect(nestEntry).toContain('does not currently run or import PyNEST');
     expect(pythonReadme).toContain(
-      'The scientific adapters (Neo, Elephant, PyNWB, NEST) are not yet',
+      'Producer-side scientific adapters (Neo, Elephant, PyNWB, NEST)',
     );
+    expect(pythonReadme).toContain('are not implemented in Python');
   });
 });

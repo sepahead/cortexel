@@ -861,3 +861,26 @@ jobs:
           umask 022
           cd -- "$source_root"
           PATH="$runtime_root/bin:$PATH" "$CORTEXEL_CI_BUN" run test:package
+
+  # One stable status-check name for default-branch protection. Matrix details stay
+  # visible above without making repository policy depend on every matrix-generated name.
+  gate:
+    name: Required CI gate
+    if: ${{ always() }}
+    needs: [contract, check, formal, python, package-smoke]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every release-development lane
+        env:
+          CONTRACT_RESULT: ${{ needs.contract.result }}
+          CHECK_RESULT: ${{ needs.check.result }}
+          FORMAL_RESULT: ${{ needs.formal.result }}
+          PYTHON_RESULT: ${{ needs.python.result }}
+          PACKAGE_SMOKE_RESULT: ${{ needs.package-smoke.result }}
+        run: |
+          test "$CONTRACT_RESULT" = success
+          test "$CHECK_RESULT" = success
+          test "$FORMAL_RESULT" = success
+          test "$PYTHON_RESULT" = success
+          test "$PACKAGE_SMOKE_RESULT" = success

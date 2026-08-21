@@ -9187,7 +9187,7 @@ const SKILL_CATALOG = freezeGenerated({
 						"registry": "cortexel-adapter-conformance-profiles.v1",
 						"id": "nest-spike-recorder.v5",
 						"digestAlgorithm": "cortexel_adapter_conformance_profile_rfc8785_sha256_v1",
-						"digest": "sha256:d6026b042cca0f58e0104962f946410cae3becff1d4a675b52f25e2e23ffc75a"
+						"digest": "sha256:53e8ad548ec61526b77a9be3635402e7147fece7cd457fa67d8b3820a600bbcc"
 					}
 				},
 				"notes": "Executable revision-5 code exists for finite-stop and positive-infinity/capture-bounded branches under one source-faithful build/clock profile, but Cortexel does not yet publish a separate closed machine-readable source-to-request mapping definition. The implementation inventory, request schema, source identity, conformance-profile identity, and R049 requirement establish different boundaries and must not be relabelled as an independent normative mapping specification."
@@ -10369,4 +10369,4 @@ const UNCERTAINTY_STYLES_BY_KIND = freezeGenerated({
 
 //#endregion
 export { EXPERIMENTAL_CAPABILITY_IDS as a, SKILL_CATALOG as c, UNCERTAINTY_STYLES_BY_KIND as d, isCapabilityId as f, lookupSkillCatalogEntry as h, CATEGORICAL_SERIES_STYLES as i, STABLE_SKILL_IDS as l, lookupCapabilityCatalogEntry as m, CAPABILITY_CATALOG as n, LEGACY_SKILL_MAP as o, isStableSkillId as p, CAPABILITY_IDS as r, REMOVED_CAPABILITY_IDS as s, CAPABILITY_AVAILABILITIES as t, THEMES as u };
-//# sourceMappingURL=catalog-dlkIbdDJ.js.map
+//# sourceMappingURL=catalog-Da0CtmnI.js.map

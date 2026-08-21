@@ -28,7 +28,8 @@ validation; it does not own a writable Cortexel source copy.
    complete integration gates. Record both the Cortexel SHA and the downstream commit in
    the adoption receipt.
 
-The private `0.10.0-dev.0` metadata is a development safeguard, not a release. The
+The `private: true` flag on `0.10.0-dev.0` is a non-publication safeguard, not a release
+or a statement about repository visibility. The
 read-only `release:verify` command intentionally fails until a final version, public
 package metadata, matching release records, an annotated tag on clean HEAD, and a real
 artifact source-stamping producer all exist. It is not a normal pull-request success

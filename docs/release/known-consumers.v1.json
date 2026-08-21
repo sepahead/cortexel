@@ -15,14 +15,19 @@
   "consumers": [
     {
       "id": "engram",
-      "repository": "private",
-      "visibility": "private",
-      "pinnedCortexelRevision": "757b94c",
+      "repository": "https://github.com/sepahead/Paper2Brain",
+      "visibility": "public",
+      "pinnedCortexelRevision": "8ec73b278dce1a40bc2a3a652cda01a0a8d26141",
       "integrationOwner": "Sepehr Mahmoudian",
-      "surfaceUsed": ["cortexel/core", "cortexel/react"],
+      "surfaceUsed": [
+        "cortexel/core",
+        "cortexel/figure",
+        "cortexel/react",
+        "cortexel/react/knowledge-graph"
+      ],
       "lastTestedAt": null,
-      "state": "unverified",
-      "notes": "Engram frontend/package.json, its lockfile, and its release receipt currently agree on git dependency revision 757b94c and consume the packaged legacy core/react surfaces. This is observed pin metadata only: no integration run against the current dirty Cortexel development contract has been executed, so no compatibility claim is made."
+      "state": "stale",
+      "notes": "Engram origin/main frontend/package.json and bun.lock agree on full git dependency revision 8ec73b278dce1a40bc2a3a652cda01a0a8d26141, while its retained backend release receipt still records 757b94cd5717a8eab718f4e3ac38c88941bfcc9c. The observed imports use the listed packaged surfaces. No clean joint integration run or regenerated consumer receipt exists, so no current compatibility claim is made."
     },
     {
       "id": "ncp",

@@ -1,0 +1,44 @@
+name: Usage question
+description: Ask how to author, validate, adapt, or render with Cortexel.
+title: "[question] "
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check `SUPPORT.md` and `docs/KNOWN_LIMITATIONS.md` first. Do not include
+        credentials, unpublished research data, or security-sensitive details.
+
+  - type: input
+    id: identity
+    attributes:
+      label: Cortexel identity
+      description: Paste the package version and contract digest from `cortexel identity --json`.
+    validations:
+      required: true
+
+  - type: input
+    id: surface
+    attributes:
+      label: Entry point and skill
+      description: Name the package subpath or CLI command and the skill or source-adapter id.
+      placeholder: cortexel/figure — neuro.spike_raster
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: Explain the outcome you need and the part of the contract or workflow that is unclear.
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Minimal input and diagnostics
+      description: Include a minimal redistributable request plus the complete structured error, if applicable.
+      render: shell
+    validations:
+      required: false

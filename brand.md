@@ -10,9 +10,9 @@ inspectable figure artifact. The mark encodes the contract, not a charting UI.
 
 - The magenta voxel is a caller-declared neural population. Its white seed point
   is one neuron. Both remain visibly outside Cortexel's authority boundary.
-- The open white bracket is the strict caller-authority, structural, semantic and
-  scientific validation boundary. It is not a checkmark or a claim that arbitrary
-  input passes.
+- The open white bracket is the strict caller-authority, structural, and semantic
+  contract-validation boundary. It is not a checkmark or a claim that arbitrary input
+  passes.
 - The open, C-shaped magenta frame is the Cortexel-authored artifact. Its shape is
   both a folded output boundary and an ownable initial without using a wordmark.
 - The white electrophysiology curve is one neuronal action potential: resting

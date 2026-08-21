@@ -1,4 +1,4 @@
-import { o as REQUEST_CONTRACT, t as ARTIFACT_CONTRACT } from "./identity-BD3MBqiL.js";
+import { o as REQUEST_CONTRACT, t as ARTIFACT_CONTRACT } from "./identity-B6EIyMGv.js";
 
 //#region src/core/contract-identity.ts
 /** Internal named projections of the generated registry-owned contract identities. */
@@ -17,4 +17,4 @@ const ARTIFACT_CONTRACT_IDENTITY = splitContractIdentity(ARTIFACT_CONTRACT, "ART
 
 //#endregion
 export { REQUEST_CONTRACT_IDENTITY as n, ARTIFACT_CONTRACT_IDENTITY as t };
-//# sourceMappingURL=contract-identity-BBttDeUN.js.map
+//# sourceMappingURL=contract-identity-BSVSbVYQ.js.map

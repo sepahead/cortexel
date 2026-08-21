@@ -1,7 +1,8 @@
 # Cortexel security model (technical / threat model)
 
 > **Status: `0.9.0` is the last tagged pre-1.0 release; this document tracks the
-> private, unreleased `0.10.0-dev.0` source tree.** It describes the threat model and
+> unreleased `0.10.0-dev.0` working-tree identity, which is intentionally
+> non-publishable (`private: true`).** It describes the threat model and
 > the technical controls that back it. Neither identity makes a stable-contract
 > claim: interfaces, limits, and even control boundaries may change before 1.0. No
 > package is published to npm or PyPI, and no DOI has been minted, so the npm/PyPI/DOI
@@ -83,9 +84,12 @@ A trust boundary is where data crosses from a less-trusted context into a
 more-trusted one and must be checked. Cortexel has these, in the order data
 traverses them:
 
-1. **Raw JSON text → parsed value** (`src/core/parse-json.ts`). The strongest and
-   most-preferred entry. It sees the *text*, so it can certify facts that are
-   unrecoverable later (notably, that no object member appeared twice).
+1. **Raw JSON text → parsed value** (`src/core/parse-json.ts`, independently mirrored by
+   `python/src/cortexel/parse_json.py`). The strongest and most-preferred entry. It sees
+   the *text*, so it can certify facts that are unrecoverable later (notably, that no
+   object member appeared twice). Both scanners enforce the seven raw-parser budgets
+   during tokenization; a Python host still owns bounded acquisition and strict UTF-8
+   decoding before it has a `str` to pass across this boundary.
 2. **Materialized JS value → safe snapshot** (`src/core/safe-snapshot.ts`). When a
    caller passes an already-parsed JavaScript object instead of text. This boundary
    is *deliberately weaker* and reports the weaker assurance
@@ -307,7 +311,9 @@ scientific review (§7), not a runtime gate.
   `JSON_ARRAY_TOO_LONG`, `JSON_TOO_MANY_KEYS`, `JSON_STRING_TOO_LONG`,
   `JSON_NUMBER_TOKEN_TOO_LONG`), so the relevant scanner loop stops at the first
   excess decoded/token unit rather than materializing the rest and measuring it later.
-  The snapshot boundary enforces the same ceilings.
+  The independent Python raw-text scanner follows the same budget order and stable error
+  classes. The snapshot boundaries enforce the same ceilings for already-materialized
+  values.
 - **A throwing `Proxy` cannot spin the snapshotter.** Every reflective operation is
   wrapped; a trap that throws collapses to `SNAPSHOT_HOSTILE_REFLECTION` and the value
   is abandoned — the thrown value is *not* re-inspected, because inspecting it would be
@@ -450,7 +456,8 @@ release ledger — that bounds or will close it.
 
 - **The independent Python reader remains partial.** It has an independent strict
   parser, canonicalizer, structural validator, and selected portable semantic evaluators,
-  including adversarial cross-language vectors. It intentionally returns
+  including adversarial cross-language vectors and the declared revision-5 NEST
+  spike-raster clock/window relations. It intentionally returns
   `SEMANTIC_VALIDATOR_UNAVAILABLE` where a skill's complete semantic rule set has not
   been implemented; it does not turn partial parity into a success claim. **Gate:** the
   remaining cross-language coverage tracked in the ledger (R019/R022 Python side,

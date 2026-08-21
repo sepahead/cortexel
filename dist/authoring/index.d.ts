@@ -1,5 +1,5 @@
 import { _ as isStableSkillId, a as CapabilityAvailability, f as SKILL_CATALOG, g as isCapabilityId, h as StableSkillId, i as CAPABILITY_IDS, m as SkillCatalogEntry, n as CAPABILITY_AVAILABILITIES, o as CapabilityCatalogEntry, p as STABLE_SKILL_IDS, r as CAPABILITY_CATALOG, s as CapabilityId, v as lookupCapabilityCatalogEntry, y as lookupSkillCatalogEntry } from "../catalog-loFdaQY_.js";
-import { i as CATALOG_DIGEST_DOMAIN, r as CATALOG_DIGEST } from "../identity-DZ0E0rUc.js";
+import { i as CATALOG_DIGEST_DOMAIN, r as CATALOG_DIGEST } from "../identity-C0HjStEj.js";
 //#region src/generated/authoring.d.ts
 interface SkillAuthoringEntry {
   /** Complete structural request schema. Full Cortexel validation remains authoritative. */
@@ -137,6 +137,7 @@ declare const SOURCE_ADAPTER_CATALOG: {
               executionScope: "single_process";
               eventBoundary: "(origin+start,origin+stop]";
               captureHorizon: "origin+stop_after_successful_return";
+              captureBoundary: "after_successful_simulate_or_run_return";
             }>;
             positiveInfinityCaptureBounded: Readonly<{
               stopKind: "nest_time_positive_infinity";
@@ -147,10 +148,10 @@ declare const SOURCE_ADAPTER_CATALOG: {
               executionScope: "single_process";
               eventBoundary: "(origin+start,capture]";
               captureHorizon: "capture_after_successful_advancing_return_before_further_advance_or_mutation";
+              captureBoundary: "after_successful_advancing_simulate_or_run_return_at_exact_capture_biological_time_before_any_further_advance_or_mutation";
             }>;
           }>;
           readonly timeBuildProfile: "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1";
-          readonly captureBoundary: "after_successful_advancing_simulate_or_run_return_at_exact_capture_biological_time_before_any_further_advance_or_mutation";
           readonly positiveInfinityExportedMs: number;
         }>;
       };

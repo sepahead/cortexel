@@ -23,8 +23,12 @@ inappropriate in a professional setting.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the project maintainers. All complaints will be reviewed and
-investigated promptly and fairly.
+reported privately to the sole maintainer through GitHub's
+[private reporting form](https://github.com/sepahead/cortexel/security/advisories/new);
+prefix the report title with `Conduct report`. This shared private channel protects the
+reporter's identity even though the report is not a software vulnerability. Reports are
+reviewed fairly on a best-effort basis; this single-maintainer project cannot promise a
+response-time SLA.
 
 This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org),
 version 2.1.

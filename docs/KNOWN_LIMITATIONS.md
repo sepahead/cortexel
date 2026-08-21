@@ -1,7 +1,7 @@
 # Known limitations of the current pre-1.0 development tree
 
-`0.9.0` is the last tagged pre-1.0 release. The working source identifies itself as the
-private, unreleased `0.10.0-dev.0`; neither identity makes a stable-contract claim. This
+`0.9.0` is the last tagged pre-1.0 release. The unreleased `0.10.0-dev.0` working-tree
+identity is intentionally non-publishable (`private: true`); neither identity makes a stable-contract claim. This
 document is the honest list of what the current tree has not yet done—the alternative to a green
 checkmark that isn't earned. Each item names what exists, what does not, and the gate
 that closes it.
@@ -128,7 +128,7 @@ The machine-readable state of every release gate is in
   inside the artifact JSON. The artifact records `tableBinding: shape_only`, the exact
   ordered table-column keys, and one row count, so schema/order/cardinality drift is
   detectable, but cell values and row bytes remain unbound.
-  Spike-raster revision 2 additionally accepts only `aboveMarkBudget: refuse` and does
+  Spike-raster revision 6 additionally accepts only `aboveMarkBudget: refuse` and does
   not advertise the registered future `raster_density_bins` policy. Restoring any
   `+sidecar` claim requires deterministic library-owned bytes, artifact output binding,
   exact encoding tests, and byte-for-byte CLI passthrough in the same change.
@@ -285,7 +285,11 @@ The machine-readable state of every release gate is in
   Unicode in member names or values), RFC 8785 canonicalization matching ECMAScript
   number formatting and UTF-16 key ordering, SHA-256 digests, contract identity, and
   structural + unit-semantic validation — all pure standard library, no Node, no
-  `jsonschema`. Its already-materialized Python boundary first copies exact built-in JSON
+  `jsonschema`. Its independent recursive-descent raw-text parser applies the generated
+  standard byte, depth, node, decoded UTF-16 string, number-token, object-member, and
+  array-item limits while scanning, before an unbounded tree is materialized. The host
+  still owns bounded byte acquisition and strict UTF-8 decoding before a Python `str`
+  exists. Its already-materialized Python boundary first copies exact built-in JSON
   values into a detached tree under the standard depth/node/string/container limits; it
   rejects subclasses, cycles, dangerous keys, malformed Unicode and non-finite or
   non-interoperable numbers without invoking caller-overridable methods. Diagnostic batches
@@ -333,6 +337,12 @@ The machine-readable state of every release gate is in
   independently ported. The normative numeric-policy registry is generated into both
   runtimes, while its interval algorithm is separately implemented and exercised against
   the same conformance vectors.
+  The spike-raster partial port independently evaluates generic event-window membership
+  and both revision-5 NEST branches. It checks the declared exact integer-tic/grid domain,
+  stored-reciprocal `Time::get_ms()` projection, capture/buffer/plan chronology, and
+  open-start/closed-stop or open-start/closed-capture membership. These are internal
+  consistency checks over caller declarations, not authentication of NEST, the producing
+  process, capture timing, or export custody; Python still exposes no producer adapter.
   The response event-scope validator checks internal declarations only: it cannot consult
   source recordings to establish selection/member referents, sender cardinality,
   completeness, pooling actually performed, a membership-digest preimage, or that a
@@ -381,7 +391,9 @@ The machine-readable state of every release gate is in
 
   Executable adapter revision 5 has two closed branch records. `finiteStop` requires
   projection v1 and capture-authority profile v3 with `kind: caller_declaration`, and
-  retains `(origin+start,origin+stop]`. `positiveInfinityCaptureBounded` covers NEST's
+  retains `(origin+start,origin+stop]`; its status capture may be at or after
+  `origin+stop` following a successful `Simulate` or `Run` return.
+  `positiveInfinityCaptureBounded` covers NEST's
   default positive-infinity stop with projection v2 and capture-authority profile v4.
   Projection v2 alone converts the exact pinned-runtime PyNEST `DBL_MAX` representation into the
   closed token `{ "kind": "nest_time_positive_infinity" }`; the adapter rejects a raw
@@ -728,7 +740,9 @@ The machine-readable state of every release gate is in
   PyNEST capture helper. Usage errors are not yet one uniform versioned diagnostic
   envelope with machine-actionable next steps. The separately packaged Python code is
   an independent strict parser/canonicalizer and explicitly partial semantic reader; it
-  exposes no console command, renderer, NEST adapter, or full validity certificate.
+  exposes no console command, renderer, producer-side NEST adapter, or full validity
+  certificate. Its partial stable spike-raster evaluator does independently check the
+  authored revision-5 NEST clock/window declarations described above.
   A future `cortexel-nest` producer helper should run inside the scientist's PyNEST
   environment and emit a versioned source-capture record, while rendering and detached
   verification remain independent of PyNEST. TypeScript and Python must share a closed
@@ -882,7 +896,8 @@ The machine-readable state of every release gate is in
   outside the boundary. Those capabilities require an external cgroup, sandbox, VM,
   Job Object, or equivalent lifetime primitive.
 - **No package is published.** Nothing has been pushed to npm or PyPI, and no DOI has been
-  minted. The npm/PyPI/CI badges in the README are inactive by design. *Gate:
+  minted. The npm and PyPI badges in the README are inactive by design; the visible CI
+  badge reports development workflow status, not release certification. *Gate:
   R108, R134–R155.*
 - **CI is a development workflow, not a release-certification matrix.** It runs
   contract, TypeScript, Python, and package-smoke jobs, but does not implement the full

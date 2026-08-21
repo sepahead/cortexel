@@ -320,7 +320,7 @@ describe('Engram receipt-bound adapter negative paths', () => {
   });
 });
 
-describe('Engram (Paper2Brain) end-to-end flow', () => {
+describe('Cortexel-local Engram (Paper2Brain) contract flow', () => {
   it('adapts, gates, and caption-binds a receipt-bound corpus graph', () => {
     const graph = receiptBoundResponse();
     const adapted = adapt(graph);

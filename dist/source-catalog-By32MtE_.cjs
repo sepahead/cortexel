@@ -1,6 +1,6 @@
-import { n as canonicalDigest } from "./canonicalize-F75Ifelv.js";
-import { n as freezeGenerated } from "./deep-freeze-CyWYjAwr.js";
-import { l as NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5, s as makeSourceAdapterExampleEnvelope } from "./source-example-Cx_NUpH0.js";
+const require_canonicalize = require('./canonicalize-CM-RPRQS.cjs');
+const require_deep_freeze = require('./deep-freeze-CX4sIEIO.cjs');
+const require_source_example = require('./source-example-Cy4zoYav.cjs');
 
 //#region src/generated/authoring.ts
 /**
@@ -11,7 +11,7 @@ import { l as NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5, s as makeSourceAdapterExam
 * `bun run check:generated` fails if this file drifts from its source.
 */
 /** Versioned Ajv compile profile bound by catalogDigest. */
-const AUTHORING_SCHEMA_COMPILATION_PROFILE_V1 = freezeGenerated({
+const AUTHORING_SCHEMA_COMPILATION_PROFILE_V1 = require_deep_freeze.freezeGenerated({
 	"id": "cortexel-authoring-schema-compilation-profile.v1",
 	"dialect": "https://json-schema.org/draft/2020-12/schema",
 	"engine": "ajv-8",
@@ -28,7 +28,7 @@ const AUTHORING_SCHEMA_COMPILATION_PROFILE_V1 = freezeGenerated({
 	}
 });
 /** Shared offline resources required to compile every generated per-skill schema. */
-const STABLE_CATALOG_SCHEMA_RESOURCES = freezeGenerated([{
+const STABLE_CATALOG_SCHEMA_RESOURCES = require_deep_freeze.freezeGenerated([{
 	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"$id": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json",
 	"title": "Cortexel shared types v1",
@@ -1935,7 +1935,7 @@ const STABLE_CATALOG_SCHEMA_RESOURCES = freezeGenerated([{
 		}
 	}
 }]);
-const SKILL_AUTHORING = freezeGenerated({
+const SKILL_AUTHORING = require_deep_freeze.freezeGenerated({
 	"network.adjacency_matrix": {
 		"requestSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -11987,8 +11987,8 @@ const NEST_SPIKE_RECORDER_FINITE_STOP_V5_EXAMPLE = {
 		recorderId: "spike-recorder-1"
 	}
 };
-const NEST_SPIKE_RECORDER_POSITIVE_INFINITY_V5_EXAMPLE_ENVELOPE = makeSourceAdapterExampleEnvelope("nest-spike-recorder", 5, NEST_SPIKE_RECORDER_POSITIVE_INFINITY_V5_EXAMPLE);
-const NEST_SPIKE_RECORDER_FINITE_STOP_V5_EXAMPLE_ENVELOPE = makeSourceAdapterExampleEnvelope("nest-spike-recorder", 5, NEST_SPIKE_RECORDER_FINITE_STOP_V5_EXAMPLE);
+const NEST_SPIKE_RECORDER_POSITIVE_INFINITY_V5_EXAMPLE_ENVELOPE = require_source_example.makeSourceAdapterExampleEnvelope("nest-spike-recorder", 5, NEST_SPIKE_RECORDER_POSITIVE_INFINITY_V5_EXAMPLE);
+const NEST_SPIKE_RECORDER_FINITE_STOP_V5_EXAMPLE_ENVELOPE = require_source_example.makeSourceAdapterExampleEnvelope("nest-spike-recorder", 5, NEST_SPIKE_RECORDER_FINITE_STOP_V5_EXAMPLE);
 const SOURCE_ADAPTER_CATALOG_DATA = {
 	protocol: "cortexel-source-adapter-catalog",
 	protocolVersion: 1,
@@ -12002,7 +12002,7 @@ const SOURCE_ADAPTER_CATALOG_DATA = {
 		implementation: {
 			packageSubpath: "cortexel/adapters/nest",
 			exportName: "nestSpikeRecorderToRaster",
-			profile: NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5
+			profile: require_source_example.NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5
 		},
 		cli: {
 			command: "cortexel source adapt nest-spike-recorder <input|->",
@@ -12055,13 +12055,13 @@ const SOURCE_ADAPTER_CATALOG_DATA = {
 		example: NEST_SPIKE_RECORDER_POSITIVE_INFINITY_V5_EXAMPLE_ENVELOPE
 	} }
 };
-const SOURCE_ADAPTER_CATALOG = freezeGenerated(SOURCE_ADAPTER_CATALOG_DATA);
+const SOURCE_ADAPTER_CATALOG = require_deep_freeze.freezeGenerated(SOURCE_ADAPTER_CATALOG_DATA);
 function lookupSourceAdapter(value) {
 	if (!isSourceAdapterId(value)) return void 0;
 	return SOURCE_ADAPTER_CATALOG.adapters[value];
 }
 /** Digests bind the complete descriptor returned by `source describe`. */
-const SOURCE_ADAPTER_DESCRIPTOR_DIGESTS = freezeGenerated({ "nest-spike-recorder": canonicalDigest({
+const SOURCE_ADAPTER_DESCRIPTOR_DIGESTS = require_deep_freeze.freezeGenerated({ "nest-spike-recorder": require_canonicalize.canonicalDigest({
 	domain: SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN,
 	descriptor: SOURCE_ADAPTER_CATALOG.adapters["nest-spike-recorder"]
 }) });
@@ -12073,7 +12073,7 @@ function lookupSourceAdapterDescriptorDigest(value) {
 * so catalog consumers need not download every example and authority paragraph merely
 * to discover an adapter, while `source describe` remains independently verifiable.
 */
-const SOURCE_ADAPTER_DISCOVERY_CATALOG = freezeGenerated({
+const SOURCE_ADAPTER_DISCOVERY_CATALOG = require_deep_freeze.freezeGenerated({
 	protocol: "cortexel-source-adapter-discovery-catalog",
 	protocolVersion: 1,
 	adapters: SOURCE_ADAPTER_IDS.map((id) => {
@@ -12092,12 +12092,95 @@ const SOURCE_ADAPTER_DISCOVERY_CATALOG = freezeGenerated({
 	})
 });
 /** Exact, emitted digest preimage; no hidden package bytes are needed to reproduce it. */
-const SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE = freezeGenerated({
+const SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE = require_deep_freeze.freezeGenerated({
 	domain: SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
 	catalog: SOURCE_ADAPTER_DISCOVERY_CATALOG
 });
-const SOURCE_ADAPTER_CATALOG_DIGEST = canonicalDigest(SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE);
+const SOURCE_ADAPTER_CATALOG_DIGEST = require_canonicalize.canonicalDigest(SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE);
 
 //#endregion
-export { SOURCE_ADAPTER_DESCRIPTOR_DIGESTS as a, SOURCE_ADAPTER_IDS as c, lookupSourceAdapterDescriptorDigest as d, AUTHORING_SCHEMA_COMPILATION_PROFILE_V1 as f, SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE as i, isSourceAdapterId as l, STABLE_CATALOG_SCHEMA_RESOURCES as m, SOURCE_ADAPTER_CATALOG_DIGEST as n, SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN as o, SKILL_AUTHORING as p, SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN as r, SOURCE_ADAPTER_DISCOVERY_CATALOG as s, SOURCE_ADAPTER_CATALOG as t, lookupSourceAdapter as u };
-//# sourceMappingURL=source-catalog-WL76PNwW.js.map
+Object.defineProperty(exports, 'AUTHORING_SCHEMA_COMPILATION_PROFILE_V1', {
+  enumerable: true,
+  get: function () {
+    return AUTHORING_SCHEMA_COMPILATION_PROFILE_V1;
+  }
+});
+Object.defineProperty(exports, 'SKILL_AUTHORING', {
+  enumerable: true,
+  get: function () {
+    return SKILL_AUTHORING;
+  }
+});
+Object.defineProperty(exports, 'SOURCE_ADAPTER_CATALOG', {
+  enumerable: true,
+  get: function () {
+    return SOURCE_ADAPTER_CATALOG;
+  }
+});
+Object.defineProperty(exports, 'SOURCE_ADAPTER_CATALOG_DIGEST', {
+  enumerable: true,
+  get: function () {
+    return SOURCE_ADAPTER_CATALOG_DIGEST;
+  }
+});
+Object.defineProperty(exports, 'SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN', {
+  enumerable: true,
+  get: function () {
+    return SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN;
+  }
+});
+Object.defineProperty(exports, 'SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE', {
+  enumerable: true,
+  get: function () {
+    return SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE;
+  }
+});
+Object.defineProperty(exports, 'SOURCE_ADAPTER_DESCRIPTOR_DIGESTS', {
+  enumerable: true,
+  get: function () {
+    return SOURCE_ADAPTER_DESCRIPTOR_DIGESTS;
+  }
+});
+Object.defineProperty(exports, 'SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN', {
+  enumerable: true,
+  get: function () {
+    return SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN;
+  }
+});
+Object.defineProperty(exports, 'SOURCE_ADAPTER_DISCOVERY_CATALOG', {
+  enumerable: true,
+  get: function () {
+    return SOURCE_ADAPTER_DISCOVERY_CATALOG;
+  }
+});
+Object.defineProperty(exports, 'SOURCE_ADAPTER_IDS', {
+  enumerable: true,
+  get: function () {
+    return SOURCE_ADAPTER_IDS;
+  }
+});
+Object.defineProperty(exports, 'STABLE_CATALOG_SCHEMA_RESOURCES', {
+  enumerable: true,
+  get: function () {
+    return STABLE_CATALOG_SCHEMA_RESOURCES;
+  }
+});
+Object.defineProperty(exports, 'isSourceAdapterId', {
+  enumerable: true,
+  get: function () {
+    return isSourceAdapterId;
+  }
+});
+Object.defineProperty(exports, 'lookupSourceAdapter', {
+  enumerable: true,
+  get: function () {
+    return lookupSourceAdapter;
+  }
+});
+Object.defineProperty(exports, 'lookupSourceAdapterDescriptorDigest', {
+  enumerable: true,
+  get: function () {
+    return lookupSourceAdapterDescriptorDigest;
+  }
+});
+//# sourceMappingURL=source-catalog-By32MtE_.cjs.map

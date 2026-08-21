@@ -1,7 +1,8 @@
 # Provenance and honesty model
 
 > **Status: `0.9.0` is the last tagged pre-1.0 release; this document tracks the
-> private, unreleased `0.10.0-dev.0` source tree.** It describes a contract, not a
+> unreleased `0.10.0-dev.0` working-tree identity, which is intentionally
+> non-publishable (`private: true`).** It describes a contract, not a
 > certified result. Neither identity makes a stable-contract claim, no package is
 > published to npm or PyPI, and no DOI has been minted. No pinned
 > reference environment (NEST, Elephant, Neo, PyNWB) has been executed, so **no figure

@@ -1,10 +1,10 @@
 # Support
 
-`0.9.0` is Cortexel's last tagged pre-1.0 release; the working source is the private,
-unreleased `0.10.0-dev.0`. Neither makes a stable-contract claim, `main` may break,
-and no package has been published to npm or PyPI. This
-document explains where to get help, what the project can and cannot do for you, and
-what to realistically expect from a single-maintainer preview.
+`0.9.0` is Cortexel's last tagged pre-1.0 release; the unreleased `0.10.0-dev.0`
+working-tree identity is intentionally non-publishable (`private: true`). Neither makes
+a stable-contract claim, `main` may break, and no package has been published to npm or
+PyPI. This document explains where to get help, what the project can and cannot do for
+you, and what to realistically expect from a single-maintainer preview.
 
 Reading this first saves everyone time: most of what feels like a "bug" in a
 scientific-figure contract is actually the contract refusing to make a claim it cannot

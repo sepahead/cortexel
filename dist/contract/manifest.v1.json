@@ -3,8 +3,8 @@
   "manifestVersion": 1,
   "requestContract": "cortexel-figure-request/1.0",
   "artifactContract": "cortexel-figure-artifact/1.0",
-  "contractDigest": "sha256:c5ae167f1d7f07650eb240750abd78bae7453940ae21d4d50e4ecb56b0c7681f",
-  "catalogDigest": "sha256:e6ef9014ca56f4bd159f8b3545ba8d7cf0241550ff25b9de44b05fde826f0dd5",
+  "contractDigest": "sha256:ed43aea88c88af84c0e327e6441ecba8cdf6024e499d84b24748946b22af0475",
+  "catalogDigest": "sha256:7e52385ef9fe7e58e94c5e005d4239c5ecb7575bb0e09a170e46758a190571b3",
   "catalogDigestDomain": "cortexel-public-stable-catalog.v2",
   "stableSkillCount": 19,
   "capabilityAvailabilities": [
@@ -8753,7 +8753,7 @@
               "registry": "cortexel-adapter-conformance-profiles.v1",
               "id": "nest-spike-recorder.v5",
               "digestAlgorithm": "cortexel_adapter_conformance_profile_rfc8785_sha256_v1",
-              "digest": "sha256:d6026b042cca0f58e0104962f946410cae3becff1d4a675b52f25e2e23ffc75a"
+              "digest": "sha256:53e8ad548ec61526b77a9be3635402e7147fece7cd457fa67d8b3820a600bbcc"
             }
           },
           "notes": "Executable revision-5 code exists for finite-stop and positive-infinity/capture-bounded branches under one source-faithful build/clock profile, but Cortexel does not yet publish a separate closed machine-readable source-to-request mapping definition. The implementation inventory, request schema, source identity, conformance-profile identity, and R049 requirement establish different boundaries and must not be relabelled as an independent normative mapping specification."
@@ -9948,7 +9948,7 @@
   "normativeSources": [
     {
       "path": "contract/meta/adapter-conformance-profiles.schema.json",
-      "digest": "sha256:0c959749c644d6bf1fbe2ce74bf5d07c22e1c0eb5553edfa0b11c3337261a141"
+      "digest": "sha256:4e61d1e164e62455671ca14137e741b98d49b8d45f5c03b75a79cf0d3e2fbdef"
     },
     {
       "path": "contract/meta/canonicalization-registry.schema.json",
@@ -9960,7 +9960,7 @@
     },
     {
       "path": "contract/registries/adapter-conformance-profiles.v1.json",
-      "digest": "sha256:22fe121f6bc642cf6e41034679c19c29f770dcf44ddbd4ce3aeb03aca33f6a62"
+      "digest": "sha256:8ee7384e3770fd6bed9af028947c5c0c0fb987ac9de977e9a5e6a20c7be3cb38"
     },
     {
       "path": "contract/registries/budget-profiles.v1.json",
@@ -9972,7 +9972,7 @@
     },
     {
       "path": "contract/registries/capabilities.v1.json",
-      "digest": "sha256:88e6d4e2346eb4cec0932ceb91abbf1798d32e108e46040aa2dae1c3474ea081"
+      "digest": "sha256:fc130dc431f3e2e3ab4aa8f73258a36d7a4ddab0b3ae0830a569055213787665"
     },
     {
       "path": "contract/registries/disclosures.v1.json",
@@ -10184,7 +10184,7 @@
     },
     {
       "path": "contract/skills/neuro.spike_raster.v1.json",
-      "digest": "sha256:53e013165a5f6e15028e4abbcd0e8a8cccf9d8170eb7199ec7bcba53f37df97b"
+      "digest": "sha256:b5a778c791c50f18182595d92d65311e3d0036566d0c70dd30a08bac53277568"
     }
   ],
   "notes": [

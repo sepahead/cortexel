@@ -1,9 +1,10 @@
 # Roadmap — from the current pre-1.0 tree to 1.0
 
-`0.9.0` is Cortexel's last tagged pre-1.0 release. The working source is the private,
-unreleased `0.10.0-dev.0`; neither identity makes a stable-contract claim. Nothing has
-been published to npm or PyPI, and no DOI has been minted. This document is the honest
-path from the current tree to a `1.0.0` that would be allowed to make those claims.
+`0.9.0` is Cortexel's last tagged pre-1.0 release. The unreleased `0.10.0-dev.0`
+working-tree identity is intentionally non-publishable (`private: true`); neither
+identity makes a stable-contract claim. Nothing has been published to npm or PyPI, and
+no DOI has been minted. This document is the honest path from the current tree to a
+`1.0.0` that would be allowed to make those claims.
 
 It is derived from two sources, and they — not this prose — are authoritative:
 
@@ -22,7 +23,7 @@ that are not yet available (see the next section). The internal work is tracked 
 milestones **M0–M9**; this document groups that work by the deliverables a consumer
 would care about.
 
-### Fixed checklist entries that are outside the current capability scope
+## Fixed checklist entries that are outside the current capability scope
 
 The release ledger is a fixed 1.0-target checklist, not a generated mirror of whatever
 the current capability registry happens to contain. Four retained entries name proposed
@@ -249,7 +250,8 @@ source. This milestone is what makes the *Packaging and runtime compatibility*
 **Status today.** Development CI has separate contract, TypeScript/build, Python, and
 package-smoke jobs. It is not a release-certification workflow: scheduled/nightly and
 protected release workflows are absent, the supported release matrix is incomplete,
-and the README's npm / PyPI / CI badges are inactive by design.
+and the README's npm and PyPI badges are inactive by design. The visible CI badge reports
+the development workflow only; it is not release certification.
 
 **What remains.**
 

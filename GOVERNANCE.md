@@ -1,7 +1,8 @@
 # Cortexel governance
 
-> **Status: `0.9.0` is the last tagged pre-1.0 release; the working source is the
-> private, unreleased `0.10.0-dev.0`.** This document describes how decisions are made
+> **Status: `0.9.0` is the last tagged pre-1.0 release; the unreleased
+> `0.10.0-dev.0` working-tree identity is intentionally non-publishable
+> (`private: true`).** This document describes how decisions are made
 > about Cortexel *today*, honestly reflecting that the project
 > currently has **one maintainer**. It does not describe a board, a committee, or a
 > staffed organization, because none exists. Where a rule anticipates 1.0, it is

@@ -99,7 +99,8 @@ const NEST_SPIKE_RECORDER_FINITE_STOP_V5_EXAMPLE = {
     stop: 10,
     n_events: 3,
     events: {
-      // Matches the v4 example's observations so only evidence shape differs.
+      // Matches the positive-infinity v5 example's observations so only the evidence
+      // shape differs.
       senders: [2, 1, 2],
       times: [9.9, 1, 1],
     },

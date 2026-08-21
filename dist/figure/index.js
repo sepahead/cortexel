@@ -3,15 +3,15 @@ import { t as deepFreeze } from "../deep-freeze-CyWYjAwr.js";
 import { a as trySelectTighterBudgetProfile, i as tryGetBudgetLimits, n as getBudgetLimits, r as restrictLimits, t as DEFAULT_PROFILE } from "../limits-DG_btFbi.js";
 import { a as isSafeDisplayString, c as pointer, i as finalizeErrorsWithPriority, l as safeText, o as makeError, r as finalizeErrors } from "../errors-CxHoMFLD.js";
 import { t as snapshotValue } from "../safe-snapshot-CTOnh-lg.js";
-import { a as PACKAGE_VERSION, c as getBuildIdentity, i as CONTRACT_DIGEST, n as CATALOG_DIGEST, o as REQUEST_CONTRACT, r as CATALOG_DIGEST_DOMAIN, s as STABLE_SKILL_COUNT, t as ARTIFACT_CONTRACT } from "../identity-BD3MBqiL.js";
-import { a as EXPERIMENTAL_CAPABILITY_IDS, c as SKILL_CATALOG, f as isCapabilityId, h as lookupSkillCatalogEntry, l as STABLE_SKILL_IDS, m as lookupCapabilityCatalogEntry, n as CAPABILITY_CATALOG, o as LEGACY_SKILL_MAP, p as isStableSkillId, r as CAPABILITY_IDS, s as REMOVED_CAPABILITY_IDS, t as CAPABILITY_AVAILABILITIES } from "../catalog-dlkIbdDJ.js";
+import { a as PACKAGE_VERSION, c as getBuildIdentity, i as CONTRACT_DIGEST, n as CATALOG_DIGEST, o as REQUEST_CONTRACT, r as CATALOG_DIGEST_DOMAIN, s as STABLE_SKILL_COUNT, t as ARTIFACT_CONTRACT } from "../identity-B6EIyMGv.js";
+import { a as EXPERIMENTAL_CAPABILITY_IDS, c as SKILL_CATALOG, f as isCapabilityId, h as lookupSkillCatalogEntry, l as STABLE_SKILL_IDS, m as lookupCapabilityCatalogEntry, n as CAPABILITY_CATALOG, o as LEGACY_SKILL_MAP, p as isStableSkillId, r as CAPABILITY_IDS, s as REMOVED_CAPABILITY_IDS, t as CAPABILITY_AVAILABILITIES } from "../catalog-Da0CtmnI.js";
 import { a as ERROR_CODE_META, f as UNIT_CODES, i as ERROR_CODES, n as CANONICALIZATION_IDS, r as DISCLOSURE_RULES, s as QUANTITY_KINDS, t as CANONICALIZATION_ALGORITHMS, u as UNITS } from "../registry-Cmer76Bg.js";
 import { t as parseJsonStrict } from "../parse-json-BkdHHhtc.js";
 import { a as captureRawRequestInput, i as captureMaterializedRequestInput, t as isLibraryAuthoredField } from "../provenance-Ejag4_0h.js";
 import { A as dimensionOf, L as resolveAlias, M as isKnownUnit, R as toSeconds, f as axesAreCompatible, i as responseEventMembershipDigest, n as compareUtf16CodeUnits, r as normalizeResponseEventMemberIds, t as RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID, x as convert, z as unitLabel } from "../response-curve-basis-B3i4qGNY.js";
-import { n as REQUEST_CONTRACT_IDENTITY } from "../contract-identity-BBttDeUN.js";
+import { n as REQUEST_CONTRACT_IDENTITY } from "../contract-identity-BSVSbVYQ.js";
 import { t as deriveDisclosures } from "../disclosures-CARlLREv.js";
-import { t as migrateLegacyRequest } from "../migrate-v0-CQ6c9Zq_.js";
+import { t as migrateLegacyRequest } from "../migrate-v0-Di9boElZ.js";
 import { isValidatedRequest, parseAndValidateRequest, parseAndValidateRequest as parseAndValidateRequest$1, validateRequestValue, validateRequestValue as validateRequestValue$1 } from "#cortexel-request-capability";
 
 //#region src/core/repairs.ts

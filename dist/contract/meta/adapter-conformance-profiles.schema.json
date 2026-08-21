@@ -60,9 +60,6 @@
           "timeBuildProfile": {
             "const": "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1"
           },
-          "captureBoundary": {
-            "const": "after_successful_advancing_simulate_or_run_return_at_exact_capture_biological_time_before_any_further_advance_or_mutation"
-          },
           "positiveInfinityExportedMs": {
             "const": 1.7976931348623157e+308
           },
@@ -126,13 +123,11 @@
             "properties": {
               "branches": true,
               "timeBuildProfile": true,
-              "captureBoundary": true,
               "positiveInfinityExportedMs": true
             },
             "required": [
               "branches",
               "timeBuildProfile",
-              "captureBoundary",
               "positiveInfinityExportedMs"
             ]
           }
@@ -240,6 +235,9 @@
         "eventBoundary": { "const": "(origin+start,origin+stop]" },
         "captureHorizon": {
           "const": "origin+stop_after_successful_return"
+        },
+        "captureBoundary": {
+          "const": "after_successful_simulate_or_run_return"
         }
       },
       "required": [
@@ -250,7 +248,8 @@
         "statusReadMethod",
         "executionScope",
         "eventBoundary",
-        "captureHorizon"
+        "captureHorizon",
+        "captureBoundary"
       ],
       "additionalProperties": false
     },
@@ -270,6 +269,9 @@
         "eventBoundary": { "const": "(origin+start,capture]" },
         "captureHorizon": {
           "const": "capture_after_successful_advancing_return_before_further_advance_or_mutation"
+        },
+        "captureBoundary": {
+          "const": "after_successful_advancing_simulate_or_run_return_at_exact_capture_biological_time_before_any_further_advance_or_mutation"
         }
       },
       "required": [
@@ -280,7 +282,8 @@
         "statusReadMethod",
         "executionScope",
         "eventBoundary",
-        "captureHorizon"
+        "captureHorizon",
+        "captureBoundary"
       ],
       "additionalProperties": false
     },

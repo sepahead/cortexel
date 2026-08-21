@@ -2,8 +2,8 @@ import { n as canonicalDigest } from "./canonicalize-F75Ifelv.js";
 import { n as getBudgetLimits } from "./limits-DG_btFbi.js";
 import { o as makeError } from "./errors-CxHoMFLD.js";
 import { t as snapshotValue } from "./safe-snapshot-CTOnh-lg.js";
-import { n as REQUEST_CONTRACT_IDENTITY } from "./contract-identity-BBttDeUN.js";
-import { c as NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3, l as NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5, n as SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER, o as isSourceAdapterExampleGuard } from "./source-example-Cx_NUpH0.js";
+import { n as REQUEST_CONTRACT_IDENTITY } from "./contract-identity-BSVSbVYQ.js";
+import { c as NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3, l as NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5, n as SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER, o as isSourceAdapterExampleGuard } from "./source-example-BRb1SykW.js";
 import { n as projectNestTicsToMillisecondsV310, r as projectNestWindowEndpointsV310, t as nestFiniteTimeLimitTicsV310 } from "./nest-time-HlQKV_CS.js";
 
 //#region src/adapters/nest/recorders.ts
@@ -54,8 +54,8 @@ const CAPTURE_AUTHORITY_PROFILE_V4 = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.bran
 const CAPTURE_AUTHORITY_KIND = "caller_declaration";
 const STATUS_READ_METHOD_V1 = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.branches.finiteStop.statusReadMethod;
 const STATUS_READ_METHOD_V2 = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.branches.positiveInfinityCaptureBounded.statusReadMethod;
-const CAPTURE_BOUNDARY_V1 = "after_successful_simulate_or_run_return";
-const CAPTURE_BOUNDARY_V2 = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.captureBoundary;
+const CAPTURE_BOUNDARY_V1 = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.branches.finiteStop.captureBoundary;
+const CAPTURE_BOUNDARY_V2 = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.branches.positiveInfinityCaptureBounded.captureBoundary;
 const RECORDING_PLAN_SCOPE = "window_backend_time_encoding_and_sender_wiring";
 const SENDER_UNIVERSE_BINDING = "recorded_sender_ids_exactly_equal_full_window_connected_source_universe";
 const CLOCK_EPOCH_CONTINUITY = "biological_time_monotonic_since_last_kernel_initialization";
@@ -590,4 +590,4 @@ function nestSpikeRecorderToRaster(exported, options) {
 
 //#endregion
 export { NEST_TIME_POSITIVE_INFINITY_EXPORTED_MS as a, NEST_TIME_BUILD_PROFILE as i, NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN_V3 as n, nestSpikeRecorderToRaster as o, NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN_V5 as r, NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN as t };
-//# sourceMappingURL=nest-DsixUIkq.js.map
+//# sourceMappingURL=nest-DDtIMa41.js.map

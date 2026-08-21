@@ -1,7 +1,8 @@
 # Versioning and compatibility
 
-> **Status: 0.9.0 is the last tagged pre-1.0 development release; the working package
-> identity is the private, unreleased `0.10.0-dev.0`.** Neither makes a stable-contract
+> **Status: 0.9.0 is the last tagged pre-1.0 development release; the unreleased
+> `0.10.0-dev.0` working-tree identity is intentionally non-publishable
+> (`private: true`).** Neither makes a stable-contract
 > promise. Any `0.x` release may change any axis below without a migration path. **The
 > stable compatibility promise begins at `1.0.0`.** Treat the working tree as moving and
 > never cite HEAD or a development package identity as a release.

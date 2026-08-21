@@ -30,7 +30,11 @@ from cortexel.generated import (
     STABLE_SKILL_IDS,
     UNITS,
 )
-from cortexel.parse_json import JsonParseError, parse_json_strict
+from cortexel.parse_json import (
+    JsonParseError,
+    _parse_json_strict_with_limits,
+    parse_json_strict,
+)
 from cortexel.validate import (
     _UNIT_CODE_PROPERTY_NAMES,
     CortexelError,
@@ -470,10 +474,33 @@ class TestCanonicalization(unittest.TestCase):
 
 
 class TestStrictParser(unittest.TestCase):
+    @staticmethod
+    def limits(**overrides: int) -> dict[str, int]:
+        limits = {
+            "rawInputBytes": 1024,
+            "jsonDepth": 8,
+            "jsonTotalNodes": 32,
+            "jsonStringLength": 32,
+            "jsonNumberTokenLength": 32,
+            "jsonObjectKeys": 8,
+            "jsonArrayItems": 8,
+        }
+        limits.update(overrides)
+        return limits
+
+    def assert_limit_code(self, text: str, code: str, **overrides: int) -> None:
+        with self.assertRaises(JsonParseError) as ctx:
+            _parse_json_strict_with_limits(text, self.limits(**overrides))
+        self.assertEqual(ctx.exception.code, code)
+
     def test_rejects_duplicate_keys(self):
         with self.assertRaises(JsonParseError) as ctx:
             parse_json_strict('{"a":1,"a":2}')
         self.assertEqual(ctx.exception.code, "JSON_DUPLICATE_KEY")
+
+        with self.assertRaises(JsonParseError) as escaped_ctx:
+            parse_json_strict('{"a":1,"\\u0061":2}')
+        self.assertEqual(escaped_ctx.exception.code, "JSON_DUPLICATE_KEY")
 
     def test_rejects_prototype_keys(self):
         with self.assertRaises(JsonParseError) as ctx:
@@ -483,6 +510,91 @@ class TestStrictParser(unittest.TestCase):
     def test_rejects_non_finite(self):
         with self.assertRaises(JsonParseError):
             parse_json_strict("NaN")
+
+        with self.assertRaises(JsonParseError) as ctx:
+            parse_json_strict("1e400")
+        self.assertEqual(ctx.exception.code, "JSON_NON_FINITE_NUMBER")
+
+    def test_applies_every_raw_parser_budget_at_its_exact_boundary(self):
+        self.assertEqual(
+            _parse_json_strict_with_limits("[]", self.limits(rawInputBytes=2)),
+            [],
+        )
+        self.assert_limit_code("[]", "JSON_BYTES_EXCEEDED", rawInputBytes=1)
+
+        self.assertEqual(
+            _parse_json_strict_with_limits("[[]]", self.limits(jsonDepth=1)),
+            [[]],
+        )
+        self.assert_limit_code("[[0]]", "JSON_DEPTH_EXCEEDED", jsonDepth=1)
+
+        self.assertEqual(
+            _parse_json_strict_with_limits("[0,1]", self.limits(jsonTotalNodes=3)),
+            [0, 1],
+        )
+        self.assert_limit_code("[0,1,2]", "JSON_TOKENS_EXCEEDED", jsonTotalNodes=3)
+
+        self.assertEqual(
+            _parse_json_strict_with_limits('"😀"', self.limits(jsonStringLength=2)),
+            "😀",
+        )
+        self.assertEqual(
+            _parse_json_strict_with_limits(
+                '"\\ud83d\\ude00"',
+                self.limits(jsonStringLength=2),
+            ),
+            "😀",
+        )
+        self.assert_limit_code('"😀x"', "JSON_STRING_TOO_LONG", jsonStringLength=2)
+
+        self.assertEqual(
+            _parse_json_strict_with_limits("12", self.limits(jsonNumberTokenLength=2)),
+            12,
+        )
+        self.assert_limit_code(
+            "123",
+            "JSON_NUMBER_TOKEN_TOO_LONG",
+            jsonNumberTokenLength=2,
+        )
+
+        self.assertEqual(
+            _parse_json_strict_with_limits('{"a":1}', self.limits(jsonObjectKeys=1)),
+            {"a": 1},
+        )
+        self.assert_limit_code('{"a":1,"b":2}', "JSON_TOO_MANY_KEYS", jsonObjectKeys=1)
+
+        self.assertEqual(
+            _parse_json_strict_with_limits("[1]", self.limits(jsonArrayItems=1)),
+            [1],
+        )
+        self.assert_limit_code("[1,2]", "JSON_ARRAY_TOO_LONG", jsonArrayItems=1)
+
+    def test_counts_raw_utf8_bytes_before_scanning(self):
+        self.assertEqual(
+            _parse_json_strict_with_limits('"😀"', self.limits(rawInputBytes=6)),
+            "😀",
+        )
+        self.assert_limit_code('"😀"', "JSON_BYTES_EXCEEDED", rawInputBytes=5)
+        self.assert_limit_code("\ufeff0", "JSON_BYTES_EXCEEDED", rawInputBytes=2)
+
+    def test_converts_pathological_inputs_to_stable_budget_errors(self):
+        with self.assertRaises(JsonParseError) as depth_ctx:
+            parse_json_strict("[" * 1100 + "]" * 1100)
+        self.assertEqual(depth_ctx.exception.code, "JSON_DEPTH_EXCEEDED")
+
+        with self.assertRaises(JsonParseError) as number_ctx:
+            parse_json_strict("1" * 5000)
+        self.assertEqual(number_ctx.exception.code, "JSON_NUMBER_TOKEN_TOO_LONG")
+
+    def test_accepts_only_an_exact_builtin_text_string(self):
+        class TextSubclass(str):
+            pass
+
+        for value in (1, TextSubclass("{}")):
+            with self.subTest(value=repr(value)):
+                with self.assertRaises(JsonParseError) as ctx:
+                    parse_json_strict(value)  # type: ignore[arg-type]
+                self.assertEqual(ctx.exception.code, "JSON_SYNTAX")
 
     def test_rejects_ill_formed_unicode_values_and_member_names(self):
         for text in (

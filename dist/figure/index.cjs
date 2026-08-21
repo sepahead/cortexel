@@ -4,15 +4,15 @@ const require_deep_freeze = require('../deep-freeze-CX4sIEIO.cjs');
 const require_limits = require('../limits-zgcdlCes.cjs');
 const require_errors = require('../errors-DaUwoa4p.cjs');
 const require_safe_snapshot = require('../safe-snapshot-Bb70fzip.cjs');
-const require_identity = require('../identity-DvvM9pyL.cjs');
-const require_catalog = require('../catalog-B4eoXq8w.cjs');
+const require_identity = require('../identity-Dt42RQe6.cjs');
+const require_catalog = require('../catalog-DG5yXxju.cjs');
 const require_registry = require('../registry-CCvLcMCj.cjs');
 const require_parse_json = require('../parse-json-fREYzpvz.cjs');
 const require_provenance = require('../provenance-jOGKOHvC.cjs');
 const require_response_curve_basis = require('../response-curve-basis-BoFkbgrp.cjs');
-const require_contract_identity = require('../contract-identity-BMEyNZJi.cjs');
+const require_contract_identity = require('../contract-identity-Cna7a4hn.cjs');
 const require_disclosures = require('../disclosures-KX6A7VTY.cjs');
-const require_migrate_v0 = require('../migrate-v0-x3Pkdayo.cjs');
+const require_migrate_v0 = require('../migrate-v0-zRdMH70e.cjs');
 let _cortexel_request_capability = require("#cortexel-request-capability");
 
 //#region src/core/repairs.ts
