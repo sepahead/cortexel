@@ -6,6 +6,27 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — sealed macOS Git and nested loader scratch authority
+
+- Replaced the macOS `/usr/bin/git` xcrun shim with the selected developer
+  toolchain's real Git executable. A direct reviewed `/usr/bin/xcode-select -p`
+  probe supports Command Line Tools and full Xcode without ambient `PATH` or
+  `xcrun` selection. The default route requires direct root-owned protected
+  entries from the selected `Developer` directory through a native Mach-O Git.
+  Physical and byte-identical shim aliases fail before descriptor-bound Git
+  acquisition or execution. Each runtime exposes a frozen closed source-authority
+  profile that distinguishes this route, protected Linux system Git, and weaker
+  explicit caller-selected acquired bytes. Darwin test fixtures use the same
+  selected default, including custom and Xcode Beta selections.
+- Replaced nested TSX fixtures' ambient `node` selection with a one-shot staged
+  Node command capability. It binds exact environment keys, private parent and
+  child authority, and post-command identity checks. Invalid input creates no
+  scratch directory, and post-create failure removes the exact created child.
+  Invocation consumes the capability before input inspection and always attempts
+  checked runtime cleanup. A pre-identity creation failure removes only a child
+  whose exact private authority can be re-established; ambiguous children remain
+  in place with explicit cleanup uncertainty.
+
 ### Fixed — bounded Python parsing and branch-scoped NEST capture authority
 
 - Replaced the Python reader's post-materialization `json.loads` boundary with an

@@ -578,10 +578,30 @@ The machine-readable state of every release gate is in
   reproduce its tree-selected canonical Git blob SHA-1 before exclusive mode-0600
   staging. No upstream object read can trigger a lazy fetch after network authority
   is removed.
-  Every Git command is launched by an exact staged supported Node runtime against
-  either canonical protected `/usr/bin/git` or an explicitly acquired exact Git
-  executable, with copied bounded binary input, bounded output/time/status, a closed
-  environment and the reviewed live guardian. HOME must be canonical root-owned
+  Every Git command is launched by an exact staged supported Node runtime. Linux uses
+  canonical protected `/usr/bin/git`. macOS runs direct protected
+  `/usr/bin/xcode-select -p` with bounded output and no ambient `PATH`. It addresses
+  the selected Command Line Tools or full-Xcode Git executable as acquisition input.
+  The default route requires canonical direct `Developer`, `usr`, `bin`, and Git
+  entries. Each entry must be root-owned, have no special or group/other-write mode,
+  and pass the reviewed ACL check. The resolved Git must remain at `usr/bin/git`
+  beneath the selected `Developer` directory. It must also have a native Mach-O
+  header. Descriptor identity and SHA-256 remain stable through private acquisition.
+  The boundary rejects `/usr/bin/git` and every physical or byte-identical shim alias
+  before copying the selected Git into its private runtime. This default authority
+  starts at the selected `Developer` directory. It does not attest the parent entry,
+  the administrative selection, or code-signature provenance. Same-UID, administrator,
+  and root replacement remain outside this boundary. An explicit
+  `sourceGitExecutable` is weaker caller-selected acquisition input. It does not gain
+  the default selected-tree or native-format claim. The runtime exposes one frozen
+  `cortexel-reviewed-git-source-authority-profile.v1` record. Its closed `kind` is
+  `linux_protected_system_git`, `darwin_selected_developer_tree_git_bytes`, or
+  `explicit_caller_selected_git_bytes`. Callers cannot supply this profile through
+  runtime options. The profile distinguishes acquisition authority only. It does not
+  establish loader, helper, library, code-signature, or parent-entry provenance.
+  Commands use copied bounded binary input,
+  bounded output/time/status, a closed environment and the reviewed live guardian.
+  HOME must be canonical root-owned
   `/dev/null` or an empty current-UID mode-0700 directory with the reviewed ACL
   profile; its identity and emptiness are revalidated after every command, including
   command failures. This does not close Git's compiled helper or dynamic-library
@@ -589,6 +609,18 @@ The machine-readable state of every release gate is in
   malicious same-UID process that deliberately escapes the guarded process group.
   Git exposes no hostile-server input-byte quota for those transport/`index-pack`
   phases; strict containment requires an external quota/sandbox or custom transport.
+  Nested TSX test fixtures use a one-shot staged exact Node command. They bind a
+  private caller parent and child before and after execution. The command omits
+  ambient `PATH` and admits only the declared environment keys, plus Darwin's
+  Node-created `__CF_USER_TEXT_ENCODING` key. This closes fixture executable
+  selection and scratch authority. Invocation consumes its one-shot capability
+  before inspecting arguments or options, and every consumed failure attempts
+  checked runtime cleanup. If creation fails before the first child identity capture,
+  cleanup removes the empty child only after re-establishing its exact private
+  authority and the original parent identity. An ambiguous or nonempty child remains
+  in place and cleanup uncertainty is reported. No recursive deletion substitutes
+  for capability cleanup. This does not close Node's loader, imported package,
+  native-library, or same-UID process dependency graph.
   The
   selected-source generator initializes a worktree-free blobless partial
   repository under a

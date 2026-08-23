@@ -2,8 +2,11 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   chmodSync,
+  copyFileSync,
+  constants as fsConstants,
   existsSync,
   linkSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -30,11 +33,13 @@ import {
   createReviewedGitRuntime,
   disposeReviewedGitRuntime,
   readReviewedGitBlobBatch,
+  REVIEWED_GIT_SOURCE_AUTHORITY_PROFILE_SCHEMA,
   reviewedGitCommandTesting,
   runReviewedGitCommand,
   type ReviewedGitRuntime,
 } from '../scripts/lib/reviewed-git-command.js';
 import { REVIEWED_POSIX_COMMAND_LIMITS } from '../scripts/lib/reviewed-posix-command.js';
+import { reviewedFixtureGitTesting } from './reviewedFixtureGit.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const PRODUCTION_GIT_CALLERS = [
@@ -145,9 +150,49 @@ describe('reviewed Git command boundary', () => {
     expect(runtime.node.authority.file.sha256)
       .toBe(runtime.node.executable.stagedSha256);
     expect(runtime.node.inventorySha256).toMatch(/^sha256:[0-9a-f]{64}$/u);
+    expect(runtime.gitSourceAuthorityProfile).toEqual({
+      schema: REVIEWED_GIT_SOURCE_AUTHORITY_PROFILE_SCHEMA,
+      kind: process.platform === 'darwin'
+        ? 'darwin_selected_developer_tree_git_bytes'
+        : 'linux_protected_system_git',
+    });
+    expect(Object.isFrozen(runtime.gitSourceAuthorityProfile)).toBe(true);
     expect(runtime.node.companions.every((companion) =>
       companion.sourceSha256 === companion.stagedSha256))
       .toBe(true);
+    if (process.platform === 'darwin') {
+      const selectionProbe = spawnSync(
+        reviewedGitCommandTesting.darwinXcodeSelectExecutable(),
+        ['-p'],
+        {
+          env: reviewedGitCommandTesting.darwinXcodeSelectEnvironment(),
+          maxBuffer: 4_097,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 10_000,
+        },
+      );
+      expect(selectionProbe.error).toBeUndefined();
+      expect(selectionProbe.status, selectionProbe.stderr.toString('utf8')).toBe(0);
+      expect(selectionProbe.stderr).toEqual(Buffer.alloc(0));
+      const selectedGitExecutable = realpathSync(
+        reviewedGitCommandTesting.darwinGitExecutableFromXcodeSelectOutput(
+          selectionProbe.stdout,
+        ),
+      );
+      expect(runtime.gitAcquisition?.executable.sourcePath).toBe(
+        selectedGitExecutable,
+      );
+      expect(runtime.gitExecutable).not.toBe(
+        reviewedGitCommandTesting.darwinGitShimExecutable(),
+      );
+      expect(runtime.gitAcquisition).not.toBeNull();
+      expect(runtime.gitAcquisition?.executable.sourceSha256).toBe(
+        runtime.gitAcquisition?.executable.stagedSha256,
+      );
+    } else {
+      expect(runtime.gitExecutable).toBe('/usr/bin/git');
+      expect(runtime.gitAuthority.executable).toBe('/usr/bin/git');
+    }
     const source = readFileSync(
       path.join(ROOT, 'scripts/lib/reviewed-git-command.ts'),
       'utf8',
@@ -156,6 +201,255 @@ describe('reviewed Git command boundary', () => {
     expect(source).not.toContain('libnode.');
     expect(source).not.toContain('SUPPORTED_NODE_MAJORS');
   });
+
+  it('keeps caller-selected acquired bytes distinct from default Git authority', () => {
+    if (workspace === '') return;
+    expect(adversarialRuntime.gitSourceAuthorityProfile).toEqual({
+      schema: REVIEWED_GIT_SOURCE_AUTHORITY_PROFILE_SCHEMA,
+      kind: 'explicit_caller_selected_git_bytes',
+    });
+    expect(Object.isFrozen(adversarialRuntime.gitSourceAuthorityProfile)).toBe(true);
+    expect(adversarialRuntime.gitAcquisition).not.toBeNull();
+    expect(adversarialRuntime.gitSourceAuthorityProfile.kind).not.toBe(
+      'darwin_selected_developer_tree_git_bytes',
+    );
+    expect(runtime.gitSourceAuthorityProfile.kind).not.toBe(
+      'explicit_caller_selected_git_bytes',
+    );
+  });
+
+  it('accepts only one bounded absolute xcode-select result for CLT or full Xcode', () => {
+    expect(reviewedGitCommandTesting.darwinGitExecutableFromXcodeSelectOutput(
+      Buffer.from('/Library/Developer/CommandLineTools\n'),
+    )).toBe('/Library/Developer/CommandLineTools/usr/bin/git');
+    expect(reviewedGitCommandTesting.darwinGitExecutableFromXcodeSelectOutput(
+      Buffer.from('/Applications/Xcode Beta.app/Contents/Developer\n'),
+    )).toBe('/Applications/Xcode Beta.app/Contents/Developer/usr/bin/git');
+
+    for (const output of [
+      Buffer.alloc(0),
+      Buffer.from('/Applications/Xcode.app/Contents/Developer'),
+      Buffer.from('Applications/Xcode.app/Contents/Developer\n'),
+      Buffer.from('/Applications/Xcode.app/Contents/Developer\r\n'),
+      Buffer.from('/first/Developer\n/second/Developer\n'),
+      Buffer.from('/Applications/Xcode.app/Contents/Developer/\n'),
+      Buffer.from(`/${'x'.repeat(4_090)}\n`),
+      Buffer.from(`/${'x'.repeat(4_096)}\n`),
+    ]) {
+      expect(() =>
+        reviewedGitCommandTesting.darwinGitExecutableFromXcodeSelectOutput(output))
+        .toThrow(/xcode-select output/u);
+    }
+  });
+
+  it('uses one closed xcode-select environment and ignores ambient DEVELOPER_DIR', () => {
+    const environment = reviewedGitCommandTesting.darwinXcodeSelectEnvironment();
+    expect(Object.keys(environment).sort()).toEqual(['LANG', 'LC_ALL', 'TZ']);
+    expect(environment).toEqual({ LANG: 'C', LC_ALL: 'C', TZ: 'UTC' });
+    expect(environment).not.toHaveProperty('DEVELOPER_DIR');
+    expect(environment).not.toHaveProperty('PATH');
+    if (process.platform !== 'darwin') return;
+
+    const baseline = spawnSync(
+      reviewedGitCommandTesting.darwinXcodeSelectExecutable(),
+      ['-p'],
+      {
+        env: environment,
+        maxBuffer: 4_097,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 10_000,
+      },
+    );
+    expect(baseline.error).toBeUndefined();
+    expect(baseline.status, baseline.stderr.toString('utf8')).toBe(0);
+    const previousDeveloperDirectory = process.env.DEVELOPER_DIR;
+    process.env.DEVELOPER_DIR = '/attacker/Developer';
+    try {
+      const canary = spawnSync(
+        reviewedGitCommandTesting.darwinXcodeSelectExecutable(),
+        ['-p'],
+        {
+          env: environment,
+          maxBuffer: 4_097,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 10_000,
+        },
+      );
+      expect(canary.error).toBeUndefined();
+      expect(canary.status, canary.stderr.toString('utf8')).toBe(0);
+      expect(canary.stdout).toEqual(baseline.stdout);
+    } finally {
+      if (previousDeveloperDirectory === undefined) {
+        delete process.env.DEVELOPER_DIR;
+      } else {
+        process.env.DEVELOPER_DIR = previousDeveloperDirectory;
+      }
+    }
+  });
+
+  it('rejects injected physical and byte-identical Darwin shim aliases', () => {
+    const shim = {
+      device: '7',
+      inode: '11',
+      sha256: `sha256:${'a'.repeat(64)}`,
+      size: 1234,
+    };
+    expect(() => reviewedGitCommandTesting.requireDistinctDarwinShimIdentity(
+      { ...shim, sha256: `sha256:${'b'.repeat(64)}` },
+      shim,
+    )).toThrow(/physical identity.*xcrun shim/u);
+    expect(() => reviewedGitCommandTesting.requireDistinctDarwinShimIdentity(
+      { ...shim, device: '8', inode: '12' },
+      shim,
+    )).toThrow(/byte identity.*xcrun shim/u);
+    expect(() => reviewedGitCommandTesting.requireDistinctDarwinShimIdentity(
+      {
+        device: '8',
+        inode: '12',
+        sha256: `sha256:${'b'.repeat(64)}`,
+        size: 1234,
+      },
+      shim,
+    )).not.toThrow();
+  });
+
+  it('requires an injected selected Developer tree to stay direct, protected, and native', () => {
+    const developerDirectory = '/Applications/Xcode.app/Contents/Developer';
+    const paths = [
+      developerDirectory,
+      `${developerDirectory}/usr`,
+      `${developerDirectory}/usr/bin`,
+      `${developerDirectory}/usr/bin/git`,
+    ];
+    const fixture = () => ({
+      developerDirectory,
+      entries: paths.map((entryPath, index) => ({
+        canonicalPath: entryPath,
+        kind: index === paths.length - 1 ? 'file' as const : 'directory' as const,
+        mode: index === paths.length - 1 ? 0o755 : 0o755,
+        path: entryPath,
+        uid: 0,
+      })),
+      gitMagicHex: 'cffaedfe',
+    });
+    expect(
+      reviewedGitCommandTesting.requireDarwinDeveloperTreeFixture(fixture()),
+    ).toBe(`${developerDirectory}/usr/bin/git`);
+
+    const escaping = fixture();
+    escaping.entries[3] = {
+      ...escaping.entries[3]!,
+      canonicalPath: '/tmp/attacker/git',
+    };
+    expect(() =>
+      reviewedGitCommandTesting.requireDarwinDeveloperTreeFixture(escaping))
+      .toThrow(/symbolic or escaping/u);
+
+    const writable = fixture();
+    writable.entries[1] = { ...writable.entries[1]!, mode: 0o775 };
+    expect(() =>
+      reviewedGitCommandTesting.requireDarwinDeveloperTreeFixture(writable))
+      .toThrow(/group\/world-write authority/u);
+
+    const setuid = fixture();
+    setuid.entries[3] = { ...setuid.entries[3]!, mode: 0o4755 };
+    expect(() =>
+      reviewedGitCommandTesting.requireDarwinDeveloperTreeFixture(setuid))
+      .toThrow(/special or group\/world-write authority/u);
+
+    const userOwned = fixture();
+    userOwned.entries[0] = { ...userOwned.entries[0]!, uid: 501 };
+    expect(() =>
+      reviewedGitCommandTesting.requireDarwinDeveloperTreeFixture(userOwned))
+      .toThrow(/not root-owned from Developer downward/u);
+
+    expect(() => reviewedGitCommandTesting.requireDarwinDeveloperTreeFixture({
+      ...fixture(),
+      gitMagicHex: Buffer.from('#!/b').toString('hex'),
+    })).toThrow(/not a native Mach-O executable/u);
+  });
+
+  it('admits default reviewed fixture Git only on supported hosts', () => {
+    expect(() => reviewedFixtureGitTesting.requireSupportedPlatform('linux'))
+      .not.toThrow();
+    expect(() => reviewedFixtureGitTesting.requireSupportedPlatform('darwin'))
+      .not.toThrow();
+    expect(() => reviewedFixtureGitTesting.requireSupportedPlatform('win32'))
+      .toThrow(/implemented only on macOS\/Linux/u);
+    const source = readFileSync(
+      path.join(ROOT, 'test/reviewedFixtureGit.ts'),
+      'utf8',
+    );
+    expect(source).not.toContain('/Library/Developer/CommandLineTools');
+    expect(source).not.toContain('/Applications/Xcode.app');
+  });
+
+  it('rejects Darwin shim aliases but admits installed developer Git executables', () => {
+    if (workspace === '' || process.platform !== 'darwin') return;
+    const shim = reviewedGitCommandTesting.darwinGitShimExecutable();
+    const shimStat = lstatSync(shim, { bigint: true });
+    const hardlinkAlias = [
+      '/usr/bin/clang',
+      '/usr/bin/cc',
+      '/usr/bin/gcc',
+    ].find((candidate) => {
+      if (!existsSync(candidate)) return false;
+      const candidateStat = lstatSync(candidate, { bigint: true });
+      return candidate !== shim &&
+        candidateStat.dev === shimStat.dev &&
+        candidateStat.ino === shimStat.ino;
+    });
+    if (hardlinkAlias !== undefined) {
+      expect(() => createReviewedGitRuntime(workspace, {
+        sourceGitExecutable: hardlinkAlias,
+      })).toThrow(/physical identity.*xcrun shim/u);
+    }
+
+    const copiedShim = path.join(workspace, 'copied-macos-git-shim');
+    copyFileSync(shim, copiedShim, fsConstants.COPYFILE_EXCL);
+    chmodSync(copiedShim, 0o555);
+    expect(() => createReviewedGitRuntime(workspace, {
+      sourceGitExecutable: realpathSync(copiedShim),
+    })).toThrow(/byte identity.*xcrun shim/u);
+
+    const installedDeveloperGitExecutables = new Set([
+      runtime.gitAcquisition?.executable.sourcePath,
+      '/Library/Developer/CommandLineTools/usr/bin/git',
+      '/Applications/Xcode.app/Contents/Developer/usr/bin/git',
+    ]);
+    for (const candidate of installedDeveloperGitExecutables) {
+      if (candidate === undefined || !existsSync(candidate)) continue;
+      const candidateStat = lstatSync(candidate, { bigint: true });
+      expect(
+        candidateStat.dev === shimStat.dev && candidateStat.ino === shimStat.ino,
+        candidate,
+      ).toBe(false);
+      const ownsCandidateRuntime = candidate !==
+        runtime.gitAcquisition?.executable.sourcePath;
+      const candidateRuntime = ownsCandidateRuntime
+        ? createReviewedGitRuntime(workspace, {
+            sourceGitExecutable: realpathSync(candidate),
+          })
+        : runtime;
+      try {
+        expect(candidateRuntime.gitVersion).toMatch(/^git version /u);
+        expect(candidateRuntime.gitExecutable).not.toBe(shim);
+        const bytes = Buffer.from(`installed Git canary: ${candidate}\n`, 'utf8');
+        const result = reviewedGit(
+          candidateRuntime,
+          repository,
+          ['hash-object', '--stdin'],
+          bytes,
+        );
+        const header = Buffer.from(`blob ${bytes.byteLength}\0`, 'utf8');
+        expect(result.stdout.toString('ascii').trim()).toBe(
+          createHash('sha1').update(header).update(bytes).digest('hex'),
+        );
+      } finally {
+        if (ownsCandidateRuntime) disposeReviewedGitRuntime(candidateRuntime);
+      }
+    }
+  }, 180_000);
 
   it('uses one ordered binary batch and rejects an identity/order mismatch', () => {
     if (workspace === '') return;
@@ -1041,6 +1335,13 @@ describe('reviewed Git command boundary', () => {
       unexpected: true,
     } as never)).toThrow(/exact reviewed member set/u);
     expect(() => createReviewedGitRuntime(workspace, {
+      gitSourceAuthorityProfile: {
+        schema: REVIEWED_GIT_SOURCE_AUTHORITY_PROFILE_SCHEMA,
+        kind: 'darwin_selected_developer_tree_git_bytes',
+      },
+      sourceGitExecutable: adversarialRuntime.gitAcquisition!.executable.sourcePath,
+    } as never)).toThrow(/exact reviewed member set/u);
+    expect(() => createReviewedGitRuntime(workspace, {
       get sourceNodeCandidates(): readonly string[] {
         throw new Error('must not execute');
       },
@@ -1056,10 +1357,15 @@ describe('reviewed Git command boundary', () => {
     expect(() => createReviewedGitRuntime(workspace, {
       sourceGitExecutable: 'git',
     })).toThrow(/absolute normalized pathname/u);
+    if (process.platform === 'darwin') {
+      expect(() => createReviewedGitRuntime(workspace, {
+        sourceGitExecutable: '/usr/bin/git',
+      })).toThrow(/xcrun shim/u);
+    }
     expect(() => createReviewedGitRuntime('.', {})).toThrow(
       /runtime parent must be an absolute normalized pathname/u,
     );
-  });
+  }, 60_000);
 
   it('rejects Bun as a staged Node control runtime', () => {
     if (workspace === '') return;

@@ -23,6 +23,7 @@ import { pathToFileURL } from 'node:url';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { processReviewedGitRuntime } from '../scripts/lib/reviewed-git-command';
 import {
   acquireReviewedExecutableIntoPrivateRoot,
   inspectReviewedExecutableAuthority,
@@ -1167,11 +1168,11 @@ describe('reviewed POSIX command boundary', () => {
 
   it('supports Git stdin without selecting the target through PATH', () => {
     if (workspace === '') return;
-    const git = realpathSync('/usr/bin/git');
+    const gitRuntime = processReviewedGitRuntime();
     const bytes = Buffer.from([0, 1, 2, 10, 13, 0xfe, 0xff]);
     const result = runReviewedPosixCommand(
       reviewedNode,
-      git,
+      gitRuntime.gitExecutable,
       ['hash-object', '--stdin'],
       workspace,
       {
@@ -1179,6 +1180,7 @@ describe('reviewed POSIX command boundary', () => {
         environment: { LANG: 'C', LC_ALL: 'C', PATH: '/usr/bin:/bin' },
         stdin: bytes,
         outputLimitBytes: 1_024,
+        targetAuthority: gitRuntime.gitAuthority,
         timeoutMs: 10_000,
       },
     );

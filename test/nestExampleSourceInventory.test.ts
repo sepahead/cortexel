@@ -20,6 +20,7 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { createClosedTsxFixtureEnvironment } from './closedTsxFixtureEnvironment.js';
 import { writeNewNestExampleInventoryFile } from '../scripts/generate-nest-example-source-inventory.js';
 import { canonicalDigest, canonicalize } from '../src/core/canonicalize.js';
 import { sha256Digest, utf8ByteLength } from '../src/core/sha256.js';
@@ -45,6 +46,7 @@ import {
   controlledGitEnvironment,
   verifyOfflineGitObjectDatabase,
 } from '../scripts/lib/offline-git-object-database.js';
+import { runReviewedFixtureGit } from './reviewedFixtureGit.js';
 import {
   REVIEWED_POSIX_ACL_INSPECTOR_SHA256,
   requireExactPrivateDirectoryAuthority,
@@ -61,53 +63,29 @@ function runPatchedNodeFixture(
   source: string,
   arguments_: readonly string[],
 ): Record<string, unknown> {
-  const script = path.join(root, `${name}.mjs`);
+  const commandParent = realpathSync(mkdtempSync(
+    path.join(root, `.cortexel-${name}-`),
+  ));
+  const script = path.join(commandParent, `${name}.mjs`);
   writeFileSync(script, source, 'utf8');
-  const result = spawnSync(
-    'node',
+  const command = createClosedTsxFixtureEnvironment(
+    commandParent,
+    `${name}-loader-temp`,
+  );
+  const result = command.runNode(
     ['--import', 'tsx', script, ...arguments_],
     {
       cwd: path.resolve('.'),
-      encoding: 'utf8',
-      env: {
-        LANG: 'C',
-        LC_ALL: 'C',
-        PATH: process.env.PATH,
-      },
-      maxBuffer: 64 * 1024,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 15_000,
+      outputLimitBytes: 64 * 1024,
+      timeoutMs: 15_000,
     },
   );
-  expect(result.error).toBeUndefined();
   expect(result.status, result.stderr).toBe(0);
   return JSON.parse(result.stdout) as Record<string, unknown>;
 }
 
 function git(repository: string, args: readonly string[]): string {
-  const result = spawnSync(
-    'git',
-    [
-      '--no-replace-objects',
-      '-c',
-      'core.fsmonitor=false',
-      '-c',
-      'core.untrackedCache=false',
-      '-C',
-      repository,
-      ...args,
-    ],
-    {
-      cwd: repository,
-      encoding: 'utf8',
-      env: controlledGitEnvironment(),
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-  if (result.error || result.status !== 0) {
-    throw new Error(`fixture git ${args[0]} failed: ${result.stderr}`);
-  }
-  return result.stdout.trim();
+  return runReviewedFixtureGit(repository, args);
 }
 
 function fixtureFile(repository: string, relativePath: string, content: string): string {

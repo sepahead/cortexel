@@ -8,19 +8,27 @@
  * runtime must then identify itself as a supported Node runtime through the
  * reviewed POSIX boundary.
  *
- * Production uses the canonical protected `/usr/bin/git`. Tests and unusual
- * hosts may explicitly acquire another exact Git executable into a second
- * private runtime. Every command revalidates both executable authorities and
- * runs with copied binary stdin, bounded binary output, a closed environment,
- * and the reviewed live-guardian lifecycle. HOME is either the protected
- * canonical null device or an empty current-UID-owned 0700 directory with a
- * reviewed ACL; its exact authority is sealed across the command.
+ * Production uses the canonical protected `/usr/bin/git` on Linux. On macOS a
+ * direct reviewed `/usr/bin/xcode-select -p` call resolves the selected
+ * developer directory. Direct protected entries from that directory through a
+ * native Git are descriptor- and digest-joined into private acquisition. The
+ * `/usr/bin/git` xcrun shim and every physical or byte-identical alias are
+ * excluded before Git acquisition. Tests and unusual hosts may explicitly
+ * acquire a weaker caller-selected Git into a second private runtime. A frozen
+ * closed profile distinguishes those three source-authority routes. Every
+ * command revalidates both executable authorities and runs with copied binary
+ * stdin, bounded binary output, a closed environment, and the reviewed
+ * live-guardian lifecycle. HOME is either the protected canonical null device
+ * or an empty current-UID-owned 0700 directory with a reviewed ACL; its exact
+ * authority is sealed across the command.
  *
- * This does not close Git's compiled helper/dynamic-library dependency graph,
- * authenticate an HTTPS peer beyond the platform trust store, impose a byte
- * quota on stock Git's smart-HTTP input, or contain a malicious same-UID target
- * that deliberately detaches or kills the guardian. Those require stronger
- * external containment and retained execution receipts.
+ * The default macOS review starts at the selected Developer directory. It does
+ * not attest its parent entry, administrative selection, code signature, or
+ * same-UID/admin/root replacement. It also does not close Git's compiled
+ * helper/dynamic-library dependency graph, authenticate an HTTPS peer beyond
+ * the platform trust store, impose a byte quota on stock Git's smart-HTTP
+ * input, or contain a malicious same-UID target that detaches or kills the
+ * guardian. Those require stronger containment and retained receipts.
  */
 import { createHash } from 'node:crypto';
 import {
@@ -33,6 +41,7 @@ import {
   mkdtempSync,
   openSync,
   opendirSync,
+  readSync,
   realpathSync,
   rmSync,
   type Dir,
@@ -61,16 +70,39 @@ import {
   currentPosixUid,
   requireExactPrivateDirectoryAuthority,
   requireProtectedDirectoryEntryChain,
+  requireReviewedPosixAclAuthority,
   type ExactPrivateDirectoryAuthority,
 } from './posix-acl-authority.js';
 
 const REVIEWED_GIT_RUNTIME_PREFIX = 'cortexel-reviewed-git-runtime-';
 const REVIEWED_GIT_RUNTIME_SCHEMA =
   'cortexel-reviewed-git-runtime.v1' as const;
+export const REVIEWED_GIT_SOURCE_AUTHORITY_PROFILE_SCHEMA =
+  'cortexel-reviewed-git-source-authority-profile.v1' as const;
 const REVIEWED_GIT_BATCH_SCHEMA =
   'cortexel-reviewed-git-blob-batch.v1' as const;
-const DEFAULT_GIT_EXECUTABLE = '/usr/bin/git';
+const SYSTEM_GIT_EXECUTABLE = '/usr/bin/git';
+const DARWIN_XCODE_SELECT_EXECUTABLE = '/usr/bin/xcode-select';
+const DARWIN_GIT_RELATIVE_PATH = path.join('usr', 'bin', 'git');
 const MAX_GIT_VERSION_BYTES = 4 * 1024;
+const MAX_DARWIN_DEVELOPER_SELECTION_BYTES =
+  REVIEWED_POSIX_COMMAND_LIMITS.pathBytes + 1;
+const DARWIN_XCODE_SELECT_ENVIRONMENT = Object.freeze({
+  LANG: 'C',
+  LC_ALL: 'C',
+  TZ: 'UTC',
+});
+const DARWIN_NATIVE_EXECUTABLE_MAGICS = new Set([
+  'bebafeca',
+  'bfbafeca',
+  'cafebabe',
+  'cafebabf',
+  'cefaedfe',
+  'cffaedfe',
+  'feedface',
+  'feedfacf',
+]);
+const GIT_IDENTITY_HASH_CHUNK_BYTES = 1024 * 1024;
 const MAX_GIT_BATCH_REQUESTS = 100_000;
 const MAX_GIT_BATCH_OBJECT_BYTES = 512 * 1024 * 1024;
 const MAX_DIAGNOSTIC_BYTES = 2_000;
@@ -110,8 +142,17 @@ export interface ReviewedGitRuntime {
   readonly gitExecutable: string;
   readonly gitAuthority: ReviewedExecutableAuthority;
   readonly gitAcquisition: ReviewedExecutableAcquisition | null;
+  readonly gitSourceAuthorityProfile: ReviewedGitSourceAuthorityProfile;
   readonly gitVersion: string;
 }
+
+export type ReviewedGitSourceAuthorityProfile = Readonly<{
+  readonly schema: typeof REVIEWED_GIT_SOURCE_AUTHORITY_PROFILE_SCHEMA;
+  readonly kind:
+    | 'linux_protected_system_git'
+    | 'darwin_selected_developer_tree_git_bytes'
+    | 'explicit_caller_selected_git_bytes';
+}>;
 
 export interface ReviewedGitCommandOptions {
   readonly environment: NodeJS.ProcessEnv;
@@ -778,24 +819,483 @@ function exactSuccessfulResult(
   }
 }
 
+function sameRegularFileStat(left: BigIntStats, right: BigIntStats): boolean {
+  return left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.mode === right.mode &&
+    left.size === right.size &&
+    left.nlink === right.nlink &&
+    left.uid === right.uid &&
+    left.gid === right.gid &&
+    left.mtimeNs === right.mtimeNs &&
+    left.ctimeNs === right.ctimeNs &&
+    left.birthtimeNs === right.birthtimeNs;
+}
+
+function hashRegularFileDescriptor(
+  descriptor: number,
+  size: number,
+  label: string,
+): string {
+  const chunk = Buffer.allocUnsafe(Math.min(
+    GIT_IDENTITY_HASH_CHUNK_BYTES,
+    Math.max(size, 1),
+  ));
+  const digest = createHash('sha256');
+  let offset = 0;
+  while (offset < size) {
+    const count = readSync(
+      descriptor,
+      chunk,
+      0,
+      Math.min(chunk.byteLength, size - offset),
+      offset,
+    );
+    if (count <= 0) fail(`${label} ended before its declared size`);
+    digest.update(chunk.subarray(0, count));
+    offset += count;
+  }
+  return `sha256:${digest.digest('hex')}`;
+}
+
+interface DarwinGitCandidateIdentity {
+  readonly device: string;
+  readonly inode: string;
+  readonly sha256: string;
+  readonly size: number;
+}
+
+interface DarwinDeveloperTreeEntryAuthority {
+  readonly canonicalPath: string;
+  readonly kind: 'directory' | 'file';
+  readonly mode: number;
+  readonly path: string;
+  readonly uid: number;
+}
+
+interface DarwinDeveloperTreeAuthorityFixture {
+  readonly developerDirectory: string;
+  readonly entries: readonly DarwinDeveloperTreeEntryAuthority[];
+  readonly gitMagicHex: string;
+}
+
+function requireDistinctDarwinShimIdentity(
+  candidate: DarwinGitCandidateIdentity,
+  shim: DarwinGitCandidateIdentity,
+): void {
+  if (
+    candidate.device === shim.device &&
+    candidate.inode === shim.inode
+  ) {
+    fail(
+      'macOS Git candidate has the physical identity of the /usr/bin/git xcrun shim',
+    );
+  }
+  if (candidate.size === shim.size && candidate.sha256 === shim.sha256) {
+    fail(
+      'macOS Git candidate has the byte identity of the /usr/bin/git xcrun shim',
+    );
+  }
+}
+
+function darwinShimIdentity(): DarwinGitCandidateIdentity {
+  const shim = inspectReviewedExecutableAuthority(
+    SYSTEM_GIT_EXECUTABLE,
+    'reviewed macOS Git shim identity',
+  );
+  return Object.freeze({
+    device: shim.file.device,
+    inode: shim.file.inode,
+    sha256: shim.file.sha256,
+    size: shim.file.size,
+  });
+}
+
+/** Reject the multiplexer by opened-file identity, never by pathname spelling. */
+function inspectNonShimDarwinGitCandidate(
+  candidate: string,
+  requireNativeExecutable = false,
+): DarwinGitCandidateIdentity {
+  const shim = darwinShimIdentity();
+  const initial = lstatSync(candidate, { bigint: true });
+  if (
+    !initial.isFile() ||
+    initial.isSymbolicLink() ||
+    initial.size < 0n ||
+    initial.size > BigInt(REVIEWED_POSIX_COMMAND_LIMITS.executableBytes)
+  ) {
+    fail('macOS Git candidate is not a bounded direct regular file');
+  }
+  const descriptor = openSync(
+    candidate,
+    fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK,
+  );
+  return withClosedDescriptor(descriptor, 'macOS Git shim identity inspection', () => {
+    const opened = fstatSync(descriptor, { bigint: true });
+    if (!opened.isFile() || !sameRegularFileStat(initial, opened)) {
+      fail('macOS Git candidate changed before shim identity inspection');
+    }
+    const nativeMagic = Buffer.alloc(4);
+    if (readSync(descriptor, nativeMagic, 0, nativeMagic.byteLength, 0) !== 4) {
+      fail('macOS Git candidate is too short for executable format review');
+    }
+    if (
+      requireNativeExecutable &&
+      !DARWIN_NATIVE_EXECUTABLE_MAGICS.has(nativeMagic.toString('hex'))
+    ) {
+      fail('selected macOS developer Git is not a native Mach-O executable');
+    }
+    const size = Number(opened.size);
+    const sha256 = hashRegularFileDescriptor(
+      descriptor,
+      size,
+      'macOS Git candidate identity',
+    );
+    const finalDescriptor = fstatSync(descriptor, { bigint: true });
+    const rebound = lstatSync(candidate, { bigint: true });
+    if (
+      !sameRegularFileStat(opened, finalDescriptor) ||
+      !sameRegularFileStat(opened, rebound)
+    ) {
+      fail('macOS Git candidate changed during shim identity inspection');
+    }
+    const identity = Object.freeze({
+      device: opened.dev.toString(10),
+      inode: opened.ino.toString(10),
+      sha256,
+      size,
+    });
+    requireDistinctDarwinShimIdentity(identity, shim);
+    return identity;
+  });
+}
+
+function requireDarwinDeveloperTreeFixture(
+  fixture: DarwinDeveloperTreeAuthorityFixture,
+): string {
+  const expectedPaths = [
+    fixture.developerDirectory,
+    path.join(fixture.developerDirectory, 'usr'),
+    path.join(fixture.developerDirectory, 'usr', 'bin'),
+    path.join(fixture.developerDirectory, DARWIN_GIT_RELATIVE_PATH),
+  ];
+  if (
+    !path.isAbsolute(fixture.developerDirectory) ||
+    path.resolve(fixture.developerDirectory) !== fixture.developerDirectory ||
+    fixture.entries.length !== expectedPaths.length
+  ) {
+    fail('selected macOS developer tree fixture is malformed');
+  }
+  for (let index = 0; index < expectedPaths.length; index++) {
+    const entry = fixture.entries[index]!;
+    const expectedPath = expectedPaths[index]!;
+    const expectedKind = index === expectedPaths.length - 1 ? 'file' : 'directory';
+    if (
+      entry.path !== expectedPath ||
+      entry.canonicalPath !== expectedPath
+    ) {
+      fail('selected macOS developer tree contains a symbolic or escaping entry');
+    }
+    if (entry.kind !== expectedKind) {
+      fail('selected macOS developer tree contains an unexpected entry kind');
+    }
+    if (entry.uid !== 0) {
+      fail('selected macOS developer tree is not root-owned from Developer downward');
+    }
+    if ((entry.mode & 0o7022) !== 0) {
+      fail('selected macOS developer tree has special or group/world-write authority');
+    }
+    if (
+      expectedKind === 'directory'
+        ? (entry.mode & 0o100) === 0
+        : (entry.mode & 0o111) === 0
+    ) {
+      fail('selected macOS developer tree is not traversable/executable');
+    }
+  }
+  if (!DARWIN_NATIVE_EXECUTABLE_MAGICS.has(fixture.gitMagicHex)) {
+    fail('selected macOS developer Git is not a native Mach-O executable');
+  }
+  const gitExecutable = expectedPaths.at(-1)!;
+  const relativeGit = path.relative(fixture.developerDirectory, gitExecutable);
+  if (
+    relativeGit !== DARWIN_GIT_RELATIVE_PATH ||
+    relativeGit.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeGit)
+  ) {
+    fail('selected macOS developer Git escapes its Developer directory');
+  }
+  return gitExecutable;
+}
+
+function withDarwinDeveloperTreeDescriptors<T>(
+  paths: readonly string[],
+  operation: (descriptors: readonly number[]) => T,
+): T {
+  const descriptors: number[] = [];
+  let outcome: { readonly ok: true; readonly value: T } |
+    { readonly ok: false; readonly error: unknown };
+  try {
+    for (let index = 0; index < paths.length; index++) {
+      const flags = fsConstants.O_RDONLY |
+        fsConstants.O_NOFOLLOW |
+        fsConstants.O_NONBLOCK |
+        (index === paths.length - 1 ? 0 : fsConstants.O_DIRECTORY);
+      descriptors.push(openSync(paths[index]!, flags));
+    }
+    outcome = { ok: true, value: operation(descriptors) };
+  } catch (error) {
+    outcome = { ok: false, error };
+  }
+  const cleanupErrors: unknown[] = [];
+  for (let index = descriptors.length - 1; index >= 0; index--) {
+    try {
+      closeSync(descriptors[index]!);
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+  }
+  if (!outcome.ok) {
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(
+        [outcome.error, ...cleanupErrors],
+        'reviewed Git boundary: selected macOS developer tree review and descriptor cleanup failed',
+        { cause: outcome.error },
+      );
+    }
+    throw outcome.error;
+  }
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(
+      cleanupErrors,
+      'reviewed Git boundary: selected macOS developer tree descriptor cleanup failed',
+    );
+  }
+  return outcome.value;
+}
+
+function inspectDarwinDeveloperTree(
+  developerDirectory: string,
+): { readonly gitExecutable: string; readonly gitIdentity: DarwinGitCandidateIdentity } {
+  const paths = [
+    developerDirectory,
+    path.join(developerDirectory, 'usr'),
+    path.join(developerDirectory, 'usr', 'bin'),
+    path.join(developerDirectory, DARWIN_GIT_RELATIVE_PATH),
+  ];
+  const initial = paths.map((entryPath) => lstatSync(entryPath, { bigint: true }));
+  return withDarwinDeveloperTreeDescriptors(paths, (descriptors) => {
+    const opened = descriptors.map((descriptor) =>
+      fstatSync(descriptor, { bigint: true }));
+    const entries = paths.map((entryPath, index): DarwinDeveloperTreeEntryAuthority => {
+      const stat = initial[index]!;
+      const descriptorStat = opened[index]!;
+      if (!sameRegularFileStat(stat, descriptorStat)) {
+        fail('selected macOS developer tree changed while it was opened');
+      }
+      if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile())) {
+        fail('selected macOS developer tree contains a non-direct entry');
+      }
+      return Object.freeze({
+        canonicalPath: realpathSync(entryPath),
+        kind: stat.isDirectory() ? 'directory' : 'file',
+        mode: Number(stat.mode & 0o7777n),
+        path: entryPath,
+        uid: Number(stat.uid),
+      });
+    });
+    const gitDescriptor = descriptors.at(-1)!;
+    const gitMagic = Buffer.alloc(4);
+    if (readSync(gitDescriptor, gitMagic, 0, gitMagic.byteLength, 0) !== 4) {
+      fail('selected macOS developer Git is too short for executable format review');
+    }
+    const gitExecutable = requireDarwinDeveloperTreeFixture({
+      developerDirectory,
+      entries,
+      gitMagicHex: gitMagic.toString('hex'),
+    });
+    requireReviewedPosixAclAuthority(paths.flatMap((entryPath, index) => [
+      {
+        kind: 'path' as const,
+        label: `selected developer entry path ${index}`,
+        value: entryPath,
+      },
+      {
+        kind: 'descriptor' as const,
+        label: `selected developer entry descriptor ${index}`,
+        value: descriptors[index]!,
+      },
+    ]));
+    const gitStat = opened.at(-1)!;
+    const gitSize = Number(gitStat.size);
+    if (
+      gitStat.size < 0n ||
+      gitStat.size > BigInt(REVIEWED_POSIX_COMMAND_LIMITS.executableBytes)
+    ) {
+      fail('selected macOS developer Git exceeds its executable byte bound');
+    }
+    const gitIdentity = Object.freeze({
+      device: gitStat.dev.toString(10),
+      inode: gitStat.ino.toString(10),
+      sha256: hashRegularFileDescriptor(
+        gitDescriptor,
+        gitSize,
+        'selected macOS developer Git identity',
+      ),
+      size: gitSize,
+    });
+    for (let index = 0; index < paths.length; index++) {
+      const rebound = lstatSync(paths[index]!, { bigint: true });
+      const reboundDescriptor = fstatSync(descriptors[index]!, { bigint: true });
+      if (
+        realpathSync(paths[index]!) !== paths[index] ||
+        !sameRegularFileStat(opened[index]!, rebound) ||
+        !sameRegularFileStat(opened[index]!, reboundDescriptor)
+      ) {
+        fail('selected macOS developer tree changed during authority review');
+      }
+    }
+    requireDistinctDarwinShimIdentity(gitIdentity, darwinShimIdentity());
+    return Object.freeze({ gitExecutable, gitIdentity });
+  });
+}
+
+function darwinDeveloperSelection(
+  stdout: Buffer,
+): { readonly developerDirectory: string; readonly gitExecutable: string } {
+  const text = decodeUtf8(stdout, 'reviewed xcode-select output');
+  if (
+    text.length < 2 ||
+    !text.endsWith('\n') ||
+    text.indexOf('\n') !== text.length - 1 ||
+    text.includes('\r') ||
+    text.includes('\0')
+  ) {
+    fail('reviewed xcode-select output must contain one absolute path and one newline');
+  }
+  const developerDirectory = text.slice(0, -1);
+  if (
+    developerDirectory.length === 0 ||
+    developerDirectory.length > REVIEWED_POSIX_COMMAND_LIMITS.pathBytes ||
+    Buffer.byteLength(developerDirectory, 'utf8') >
+      REVIEWED_POSIX_COMMAND_LIMITS.pathBytes ||
+    !path.isAbsolute(developerDirectory) ||
+    path.resolve(developerDirectory) !== developerDirectory
+  ) {
+    fail('reviewed xcode-select output is not a bounded normalized absolute path');
+  }
+  const gitExecutable = path.join(developerDirectory, DARWIN_GIT_RELATIVE_PATH);
+  if (
+    gitExecutable.length > REVIEWED_POSIX_COMMAND_LIMITS.pathBytes ||
+    Buffer.byteLength(gitExecutable, 'utf8') > REVIEWED_POSIX_COMMAND_LIMITS.pathBytes
+  ) {
+    fail('reviewed xcode-select output resolves beyond its Git path bound');
+  }
+  return Object.freeze({
+    developerDirectory,
+    gitExecutable,
+  });
+}
+
+function resolveDarwinDefaultGitExecutable(
+  runtimeRoot: string,
+  nodeRuntime: ReviewedNodeRuntime,
+): { readonly gitExecutable: string; readonly gitIdentity: DarwinGitCandidateIdentity } {
+  const selectorAuthority = inspectReviewedExecutableAuthority(
+    DARWIN_XCODE_SELECT_EXECUTABLE,
+    'reviewed xcode-select executable',
+  );
+  const result = runReviewedPosixCommand(
+    nodeRuntime.node.authority.executable,
+    DARWIN_XCODE_SELECT_EXECUTABLE,
+    ['-p'],
+    runtimeRoot,
+    {
+      controlRuntimeAuthority: nodeRuntime.node.authority,
+      environment: DARWIN_XCODE_SELECT_ENVIRONMENT,
+      outputLimitBytes: MAX_DARWIN_DEVELOPER_SELECTION_BYTES,
+      targetAuthority: selectorAuthority,
+      timeoutMs: 10_000,
+    },
+  );
+  exactSuccessfulResult(result, 'reviewed xcode-select probe');
+  const selection = darwinDeveloperSelection(result.stdout);
+  if (realpathSync(selection.developerDirectory) !== selection.developerDirectory) {
+    fail('reviewed xcode-select developer directory is not canonical');
+  }
+  return inspectDarwinDeveloperTree(selection.developerDirectory);
+}
+
+function gitSourceAuthorityProfile(
+  kind: ReviewedGitSourceAuthorityProfile['kind'],
+): ReviewedGitSourceAuthorityProfile {
+  return Object.freeze({
+    schema: REVIEWED_GIT_SOURCE_AUTHORITY_PROFILE_SCHEMA,
+    kind,
+  });
+}
+
 function acquireGit(
   runtimeRoot: string,
+  nodeRuntime: ReviewedNodeRuntime,
   sourceGitExecutable: string | undefined,
 ): {
   readonly executable: string;
   readonly authority: ReviewedExecutableAuthority;
   readonly acquisition: ReviewedExecutableAcquisition | null;
+  readonly sourceAuthorityProfile: ReviewedGitSourceAuthorityProfile;
 } {
-  const requested = sourceGitExecutable ?? DEFAULT_GIT_EXECUTABLE;
+  const defaultDarwinGit = process.platform === 'darwin'
+    ? sourceGitExecutable === undefined
+      ? resolveDarwinDefaultGitExecutable(runtimeRoot, nodeRuntime)
+      : null
+    : null;
+  const defaultGitExecutable = process.platform === 'darwin'
+    ? defaultDarwinGit?.gitExecutable ?? null
+    : SYSTEM_GIT_EXECUTABLE;
+  const requested = sourceGitExecutable ?? defaultGitExecutable!;
+  const sourceAuthorityProfile = gitSourceAuthorityProfile(
+    sourceGitExecutable !== undefined
+      ? 'explicit_caller_selected_git_bytes'
+      : process.platform === 'darwin'
+        ? 'darwin_selected_developer_tree_git_bytes'
+        : 'linux_protected_system_git',
+  );
   const canonical = realpathSync(requested);
-  if (requested === DEFAULT_GIT_EXECUTABLE && canonical === DEFAULT_GIT_EXECUTABLE) {
+  const darwinIdentity = process.platform === 'darwin'
+    ? inspectNonShimDarwinGitCandidate(
+        canonical,
+        sourceGitExecutable === undefined,
+      )
+    : null;
+  if (
+    defaultDarwinGit !== null &&
+    darwinIdentity !== null &&
+    (
+      defaultDarwinGit.gitIdentity.device !== darwinIdentity.device ||
+      defaultDarwinGit.gitIdentity.inode !== darwinIdentity.inode ||
+      defaultDarwinGit.gitIdentity.size !== darwinIdentity.size ||
+      defaultDarwinGit.gitIdentity.sha256 !== darwinIdentity.sha256
+    )
+  ) {
+    fail('selected macOS developer Git changed after Developer-tree review');
+  }
+  if (
+    process.platform !== 'darwin' &&
+    sourceGitExecutable === undefined &&
+    defaultGitExecutable !== null &&
+    requested === defaultGitExecutable &&
+    canonical === defaultGitExecutable
+  ) {
+    const authority = inspectReviewedExecutableAuthority(
+      defaultGitExecutable,
+      'reviewed system Git executable',
+    );
     return Object.freeze({
-      executable: DEFAULT_GIT_EXECUTABLE,
-      authority: inspectReviewedExecutableAuthority(
-        DEFAULT_GIT_EXECUTABLE,
-        'reviewed system Git executable',
-      ),
+      executable: defaultGitExecutable,
+      authority,
       acquisition: null,
+      sourceAuthorityProfile,
     });
   }
   const gitRuntime = path.join(runtimeRoot, 'git');
@@ -806,10 +1306,18 @@ function acquireGit(
     gitRuntime,
     path.join('bin', 'git'),
   );
+  if (
+    darwinIdentity !== null &&
+    (acquisition.executable.sourceSha256 !== darwinIdentity.sha256 ||
+      acquisition.executable.size !== darwinIdentity.size)
+  ) {
+    fail('macOS Git candidate changed between shim review and acquisition');
+  }
   return Object.freeze({
     executable: acquisition.authority.executable,
     authority: acquisition.authority,
     acquisition,
+    sourceAuthorityProfile,
   });
 }
 
@@ -870,7 +1378,7 @@ export function createReviewedGitRuntime(
     const nodeRuntime = createReviewedNodeRuntime(runtimeRoot, {
       ...(sourceNodeCandidates === undefined ? {} : { sourceNodeCandidates }),
     });
-    const git = acquireGit(runtimeRoot, sourceGitExecutable);
+    const git = acquireGit(runtimeRoot, nodeRuntime, sourceGitExecutable);
     const versionProbe = runReviewedPosixCommand(
       nodeRuntime.node.authority.executable,
       git.executable,
@@ -903,6 +1411,7 @@ export function createReviewedGitRuntime(
       gitExecutable: git.executable,
       gitAuthority: git.authority,
       gitAcquisition: git.acquisition,
+      gitSourceAuthorityProfile: git.sourceAuthorityProfile,
       gitVersion,
     } satisfies ReviewedGitRuntime);
     const stat = lstatSync(runtimeRoot, { bigint: true });
@@ -961,6 +1470,19 @@ export function disposeReviewedGitRuntime(runtime: ReviewedGitRuntime): void {
 }
 
 export const reviewedGitCommandTesting = Object.freeze({
+  darwinGitExecutableFromXcodeSelectOutput: (stdout: Buffer): string =>
+    darwinDeveloperSelection(stdout).gitExecutable,
+  darwinGitShimExecutable: (): string => SYSTEM_GIT_EXECUTABLE,
+  requireDistinctDarwinShimIdentity: (
+    candidate: DarwinGitCandidateIdentity,
+    shim: DarwinGitCandidateIdentity,
+  ): void => requireDistinctDarwinShimIdentity(candidate, shim),
+  requireDarwinDeveloperTreeFixture: (
+    fixture: DarwinDeveloperTreeAuthorityFixture,
+  ): string => requireDarwinDeveloperTreeFixture(fixture),
+  darwinXcodeSelectExecutable: (): string => DARWIN_XCODE_SELECT_EXECUTABLE,
+  darwinXcodeSelectEnvironment: (): Readonly<Record<string, string>> =>
+    DARWIN_XCODE_SELECT_ENVIRONMENT,
   hostNodeCandidates: (): readonly string[] =>
     reviewedNodeRuntimeTesting.hostNodeCandidates(),
   maximumArgumentBytes: REVIEWED_POSIX_COMMAND_LIMITS.argumentBytes,

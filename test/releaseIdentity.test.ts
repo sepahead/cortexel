@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   chmodSync,
@@ -16,6 +16,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { createClosedTsxFixtureEnvironment } from './closedTsxFixtureEnvironment.js';
 import {
   artifactReleaseStampingProblems,
   isCanonicalGregorianDate,
@@ -871,8 +872,11 @@ describe('release identity — pure final-release gate', () => {
         }
         process.stdout.write(JSON.stringify({ message }));
       `, 'utf8');
-      const result = spawnSync(
-        'node',
+      const command = createClosedTsxFixtureEnvironment(
+        repository,
+        'fifo-loader-temp',
+      );
+      const result = command.runNode(
         [
           '--import',
           'tsx',
@@ -882,18 +886,10 @@ describe('release identity — pure final-release gate', () => {
         ],
         {
           cwd: ROOT,
-          encoding: 'utf8',
-          env: {
-            LANG: 'C',
-            LC_ALL: 'C',
-            PATH: process.env.PATH,
-          },
-          maxBuffer: 64 * 1024,
-          stdio: ['ignore', 'pipe', 'pipe'],
-          timeout: 5_000,
+          outputLimitBytes: 64 * 1024,
+          timeoutMs: 5_000,
         },
       );
-      expect(result.error).toBeUndefined();
       expect(result.status, result.stderr).toBe(0);
       expect(JSON.parse(result.stdout)).toMatchObject({
         message: expect.stringContaining('not a regular file'),
@@ -1002,8 +998,11 @@ describe('release identity — pure final-release gate', () => {
         }
         process.stdout.write(JSON.stringify({ ...observed, closeAttempts }));
       `, 'utf8');
-      const result = spawnSync(
-        'node',
+      const command = createClosedTsxFixtureEnvironment(
+        repository,
+        'close-loader-temp',
+      );
+      const result = command.runNode(
         [
           '--import',
           'tsx',
@@ -1013,18 +1012,10 @@ describe('release identity — pure final-release gate', () => {
         ],
         {
           cwd: ROOT,
-          encoding: 'utf8',
-          env: {
-            LANG: 'C',
-            LC_ALL: 'C',
-            PATH: process.env.PATH,
-          },
-          maxBuffer: 64 * 1024,
-          stdio: ['ignore', 'pipe', 'pipe'],
-          timeout: 5_000,
+          outputLimitBytes: 64 * 1024,
+          timeoutMs: 5_000,
         },
       );
-      expect(result.error).toBeUndefined();
       expect(result.status, result.stderr).toBe(0);
       expect(JSON.parse(result.stdout)).toEqual({
         aggregate: true,

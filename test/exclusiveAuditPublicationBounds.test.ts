@@ -1,6 +1,4 @@
-import { spawnSync } from 'node:child_process';
 import {
-  mkdirSync,
   mkdtempSync,
   realpathSync,
   rmSync,
@@ -10,6 +8,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
+
+import { createClosedTsxFixtureEnvironment } from './closedTsxFixtureEnvironment.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const MODULE_PATH = path.join(
@@ -31,8 +31,6 @@ function runBoundFixture(mode: string): BoundFixtureResult {
   const fixture = realpathSync(
     mkdtempSync(path.join(tmpdir(), 'cortexel-publication-bound-')),
   );
-  const loaderTemporaryDirectory = path.join(fixture, 'loader-temp');
-  mkdirSync(loaderTemporaryDirectory, { mode: 0o700 });
   const script = path.join(fixture, 'fixture.mjs');
   try {
     writeFileSync(script, String.raw`
@@ -129,45 +127,20 @@ function runBoundFixture(mode: string): BoundFixtureResult {
         requestedPathCodeUnits: requestedPath.length,
       }));
     `, 'utf8');
-    const result = spawnSync(
-      'node',
+    const command = createClosedTsxFixtureEnvironment(fixture, 'loader-temp');
+    const { loaderTemporaryDirectory } = command;
+    const result = command.runNode(
       ['--import', 'tsx', script, mode, fixture, MODULE_PATH],
       {
         cwd: ROOT,
-        encoding: 'utf8',
-        env: {
-          LANG: 'C',
-          LC_ALL: 'C',
-          PATH: process.env.PATH,
-          // The tsx loader performs a temporary case-sensitivity probe before
-          // this fixture module runs. Keep that loader-owned I/O inside the
-          // fixture's already-authorized private directory so sealed sandboxes
-          // need not grant ambient /tmp write authority.
-          TEMP: loaderTemporaryDirectory,
-          TMP: loaderTemporaryDirectory,
-          TMPDIR: loaderTemporaryDirectory,
-        },
-        maxBuffer: 64 * 1024,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        outputLimitBytes: 64 * 1024,
         // A sealed full-suite run can briefly saturate process startup while the
         // package/runtime smoke tests execute in neighboring workers. The fixture
         // itself is synchronous and bounded; allow startup headroom without making
         // a hung child unbounded.
-        timeout: 30_000,
+        timeoutMs: 30_000,
       },
     );
-    if (result.error !== undefined) {
-      throw new Error(
-        `publication-bound fixture spawn failed: ${JSON.stringify({
-          code:
-            'code' in result.error && typeof result.error.code === 'string'
-              ? result.error.code
-              : null,
-          message: result.error.message.slice(0, 512),
-          name: result.error.name,
-        })}`,
-      );
-    }
     if (result.status !== 0) {
       // Keep child output on one JSON-escaped line. Passing raw stderr as an
       // assertion annotation lets stack-like or non-UTF-8 child diagnostics enter
@@ -197,7 +170,7 @@ describe('exclusive audit publication resolved-path bounds', () => {
       expect(result.mutationCalls).toEqual([]);
       expect(result.finalEntries).toEqual(['fixture.mjs', 'loader-temp']);
     }
-  });
+  }, 60_000);
 
   it('rejects an over-bound canonical parent before mutation', () => {
     for (const mode of ['parent-code-units', 'parent-utf8']) {
@@ -206,12 +179,12 @@ describe('exclusive audit publication resolved-path bounds', () => {
       expect(result.mutationCalls).toEqual([]);
       expect(result.finalEntries).toEqual(['fixture.mjs', 'loader-temp']);
     }
-  });
+  }, 60_000);
 
   it('rejects an over-bound constructed staging path before mutation', () => {
     const result = runBoundFixture('staged');
     expect(result.message).toMatch(/resolved audit staging path exceeds/u);
     expect(result.mutationCalls).toEqual([]);
     expect(result.finalEntries).toEqual(['fixture.mjs', 'loader-temp']);
-  });
+  }, 60_000);
 });

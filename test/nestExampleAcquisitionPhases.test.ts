@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
   existsSync,
@@ -21,6 +20,7 @@ import {
   createReviewedGitRuntime,
   disposeReviewedGitRuntime,
 } from '../scripts/lib/reviewed-git-command.js';
+import { runReviewedFixtureGit } from './reviewedFixtureGit.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -29,28 +29,7 @@ function fixtureGit(
   arguments_: readonly string[],
   input?: string,
 ): string {
-  const result = spawnSync(
-    '/usr/bin/git',
-    ['--no-replace-objects', '-C', repository, ...arguments_],
-    {
-      encoding: 'utf8',
-      env: {
-        GIT_CONFIG_COUNT: '0',
-        GIT_CONFIG_GLOBAL: '/dev/null',
-        GIT_CONFIG_NOSYSTEM: '1',
-        GIT_NO_REPLACE_OBJECTS: '1',
-        HOME: '/dev/null',
-        LANG: 'C',
-        LC_ALL: 'C',
-        PATH: '/usr/bin:/bin',
-      },
-      input,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    },
-  );
-  expect(result.error).toBeUndefined();
-  expect(result.status, result.stderr).toBe(0);
-  return result.stdout.trim();
+  return runReviewedFixtureGit(repository, arguments_, input);
 }
 
 afterEach(() => {
