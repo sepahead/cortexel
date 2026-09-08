@@ -15,8 +15,10 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -56,6 +58,9 @@ import {
 } from '../scripts/lib/posix-acl-authority.js';
 
 const temporaryDirectories: string[] = [];
+const TSX_IMPORT = pathToFileURL(
+  realpathSync(createRequire(import.meta.url).resolve('tsx')),
+).href;
 
 function runPatchedNodeFixture(
   root: string,
@@ -73,9 +78,9 @@ function runPatchedNodeFixture(
     `${name}-loader-temp`,
   );
   const result = command.runNode(
-    ['--import', 'tsx', script, ...arguments_],
+    ['--import', TSX_IMPORT, script, ...arguments_],
     {
-      cwd: path.resolve('.'),
+      cwd: commandParent,
       outputLimitBytes: 64 * 1024,
       timeoutMs: 15_000,
     },
@@ -1419,6 +1424,41 @@ describe('offline NEST official-example source inventory', () => {
       if (mode === 'close') expect(result.closeCalls).toHaveLength(1);
     }
   }, 30_000);
+
+  it('rejects an actual default-ACL command cwd before child execution', () => {
+    if (process.platform !== 'linux') return;
+    const root = realpathSync(mkdtempSync(
+      path.join(tmpdir(), 'cortexel-fixture-cwd-acl-'),
+    ));
+    temporaryDirectories.push(root);
+    const deniedCwd = path.join(root, 'denied-cwd');
+    const marker = path.join(root, 'child-ran');
+    mkdirSync(deniedCwd, { mode: 0o700 });
+    const acl = spawnSync(
+      '/usr/bin/setfacl',
+      ['--modify', 'default:user:65534:r-x', '--', deniedCwd],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    expect(acl.error).toBeUndefined();
+    expect(acl.status, acl.stderr).toBe(0);
+    const command = createClosedTsxFixtureEnvironment(root, 'denied-loader-temp');
+    expect(() => command.runNode(
+      ['-e', `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran')`],
+      { cwd: deniedCwd, outputLimitBytes: 1_024, timeoutMs: 10_000 },
+    )).toThrow(/carries an extended default ACL/u);
+    expect(existsSync(marker)).toBe(false);
+    expect(() => command.dispose()).toThrow(/already consumed or disposed/u);
+    expect(() => requireReviewedPosixAclAuthority([
+      { kind: 'path', label: 'retained denied cwd', value: deniedCwd },
+    ])).toThrow(/carries an extended default ACL/u);
+
+    const positive = createClosedTsxFixtureEnvironment(root, 'accepted-loader-temp');
+    const result = positive.runNode(
+      ['-e', 'process.stdout.write(process.cwd())'],
+      { cwd: root, outputLimitBytes: 4_096, timeoutMs: 10_000 },
+    );
+    expect(result).toMatchObject({ status: 0, signal: null, stderr: '', stdout: root });
+  }, 60_000);
 
   it('uses reviewed Linux VFS ACL checks for paths and descriptors', () => {
     if (process.platform !== 'linux') return;

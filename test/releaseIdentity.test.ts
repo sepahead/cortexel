@@ -11,8 +11,10 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
@@ -41,6 +43,9 @@ import {
 } from '../scripts/verify-release.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
+const TSX_IMPORT = pathToFileURL(
+  realpathSync(createRequire(import.meta.url).resolve('tsx')),
+).href;
 const HEAD = '1111111111111111111111111111111111111111';
 
 const RELEASE_CAPABLE_ARTIFACT_SCHEMA = {
@@ -187,6 +192,7 @@ function createEvidenceRepositoryFixture(
   git('init', '-q');
   git('config', 'user.email', 'release-test@example.invalid');
   git('config', 'user.name', 'Release Test');
+  git('config', 'commit.gpgsign', 'false');
   mkdirSync(path.join(repository, 'docs', 'release'), { recursive: true });
   mkdirSync(path.join(repository, 'dist'), { recursive: true });
   const packageJson = { name: 'fixture', version: '1.0.0', files: ['dist'], ...packageOverrides };
@@ -638,6 +644,46 @@ describe('release identity — pure final-release gate', () => {
     }))).toContain('refs/tags/v0.10.0 tagger date must equal CITATION.cff date-released');
   });
 
+  it('keeps private fixture commits independent of inherited signing credentials', () => {
+    const directory = realpathSync(
+      mkdtempSync(path.join(tmpdir(), 'cortexel-release-signing-')),
+    );
+    const configuration = path.join(directory, 'global.gitconfig');
+    const signer = path.join(directory, 'refuse-signing');
+    const marker = `${signer}.attempted`;
+    const previousGlobalConfiguration = process.env.GIT_CONFIG_GLOBAL;
+    let fixture: EvidenceRepositoryFixture | undefined;
+    try {
+      writeFileSync(signer, '#!/bin/sh\nprintf \'attempted\\n\' > "$0.attempted"\nexit 79\n');
+      chmodSync(signer, 0o700);
+      for (const [key, value] of [
+        ['commit.gpgsign', 'true'],
+        ['gpg.format', 'openpgp'],
+        ['gpg.program', signer],
+        ['user.signingkey', 'fixture-key'],
+      ] as const) {
+        execFileSync('git', ['config', '--file', configuration, key, value]);
+      }
+      const configurationBytes = readFileSync(configuration);
+      process.env.GIT_CONFIG_GLOBAL = configuration;
+      const owned = createEvidenceRepositoryFixture();
+      fixture = owned;
+      expect(owned.sourceCommit).not.toBe(owned.authorizationHead);
+      expect(() => readFileSync(marker)).toThrow(/ENOENT/);
+      expect(() => owned.git(
+        '-c', 'commit.gpgsign=true', 'commit', '--allow-empty', '-qm', 'refused signing control',
+      )).toThrow();
+      expect(readFileSync(marker, 'utf8')).toBe('attempted\n');
+      expect(owned.git('rev-parse', 'HEAD')).toBe(owned.authorizationHead);
+      expect(readFileSync(configuration)).toEqual(configurationBytes);
+    } finally {
+      if (previousGlobalConfiguration === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+      else process.env.GIT_CONFIG_GLOBAL = previousGlobalConfiguration;
+      if (fixture) rmSync(fixture.repository, { recursive: true, force: true });
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('does not let assume-unchanged hide modified publication bytes from the clean-tree gate', () => {
     const repository = realpathSync(
       mkdtempSync(path.join(tmpdir(), 'cortexel-release-git-')),
@@ -649,6 +695,7 @@ describe('release identity — pure final-release gate', () => {
       git('init', '-q');
       git('config', 'user.email', 'release-test@example.invalid');
       git('config', 'user.name', 'Release Test');
+      git('config', 'commit.gpgsign', 'false');
       writeFileSync(path.join(repository, 'package.json'), '{"name":"clean"}\n');
       git('add', 'package.json');
       git('commit', '-qm', 'fixture');
@@ -677,6 +724,7 @@ describe('release identity — pure final-release gate', () => {
       git('init', '-q');
       git('config', 'user.email', 'release-test@example.invalid');
       git('config', 'user.name', 'Release Test');
+      git('config', 'commit.gpgsign', 'false');
       writeFileSync(path.join(repository, 'package.json'), '{"name":"fixture"}\n');
       mkdirSync(path.join(repository, 'dist'));
       writeFileSync(path.join(repository, 'dist', 'tracked.js'), 'export {};\n');
@@ -711,6 +759,7 @@ describe('release identity — pure final-release gate', () => {
       git('init', '-q');
       git('config', 'user.email', 'release-test@example.invalid');
       git('config', 'user.name', 'Release Test');
+      git('config', 'commit.gpgsign', 'false');
       writeFileSync(path.join(repository, 'package.json'), '{"name":"fixture"}\n');
       git('add', 'package.json');
       git('commit', '-qm', 'fixture');
@@ -741,6 +790,7 @@ describe('release identity — pure final-release gate', () => {
       git('init', '-q');
       git('config', 'user.email', 'release-test@example.invalid');
       git('config', 'user.name', 'Release Test');
+      git('config', 'commit.gpgsign', 'false');
       writeFileSync(path.join(repository, 'package.json'), contents);
       git('add', 'package.json');
       git('commit', '-qm', 'fixture');
@@ -879,13 +929,13 @@ describe('release identity — pure final-release gate', () => {
       const result = command.runNode(
         [
           '--import',
-          'tsx',
+          TSX_IMPORT,
           script,
           repository,
           path.resolve('scripts/lib/direct-repository-file.ts'),
         ],
         {
-          cwd: ROOT,
+          cwd: repository,
           outputLimitBytes: 64 * 1024,
           timeoutMs: 5_000,
         },
@@ -1005,13 +1055,13 @@ describe('release identity — pure final-release gate', () => {
       const result = command.runNode(
         [
           '--import',
-          'tsx',
+          TSX_IMPORT,
           script,
           repository,
           path.resolve('scripts/lib/direct-repository-file.ts'),
         ],
         {
-          cwd: ROOT,
+          cwd: repository,
           outputLimitBytes: 64 * 1024,
           timeoutMs: 5_000,
         },

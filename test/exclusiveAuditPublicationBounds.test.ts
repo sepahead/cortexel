@@ -4,14 +4,19 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
 import { createClosedTsxFixtureEnvironment } from './closedTsxFixtureEnvironment.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
+const TSX_IMPORT = pathToFileURL(
+  realpathSync(createRequire(import.meta.url).resolve('tsx')),
+).href;
 const MODULE_PATH = path.join(
   ROOT,
   'scripts',
@@ -20,11 +25,13 @@ const MODULE_PATH = path.join(
 );
 
 interface BoundFixtureResult {
+  readonly cwd: string;
   readonly finalEntries: readonly string[];
   readonly loaderTemporaryDirectory: string;
   readonly message: string;
   readonly mutationCalls: readonly string[];
   readonly requestedPathCodeUnits: number;
+  readonly publishedText: string | null;
 }
 
 function runBoundFixture(mode: string): BoundFixtureResult {
@@ -101,7 +108,7 @@ function runBoundFixture(mode: string): BoundFixtureResult {
             ? '/' + 's'.repeat(4_096)
             : joined;
         };
-      } else {
+      } else if (mode !== 'valid') {
         throw new Error('unknown bound fixture mode');
       }
 
@@ -118,21 +125,25 @@ function runBoundFixture(mode: string): BoundFixtureResult {
         process.cwd = originalCwd;
         path.join = originalJoin;
       }
-      if (!message) throw new Error('over-bound publication path was accepted');
+      if (mode === 'valid' ? message.length > 0 : !message) {
+        throw new Error(mode === 'valid' ? message : 'over-bound publication path was accepted');
+      }
       process.stdout.write(JSON.stringify({
+        cwd: process.cwd(),
         finalEntries: fs.readdirSync(fixture).sort(),
         loaderTemporaryDirectory: tmpdir(),
         message,
         mutationCalls,
         requestedPathCodeUnits: requestedPath.length,
+        publishedText: mode === 'valid' ? fs.readFileSync(target, 'utf8') : null,
       }));
     `, 'utf8');
     const command = createClosedTsxFixtureEnvironment(fixture, 'loader-temp');
     const { loaderTemporaryDirectory } = command;
     const result = command.runNode(
-      ['--import', 'tsx', script, mode, fixture, MODULE_PATH],
+      ['--import', TSX_IMPORT, script, mode, fixture, MODULE_PATH],
       {
-        cwd: ROOT,
+        cwd: fixture,
         outputLimitBytes: 64 * 1024,
         // A sealed full-suite run can briefly saturate process startup while the
         // package/runtime smoke tests execute in neighboring workers. The fixture
@@ -154,6 +165,7 @@ function runBoundFixture(mode: string): BoundFixtureResult {
       );
     }
     const parsed = JSON.parse(result.stdout) as BoundFixtureResult;
+    expect(parsed.cwd).toBe(fixture);
     expect(parsed.loaderTemporaryDirectory).toBe(loaderTemporaryDirectory);
     return parsed;
   } finally {
@@ -162,6 +174,14 @@ function runBoundFixture(mode: string): BoundFixtureResult {
 }
 
 describe('exclusive audit publication resolved-path bounds', () => {
+  it('publishes exact bytes from the private fixture cwd with the installed TSX loader', () => {
+    const result = runBoundFixture('valid');
+    expect(result.message).toBe('');
+    expect(result.publishedText).toBe('{}');
+    expect(result.finalEntries).toEqual(['fixture.mjs', 'loader-temp', 'result.json']);
+    expect(result.mutationCalls.some((call) => call.startsWith('link:'))).toBe(true);
+  }, 60_000);
+
   it('rejects a short relative name expanded by a long cwd before mutation', () => {
     for (const mode of ['target-code-units', 'target-utf8']) {
       const result = runBoundFixture(mode);
