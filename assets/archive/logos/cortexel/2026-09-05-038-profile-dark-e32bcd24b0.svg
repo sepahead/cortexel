@@ -1,0 +1,66 @@
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" viewBox="38 498 124 124" width="124" height="124" role="img" aria-labelledby="cortexel-archive-title cortexel-archive-desc"><ns0:title id="cortexel-archive-title">CORTEXEL historical profile mark</ns0:title><ns0:desc id="cortexel-archive-desc">Archived design extracted from a historical portfolio SVG. This image makes no current product or release claim.</ns0:desc><ns0:defs><ns0:filter id="edgeGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <ns0:feGaussianBlur stdDeviation="2.4" result="b" />
+      <ns0:feMerge><ns0:feMergeNode in="b" /><ns0:feMergeNode in="SourceGraphic" /></ns0:feMerge>
+    </ns0:filter>
+    <ns0:filter id="nodeShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <ns0:feDropShadow dx="0" dy="1.5" stdDeviation="2.4" flood-color="#000000" flood-opacity="0.38" />
+    </ns0:filter>
+    <ns0:radialGradient id="voxGrad" cx="50%" cy="40%" r="68%">
+      <ns0:stop offset="0%" stop-color="#2a0a2e" />
+      <ns0:stop offset="100%" stop-color="#10131a" />
+    </ns0:radialGradient>
+    </ns0:defs><ns0:style>.seat-ring{fill: none; stroke-width: 2.2;}
+.seat-groove{fill: none; stroke: #05070b; stroke-opacity: 0.5; stroke-width: 1;}
+.seat-hairline{fill: none; stroke: #2b333d; stroke-opacity: 0.55; stroke-width: 1;}
+.seat-vox{fill: url(#voxGrad);}
+.ctx-well{fill: url(#ctxWell); stroke: #1f1227; stroke-width: 1.1;}
+.ctx-min-voxel-top{fill: #e879f9; stroke: #fdf4ff; stroke-width: 0.65; stroke-linejoin: round;}
+.ctx-min-voxel-left{fill: #a21caf; stroke: #f0abfc; stroke-width: 0.65; stroke-linejoin: round;}
+.ctx-min-voxel-right{fill: #701a75; stroke: #d946ef; stroke-width: 0.65; stroke-linejoin: round;}
+.ctx-min-neuron{fill: #ffffff; stroke: #e879f9; stroke-width: 0.45;}
+.ctx-min-intake-lane{fill: none; stroke: #c4b5fd; stroke-width: 0.8; stroke-opacity: 0.55; stroke-dasharray: 2 2.2; stroke-linecap: round;}
+.ctx-min-boundary{fill: none; stroke: #fdf4ff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;}
+.ctx-min-artifact{fill: none; stroke: url(#ctxArtifactEdge); stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round;}
+.ctx-min-action-potential{fill: none; stroke: #ffffff; stroke-width: 1.45; stroke-linecap: round; stroke-linejoin: round;}
+.ctx-min-token{fill: #fdf4ff; stroke: #e879f9; stroke-width: 0.45; filter: url(#edgeGlow);}
+.ctx-min-scan{stroke: #ffffff; stroke-width: 1.2; stroke-linecap: round; filter: url(#edgeGlow);}</ns0:style><ns0:g class="nodes"><ns0:g class="ctx-mark">
+    <ns0:defs>
+      <ns0:linearGradient id="voxBezel" x1="0" y1="526" x2="0" y2="594" gradientUnits="userSpaceOnUse">
+        <ns0:stop offset="0%" stop-color="#f5d0fe" /><ns0:stop offset="45%" stop-color="#e879f9" /><ns0:stop offset="100%" stop-color="#86198f" />
+      </ns0:linearGradient>
+    </ns0:defs>
+    <ns0:g filter="url(#nodeShadow)"><ns0:circle cx="100" cy="560" r="34" class="seat-vox" /></ns0:g>
+    <ns0:circle cx="100" cy="560" r="34" stroke="url(#voxBezel)" class="seat-ring" />
+    <ns0:circle cx="100" cy="560" r="31.8" class="seat-groove" />
+    <ns0:circle cx="100" cy="560" r="35.4" class="seat-hairline" />
+    <ns0:defs>
+      <ns0:radialGradient id="ctxWell" cx="42%" cy="36%" r="74%"><ns0:stop offset="0%" stop-color="#291132" /><ns0:stop offset="68%" stop-color="#110a1a" /><ns0:stop offset="100%" stop-color="#05070c" /></ns0:radialGradient>
+      <ns0:linearGradient id="ctxArtifactEdge" x1="0" y1="542" x2="0" y2="578" gradientUnits="userSpaceOnUse"><ns0:stop offset="0%" stop-color="#fdf4ff" /><ns0:stop offset="38%" stop-color="#e879f9" /><ns0:stop offset="100%" stop-color="#86198f" /></ns0:linearGradient>
+      <ns0:clipPath id="ctxActionPotentialClip"><ns0:rect x="102.7" y="546" width="15.5" height="29">
+        <ns0:animate attributeName="width" values="15.5;15.5;0;0;15.5;15.5" keyTimes="0;0.02;0.05;0.43;0.61;1" dur="8.4s" repeatCount="indefinite" />
+      </ns0:rect></ns0:clipPath>
+    </ns0:defs>
+    <ns0:circle cx="100" cy="560" r="30.2" class="ctx-well" />
+
+    <ns0:g class="ctx-min-voxel">
+      <ns0:polygon points="75,558 81,554 87,558 81,562" class="ctx-min-voxel-top" />
+      <ns0:polygon points="75,558 81,562 81,569 75,565" class="ctx-min-voxel-left" />
+      <ns0:polygon points="87,558 81,562 81,569 87,565" class="ctx-min-voxel-right" />
+      <ns0:circle cx="81" cy="558" r="1.35" class="ctx-min-neuron" />
+    </ns0:g>
+    <ns0:path d="M88 562H93" class="ctx-min-intake-lane" />
+    <ns0:path d="M97 542H93V578H97" class="ctx-min-boundary" />
+
+    <ns0:path d="M101 544H120V576H101" class="ctx-min-artifact" />
+    <ns0:path d="M103.2 567              C104.8 567 105.9 567 106.6 566.7              C107.3 566.2 107.8 551.2 108.7 548.5              C109 547.3 109.5 547.9 110 550.6              C110.7 555.8 111 564.4 112.1 569.4              C112.8 572.3 113.7 573.1 114.4 570.5              C115.2 567.9 116.2 567 117.7 567" class="ctx-min-action-potential" clip-path="url(#ctxActionPotentialClip)" />
+
+    <ns0:polygon points="78,562 81,560 84,562 81,564" class="ctx-min-token" opacity="0">
+      <ns0:animateTransform attributeName="transform" type="translate" values="0 0;0 0;12 0;12 0;0 0" keyTimes="0;0.10;0.27;0.90;1" dur="8.4s" repeatCount="indefinite" />
+      <ns0:animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.08;0.11;0.28;0.32;1" dur="8.4s" repeatCount="indefinite" />
+    </ns0:polygon>
+    <ns0:line x1="93" y1="546" x2="93" y2="552" class="ctx-min-scan" opacity="0">
+      <ns0:animateTransform attributeName="transform" type="translate" values="0 0;0 0;0 22;0 22;0 0" keyTimes="0;0.28;0.43;0.90;1" dur="8.4s" repeatCount="indefinite" />
+      <ns0:animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.26;0.29;0.41;0.44;1" dur="8.4s" repeatCount="indefinite" />
+    </ns0:line>
+    </ns0:g>
+  </ns0:g></ns0:svg>

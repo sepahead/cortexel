@@ -1,0 +1,36 @@
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" viewBox="48 298 124 124" width="124" height="124" role="img" aria-labelledby="cortexel-archive-title cortexel-archive-desc"><ns0:title id="cortexel-archive-title">CORTEXEL historical profile mark</ns0:title><ns0:desc id="cortexel-archive-desc">Archived design extracted from a historical portfolio SVG. This image makes no current product or release claim.</ns0:desc><ns0:defs><ns0:filter id="nodeShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <ns0:feDropShadow dx="0" dy="1.5" stdDeviation="2.4" flood-color="#000000" flood-opacity="0.38" />
+    </ns0:filter>
+    <ns0:filter id="soft" x="-60%" y="-60%" width="220%" height="220%">
+      <ns0:feGaussianBlur stdDeviation="4" result="b" />
+      <ns0:feMerge><ns0:feMergeNode in="b" /><ns0:feMergeNode in="SourceGraphic" /></ns0:feMerge>
+    </ns0:filter>
+    <ns0:radialGradient id="voxGrad" cx="50%" cy="40%" r="68%">
+      <ns0:stop offset="0%" stop-color="#2a0a2e" />
+      <ns0:stop offset="100%" stop-color="#10131a" />
+    </ns0:radialGradient>
+    </ns0:defs><ns0:style>:root{--hub-accent: #34d399; --cube-accent: #fb923c; --tri-accent: #a78bfa;}
+.seat-ring{fill: none; stroke-width: 2.2;}
+.seat-groove{fill: none; stroke: #05070b; stroke-opacity: 0.5; stroke-width: 1;}
+.seat-hairline{fill: none; stroke: #2b333d; stroke-opacity: 0.55; stroke-width: 1;}
+.seat-vox{fill: url(#voxGrad);}
+.vox-top{fill: #e879f9; fill-opacity: 0.6; stroke: #e879f9; stroke-width: 1.3;}
+.vox-left{fill: #e879f9; fill-opacity: 0.32; stroke: #e879f9; stroke-width: 1.3;}
+.vox-right{fill: #e879f9; fill-opacity: 0.15; stroke: #e879f9; stroke-width: 1.3;}
+.vox-net{color: #e879f9;}</ns0:style><ns0:g class="nodes"><ns0:g class="vox-net">
+    <ns0:defs>
+      <ns0:linearGradient id="voxBezel" x1="0" y1="326" x2="0" y2="394" gradientUnits="userSpaceOnUse">
+        <ns0:stop offset="0%" stop-color="#f5d0fe" /><ns0:stop offset="45%" stop-color="#e879f9" /><ns0:stop offset="100%" stop-color="#86198f" />
+      </ns0:linearGradient>
+    </ns0:defs>
+    <ns0:g filter="url(#nodeShadow)"><ns0:circle cx="110" cy="360" r="34" class="seat-vox" /></ns0:g>
+    <ns0:circle cx="110" cy="360" r="34" stroke="url(#voxBezel)" class="seat-ring" />
+    <ns0:circle cx="110" cy="360" r="31.8" class="seat-groove" />
+    <ns0:circle cx="110" cy="360" r="35.4" class="seat-hairline" />
+    <ns0:defs><ns0:linearGradient id="voxCalli0" gradientUnits="userSpaceOnUse" x1="110" y1="335" x2="90" y2="373"><ns0:stop offset="0" stop-color="currentColor" stop-opacity="0.45" /><ns0:stop offset="1" stop-color="currentColor" stop-opacity="0.725" /></ns0:linearGradient><ns0:linearGradient id="voxCalli1" gradientUnits="userSpaceOnUse" x1="110" y1="335" x2="130" y2="373"><ns0:stop offset="0" stop-color="currentColor" stop-opacity="0.45" /><ns0:stop offset="1" stop-color="currentColor" stop-opacity="1" /></ns0:linearGradient><ns0:linearGradient id="voxCalli2" gradientUnits="userSpaceOnUse" x1="90" y1="373" x2="130" y2="373"><ns0:stop offset="0" stop-color="currentColor" stop-opacity="0.725" /><ns0:stop offset="1" stop-color="currentColor" stop-opacity="1" /></ns0:linearGradient></ns0:defs>
+    <ns0:g filter="url(#soft)">
+      <ns0:path d="M110 335 Q92.7 350.2 90 373 Q96.6 352.2 110 335 Z" fill="url(#voxCalli0)" /> <ns0:path d="M110 335 Q123.4 352.2 130 373 Q127.3 350.2 110 335 Z" fill="url(#voxCalli1)" /> <ns0:path d="M90 373 Q110 381.2 130 373 Q110 376.8 90 373 Z" fill="url(#voxCalli2)" />
+      <ns0:g opacity="0.45"><ns0:polygon points="102.8,331.8 110,335.4 110,341.8 102.8,338.2" class="vox-left" stroke-linejoin="round" /><ns0:polygon points="117.2,331.8 110,335.4 110,341.8 117.2,338.2" class="vox-right" stroke-linejoin="round" /><ns0:polygon points="110,328.2 117.2,331.8 110,335.4 102.8,331.8" class="vox-top" stroke-linejoin="round" /></ns0:g> <ns0:g opacity="0.725"><ns0:polygon points="81,369 90,373.5 90,381.5 81,377" class="vox-left" stroke-linejoin="round" /><ns0:polygon points="99,369 90,373.5 90,381.5 99,377" class="vox-right" stroke-linejoin="round" /><ns0:polygon points="90,364.5 99,369 90,373.5 81,369" class="vox-top" stroke-linejoin="round" /></ns0:g> <ns0:g opacity="1"><ns0:polygon points="119.2,368.2 130,373.6 130,383.2 119.2,377.8" class="vox-left" stroke-linejoin="round" /><ns0:polygon points="140.8,368.2 130,373.6 130,383.2 140.8,377.8" class="vox-right" stroke-linejoin="round" /><ns0:polygon points="130,362.8 140.8,368.2 130,373.6 119.2,368.2" class="vox-top" stroke-linejoin="round" /></ns0:g>
+    </ns0:g>
+    </ns0:g>
+  </ns0:g></ns0:svg>

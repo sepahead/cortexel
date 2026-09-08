@@ -1,0 +1,99 @@
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" viewBox="48 298 124 124" width="124" height="124" role="img" aria-labelledby="cortexel-archive-title cortexel-archive-desc"><ns0:title id="cortexel-archive-title">CORTEXEL historical profile mark</ns0:title><ns0:desc id="cortexel-archive-desc">Archived design extracted from a historical portfolio SVG. This image makes no current product or release claim.</ns0:desc><ns0:defs><ns0:filter id="edgeGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <ns0:feGaussianBlur stdDeviation="2.4" result="b" />
+      <ns0:feMerge><ns0:feMergeNode in="b" /><ns0:feMergeNode in="SourceGraphic" /></ns0:feMerge>
+    </ns0:filter>
+    <ns0:filter id="nodeShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <ns0:feDropShadow dx="0" dy="1.5" stdDeviation="2.4" flood-color="#000000" flood-opacity="0.38" />
+    </ns0:filter>
+    <ns0:radialGradient id="voxGrad" cx="50%" cy="40%" r="68%">
+      <ns0:stop offset="0%" stop-color="#2a0a2e" />
+      <ns0:stop offset="100%" stop-color="#10131a" />
+    </ns0:radialGradient>
+    </ns0:defs><ns0:style>.seat-ring{fill: none; stroke-width: 2.2;}
+.seat-groove{fill: none; stroke: #05070b; stroke-opacity: 0.5; stroke-width: 1;}
+.seat-hairline{fill: none; stroke: #2b333d; stroke-opacity: 0.55; stroke-width: 1;}
+.seat-vox{fill: url(#voxGrad);}
+.ctx-well{fill: url(#ctxWell); stroke: #1f1227; stroke-width: 1.1;}
+.ctx-declared-lane{fill: none; stroke: #c4b5fd; stroke-width: 0.85; stroke-opacity: 0.58; stroke-dasharray: 2.1 2.3; stroke-linecap: round;}
+.ctx-neuron{fill: #e9d5ff; stroke: #ffffff; stroke-width: 0.8;}
+.ctx-voxel-top{fill: #e879f9; stroke: #fdf4ff; stroke-width: 0.55; stroke-linejoin: round;}
+.ctx-voxel-left{fill: #a21caf; stroke: #f0abfc; stroke-width: 0.55; stroke-linejoin: round;}
+.ctx-voxel-right{fill: #701a75; stroke: #d946ef; stroke-width: 0.55; stroke-linejoin: round;}
+.ctx-boundary{fill: none; stroke: #fdf4ff; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round;}
+.ctx-lattice{fill: none; stroke: #e879f9; stroke-width: 0.75; stroke-opacity: 0.72; stroke-linecap: round;}
+.ctx-sheet-shadow{fill: #000000; fill-opacity: 0.62;}
+.ctx-sheet{fill: url(#ctxSheet); stroke: url(#ctxSheetEdge); stroke-width: 1.45; stroke-linejoin: round;}
+.ctx-fold{fill: none; stroke: #f5d0fe; stroke-width: 0.8; stroke-opacity: 0.72; stroke-linejoin: round;}
+.ctx-figure-field{fill: #070a11; stroke: #e879f9; stroke-width: 0.55; stroke-opacity: 0.58;}
+.ctx-figure-trace{fill: none; stroke: #f8fafc; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round;}
+.ctx-figure-point{fill: #ffffff; stroke: #e879f9; stroke-width: 0.45;}
+.ctx-disclosure{fill: #220b2a; stroke: #f0abfc; stroke-width: 0.55; stroke-opacity: 0.82;}
+.ctx-table-grid{fill: none; stroke: #f0abfc; stroke-width: 0.45; stroke-opacity: 0.5;}
+.ctx-table-cell{fill: #f5d0fe; fill-opacity: 0.86;}
+.ctx-digest{fill: #ffffff; stroke: #e879f9; stroke-width: 0.55;}
+.ctx-digest-ring{fill: none; stroke: #fdf4ff; stroke-width: 0.8; filter: url(#edgeGlow);}
+.ctx-intake{fill: #fdf4ff; stroke: #e879f9; stroke-width: 0.45; filter: url(#edgeGlow);}</ns0:style><ns0:g class="nodes"><ns0:g class="ctx-mark">
+    <ns0:defs>
+      <ns0:linearGradient id="voxBezel" x1="0" y1="326" x2="0" y2="394" gradientUnits="userSpaceOnUse">
+        <ns0:stop offset="0%" stop-color="#f5d0fe" /><ns0:stop offset="45%" stop-color="#e879f9" /><ns0:stop offset="100%" stop-color="#86198f" />
+      </ns0:linearGradient>
+    </ns0:defs>
+    <ns0:g filter="url(#nodeShadow)"><ns0:circle cx="110" cy="360" r="34" class="seat-vox" /></ns0:g>
+    <ns0:circle cx="110" cy="360" r="34" stroke="url(#voxBezel)" class="seat-ring" />
+    <ns0:circle cx="110" cy="360" r="31.8" class="seat-groove" />
+    <ns0:circle cx="110" cy="360" r="35.4" class="seat-hairline" />
+    <ns0:defs>
+      <ns0:radialGradient id="ctxWell" cx="42%" cy="36%" r="72%"><ns0:stop offset="0%" stop-color="#2a1233" /><ns0:stop offset="62%" stop-color="#120b1c" /><ns0:stop offset="100%" stop-color="#05070c" /></ns0:radialGradient>
+      <ns0:linearGradient id="ctxSheet" x1="0" y1="339" x2="0" y2="380" gradientUnits="userSpaceOnUse"><ns0:stop offset="0%" stop-color="#3b1b47" /><ns0:stop offset="44%" stop-color="#1a1024" /><ns0:stop offset="100%" stop-color="#090b12" /></ns0:linearGradient>
+      <ns0:linearGradient id="ctxSheetEdge" x1="0" y1="339" x2="0" y2="380" gradientUnits="userSpaceOnUse"><ns0:stop offset="0%" stop-color="#fdf4ff" /><ns0:stop offset="36%" stop-color="#e879f9" /><ns0:stop offset="100%" stop-color="#86198f" /></ns0:linearGradient>
+      <ns0:radialGradient id="ctxScanGlow"><ns0:stop offset="0%" stop-color="#ffffff" stop-opacity="0.9" /><ns0:stop offset="38%" stop-color="#f0abfc" stop-opacity="0.35" /><ns0:stop offset="100%" stop-color="#e879f9" stop-opacity="0" /></ns0:radialGradient>
+    </ns0:defs>
+    <ns0:circle cx="110" cy="360" r="30.2" class="ctx-well" />
+
+    <ns0:path d="M88 350H102 M88 369H102" class="ctx-declared-lane" />
+    <ns0:circle cx="88" cy="350" r="3.8" class="ctx-neuron" />
+    <ns0:g class="ctx-voxel">
+      <ns0:polygon points="84,367 88,364.5 92,367 88,369.5" class="ctx-voxel-top" />
+      <ns0:polygon points="84,367 88,369.5 88,374 84,371.5" class="ctx-voxel-left" />
+      <ns0:polygon points="92,367 88,369.5 88,374 92,371.5" class="ctx-voxel-right" />
+    </ns0:g>
+
+    <ns0:path d="M106 340H102V380H106" class="ctx-boundary" />
+    <ns0:path d="M102 346H107 M102 353H107 M102 360H107 M102 367H107 M102 374H107" class="ctx-lattice" />
+    <ns0:circle cx="104.5" cy="342" r="7" fill="url(#ctxScanGlow)" opacity="0">
+      <ns0:animateTransform attributeName="transform" type="translate" values="0 0;0 0;0 36;0 36;0 0" keyTimes="0;0.24;0.43;0.92;1" dur="8.8s" repeatCount="indefinite" />
+      <ns0:animate attributeName="opacity" values="0;0;0.9;0.9;0;0" keyTimes="0;0.22;0.25;0.41;0.44;1" dur="8.8s" repeatCount="indefinite" />
+    </ns0:circle>
+
+    <ns0:path d="M111 339H127L133 345V380H111Z" class="ctx-sheet-shadow" transform="translate(1.6 2)" />
+    <ns0:path d="M111 339H127L133 345V380H111Z" class="ctx-sheet" />
+    <ns0:path d="M127 339V345H133" class="ctx-fold" />
+    <ns0:rect x="115" y="345" width="14" height="22" rx="1.6" class="ctx-figure-field" />
+    <ns0:path d="M116.5 363L120 356L123.5 359L127.7 350" class="ctx-figure-trace" stroke-dasharray="29" stroke-dashoffset="0">
+      <ns0:animate attributeName="stroke-dashoffset" values="0;0;29;29;0;0" keyTimes="0;0.02;0.05;0.44;0.68;1" dur="8.8s" repeatCount="indefinite" />
+    </ns0:path>
+    <ns0:circle cx="120" cy="356" r="1.05" class="ctx-figure-point" />
+    <ns0:circle cx="123.5" cy="359" r="1.05" class="ctx-figure-point" />
+    <ns0:circle cx="127.7" cy="350" r="1.05" class="ctx-figure-point" />
+
+    <ns0:path d="M111 370H133V380H111Z" class="ctx-disclosure" />
+    <ns0:path d="M117.5 370V380 M123.5 370V380 M129 370V380" class="ctx-table-grid" />
+    <ns0:rect x="113.1" y="373.4" width="2.4" height="3.1" rx="0.5" class="ctx-table-cell" />
+    <ns0:rect x="119.2" y="372.3" width="2.5" height="5.3" rx="0.5" class="ctx-table-cell" />
+    <ns0:rect x="125.1" y="374.1" width="2.3" height="2.7" rx="0.5" class="ctx-table-cell" />
+    <ns0:circle cx="131" cy="375" r="1.55" class="ctx-digest" />
+    <ns0:circle cx="131" cy="375" r="2.7" class="ctx-digest-ring" opacity="0">
+      <ns0:animate attributeName="r" values="2.7;2.7;5.2;5.2" keyTimes="0;0.67;0.77;1" dur="8.8s" repeatCount="indefinite" />
+      <ns0:animate attributeName="opacity" values="0;0;0.9;0;0" keyTimes="0;0.67;0.70;0.80;1" dur="8.8s" repeatCount="indefinite" />
+    </ns0:circle>
+
+    <ns0:circle cx="88" cy="350" r="1.65" class="ctx-intake" opacity="0">
+      <ns0:animateTransform attributeName="transform" type="translate" values="0 0;0 0;14 0;14 0;0 0" keyTimes="0;0.08;0.19;0.42;1" dur="8.8s" repeatCount="indefinite" />
+      <ns0:animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.06;0.09;0.20;0.23;1" dur="8.8s" repeatCount="indefinite" />
+    </ns0:circle>
+    <ns0:polygon points="86,369 88,367.7 90,369 88,370.3" class="ctx-intake" opacity="0">
+      <ns0:animateTransform attributeName="transform" type="translate" values="0 0;0 0;14 0;14 0;0 0" keyTimes="0;0.12;0.23;0.42;1" dur="8.8s" repeatCount="indefinite" />
+      <ns0:animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.10;0.13;0.24;0.27;1" dur="8.8s" repeatCount="indefinite" />
+    </ns0:polygon>
+    </ns0:g>
+  </ns0:g></ns0:svg>

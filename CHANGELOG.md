@@ -6,6 +6,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — animated vector identity
+
+- Refined the population cube, validation bracket, and neural trace with solid facets and a metal rim.
+- Preserved the repeating input-to-figure animation and added a complete reduced-motion still.
+- Archived earlier repository and profile logos with their source identities.
+
 ### Fixed — sealed macOS Git and nested loader scratch authority
 
 - Replaced the macOS `/usr/bin/git` xcrun shim with the selected developer

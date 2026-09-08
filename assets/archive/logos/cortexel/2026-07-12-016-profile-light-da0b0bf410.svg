@@ -1,0 +1,42 @@
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" viewBox="48 298 124 124" width="124" height="124" role="img" aria-labelledby="cortexel-archive-title cortexel-archive-desc"><ns0:title id="cortexel-archive-title">CORTEXEL historical profile mark</ns0:title><ns0:desc id="cortexel-archive-desc">Archived design extracted from a historical portfolio SVG. This image makes no current product or release claim.</ns0:desc><ns0:defs><ns0:filter id="nodeShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <ns0:feDropShadow dx="0" dy="1.5" stdDeviation="2.4" flood-color="#000000" flood-opacity="0.38" />
+    </ns0:filter>
+    <ns0:filter id="soft" x="-60%" y="-60%" width="220%" height="220%">
+      <ns0:feGaussianBlur stdDeviation="4" result="b" />
+      <ns0:feMerge><ns0:feMergeNode in="b" /><ns0:feMergeNode in="SourceGraphic" /></ns0:feMerge>
+    </ns0:filter>
+    <ns0:radialGradient id="voxGrad" cx="50%" cy="40%" r="68%">
+      <ns0:stop offset="0%" stop-color="#2a0a2e" />
+      <ns0:stop offset="100%" stop-color="#10131a" />
+    </ns0:radialGradient>
+    </ns0:defs><ns0:style>:root{--hub-accent: #34d399; --cube-accent: #fb923c; --tri-accent: #a78bfa;}
+.seat-ring{fill: none; stroke-width: 2.2;}
+.seat-groove{fill: none; stroke: #05070b; stroke-opacity: 0.5; stroke-width: 1;}
+.seat-hairline{fill: none; stroke: #2b333d; stroke-opacity: 0.55; stroke-width: 1;}
+.seat-vox{fill: url(#voxGrad);}
+.vox-top{fill: #e879f9; fill-opacity: 0.6; stroke: #e879f9; stroke-width: 1.3;}
+.vox-left{fill: #e879f9; fill-opacity: 0.32; stroke: #e879f9; stroke-width: 1.3;}
+.vox-right{fill: #e879f9; fill-opacity: 0.15; stroke: #e879f9; stroke-width: 1.3;}
+.vox-net{color: #e879f9;}
+.vox-code{fill: none; stroke: #f0abfc; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;}
+:root{--hub-accent: #059669; --cube-accent: #c2410c; --tri-accent: #7c3aed;}</ns0:style><ns0:g class="nodes"><ns0:g class="vox-net">
+    <ns0:defs>
+      <ns0:linearGradient id="voxBezel" x1="0" y1="326" x2="0" y2="394" gradientUnits="userSpaceOnUse">
+        <ns0:stop offset="0%" stop-color="#f5d0fe" /><ns0:stop offset="45%" stop-color="#e879f9" /><ns0:stop offset="100%" stop-color="#86198f" />
+      </ns0:linearGradient>
+    </ns0:defs>
+    <ns0:g filter="url(#nodeShadow)"><ns0:circle cx="110" cy="360" r="34" class="seat-vox" /></ns0:g>
+    <ns0:circle cx="110" cy="360" r="34" stroke="url(#voxBezel)" class="seat-ring" />
+    <ns0:circle cx="110" cy="360" r="31.8" class="seat-groove" />
+    <ns0:circle cx="110" cy="360" r="35.4" class="seat-hairline" />
+    <ns0:path class="vox-code" d="M84 321 L75 329 L84 337" /><ns0:path class="vox-code" d="M136 383 L145 391 L136 399" />
+    <ns0:defs><ns0:linearGradient id="voxCalli0" gradientUnits="userSpaceOnUse" x1="110" y1="338" x2="93" y2="371"><ns0:stop offset="0" stop-color="currentColor" stop-opacity="0.45" /><ns0:stop offset="1" stop-color="currentColor" stop-opacity="0.725" /></ns0:linearGradient><ns0:linearGradient id="voxCalli1" gradientUnits="userSpaceOnUse" x1="110" y1="338" x2="127" y2="371"><ns0:stop offset="0" stop-color="currentColor" stop-opacity="0.45" /><ns0:stop offset="1" stop-color="currentColor" stop-opacity="1" /></ns0:linearGradient><ns0:linearGradient id="voxCalli2" gradientUnits="userSpaceOnUse" x1="93" y1="371" x2="127" y2="371"><ns0:stop offset="0" stop-color="currentColor" stop-opacity="0.725" /><ns0:stop offset="1" stop-color="currentColor" stop-opacity="1" /></ns0:linearGradient>
+      <ns0:radialGradient id="voxFire"><ns0:stop offset="0%" stop-color="#fbcfe8" stop-opacity="0.95" /><ns0:stop offset="45%" stop-color="#e879f9" stop-opacity="0.4" /><ns0:stop offset="100%" stop-color="#e879f9" stop-opacity="0" /></ns0:radialGradient>
+    </ns0:defs>
+    <ns0:g filter="url(#soft)">
+      <ns0:path d="M110 338 Q94.2 350.7 93 371 Q98.1 352.8 110 338 Z" fill="url(#voxCalli0)" /> <ns0:path d="M110 338 Q121.9 352.8 127 371 Q125.8 350.7 110 338 Z" fill="url(#voxCalli1)" /> <ns0:path d="M93 371 Q110 379.2 127 371 Q110 374.8 93 371 Z" fill="url(#voxCalli2)" />
+      <ns0:g opacity="0.45"><ns0:polygon points="103.6,335.2 110,338.4 110,344 103.6,340.8" class="vox-left" stroke-linejoin="round" /><ns0:polygon points="116.4,335.2 110,338.4 110,344 116.4,340.8" class="vox-right" stroke-linejoin="round" /><ns0:polygon points="110,332 116.4,335.2 110,338.4 103.6,335.2" class="vox-top" stroke-linejoin="round" /></ns0:g> <ns0:g opacity="0.725"><ns0:polygon points="85,367.5 93,371.5 93,378.5 85,374.5" class="vox-left" stroke-linejoin="round" /><ns0:polygon points="101,367.5 93,371.5 93,378.5 101,374.5" class="vox-right" stroke-linejoin="round" /><ns0:polygon points="93,363.5 101,367.5 93,371.5 85,367.5" class="vox-top" stroke-linejoin="round" /></ns0:g> <ns0:g opacity="1"><ns0:polygon points="117.4,366.8 127,371.6 127,380 117.4,375.2" class="vox-left" stroke-linejoin="round" /><ns0:polygon points="136.6,366.8 127,371.6 127,380 136.6,375.2" class="vox-right" stroke-linejoin="round" /><ns0:polygon points="127,362 136.6,366.8 127,371.6 117.4,366.8" class="vox-top" stroke-linejoin="round" /></ns0:g>
+    </ns0:g>
+    <ns0:g class="vox-fire"><ns0:circle cx="110" cy="338" r="0" fill="url(#voxFire)"><ns0:animate attributeName="r" values="0;0;11;0;0" keyTimes="0;0;0.1;0.3;1" dur="5s" repeatCount="indefinite" /><ns0:animate attributeName="opacity" values="0;0;0.85;0;0" keyTimes="0;0;0.1;0.3;1" dur="5s" repeatCount="indefinite" /></ns0:circle><ns0:circle cx="93" cy="371" r="0" fill="url(#voxFire)"><ns0:animate attributeName="r" values="0;0;11;0;0" keyTimes="0;0.3;0.4;0.6;1" dur="5s" repeatCount="indefinite" /><ns0:animate attributeName="opacity" values="0;0;0.85;0;0" keyTimes="0;0.3;0.4;0.6;1" dur="5s" repeatCount="indefinite" /></ns0:circle><ns0:circle cx="127" cy="371" r="0" fill="url(#voxFire)"><ns0:animate attributeName="r" values="0;0;11;0;0" keyTimes="0;0.6;0.7;0.8;1" dur="5s" repeatCount="indefinite" /><ns0:animate attributeName="opacity" values="0;0;0.85;0;0" keyTimes="0;0.6;0.7;0.8;1" dur="5s" repeatCount="indefinite" /></ns0:circle><ns0:circle r="1.8" fill="#fdf4ff" opacity="0"><ns0:animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.2;0.2;0.4;0.4;1" dur="5s" repeatCount="indefinite" /><ns0:animateMotion path="M110 338 L93 371" keyPoints="0;0;1;1" keyTimes="0;0.2;0.4;1" calcMode="linear" dur="5s" repeatCount="indefinite" /></ns0:circle><ns0:circle r="1.8" fill="#fdf4ff" opacity="0"><ns0:animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.2;0.2;0.4;0.4;1" dur="5s" repeatCount="indefinite" /><ns0:animateMotion path="M110 338 L127 371" keyPoints="0;0;1;1" keyTimes="0;0.2;0.4;1" calcMode="linear" dur="5s" repeatCount="indefinite" /></ns0:circle><ns0:circle r="1.8" fill="#fdf4ff" opacity="0"><ns0:animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.5;0.5;0.6;0.7;1" dur="5s" repeatCount="indefinite" /><ns0:animateMotion path="M93 371 L127 371" keyPoints="0;0;1;1" keyTimes="0;0.5;0.7;1" calcMode="linear" dur="5s" repeatCount="indefinite" /></ns0:circle></ns0:g>
+    </ns0:g>
+  </ns0:g></ns0:svg>

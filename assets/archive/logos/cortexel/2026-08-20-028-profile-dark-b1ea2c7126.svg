@@ -1,0 +1,76 @@
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" viewBox="48 298 124 124" width="124" height="124" role="img" aria-labelledby="cortexel-archive-title cortexel-archive-desc"><ns0:title id="cortexel-archive-title">CORTEXEL historical profile mark</ns0:title><ns0:desc id="cortexel-archive-desc">Archived design extracted from a historical portfolio SVG. This image makes no current product or release claim.</ns0:desc><ns0:defs><ns0:filter id="edgeGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <ns0:feGaussianBlur stdDeviation="2.4" result="b" />
+      <ns0:feMerge><ns0:feMergeNode in="b" /><ns0:feMergeNode in="SourceGraphic" /></ns0:feMerge>
+    </ns0:filter>
+    <ns0:filter id="nodeShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <ns0:feDropShadow dx="0" dy="1.5" stdDeviation="2.4" flood-color="#000000" flood-opacity="0.38" />
+    </ns0:filter>
+    <ns0:radialGradient id="voxGrad" cx="50%" cy="40%" r="68%">
+      <ns0:stop offset="0%" stop-color="#2a0a2e" />
+      <ns0:stop offset="100%" stop-color="#10131a" />
+    </ns0:radialGradient>
+    </ns0:defs><ns0:style>.seat-ring{fill: none; stroke-width: 2.2;}
+.seat-groove{fill: none; stroke: #05070b; stroke-opacity: 0.5; stroke-width: 1;}
+.seat-hairline{fill: none; stroke: #2b333d; stroke-opacity: 0.55; stroke-width: 1;}
+.seat-vox{fill: url(#voxGrad);}
+.ctx-well{fill: url(#ctxWell); stroke: #1f1227; stroke-width: 1.1;}
+.ctx-min-voxel-top{fill: #e879f9; stroke: #fdf4ff; stroke-width: 0.65; stroke-linejoin: round;}
+.ctx-min-voxel-left{fill: #a21caf; stroke: #f0abfc; stroke-width: 0.65; stroke-linejoin: round;}
+.ctx-min-voxel-right{fill: #701a75; stroke: #d946ef; stroke-width: 0.65; stroke-linejoin: round;}
+.ctx-min-neuron{fill: #ffffff; stroke: #e879f9; stroke-width: 0.45;}
+.ctx-min-intake-lane{fill: none; stroke: #c4b5fd; stroke-width: 0.8; stroke-opacity: 0.55; stroke-dasharray: 2 2.2; stroke-linecap: round;}
+.ctx-min-boundary{fill: none; stroke: #fdf4ff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;}
+.ctx-min-artifact{fill: none; stroke: url(#ctxArtifactEdge); stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round;}
+.ctx-min-raster{fill: none; stroke: #ffffff; stroke-width: 1.25; stroke-linecap: round;}
+.ctx-min-raster-b{stroke-opacity: 0.92;}
+.ctx-min-raster-c{stroke-opacity: 0.84;}
+.ctx-min-token{fill: #fdf4ff; stroke: #e879f9; stroke-width: 0.45; filter: url(#edgeGlow);}
+.ctx-min-scan{stroke: #ffffff; stroke-width: 1.2; stroke-linecap: round; filter: url(#edgeGlow);}</ns0:style><ns0:g class="nodes"><ns0:g class="ctx-mark">
+    <ns0:defs>
+      <ns0:linearGradient id="voxBezel" x1="0" y1="326" x2="0" y2="394" gradientUnits="userSpaceOnUse">
+        <ns0:stop offset="0%" stop-color="#f5d0fe" /><ns0:stop offset="45%" stop-color="#e879f9" /><ns0:stop offset="100%" stop-color="#86198f" />
+      </ns0:linearGradient>
+    </ns0:defs>
+    <ns0:g filter="url(#nodeShadow)"><ns0:circle cx="110" cy="360" r="34" class="seat-vox" /></ns0:g>
+    <ns0:circle cx="110" cy="360" r="34" stroke="url(#voxBezel)" class="seat-ring" />
+    <ns0:circle cx="110" cy="360" r="31.8" class="seat-groove" />
+    <ns0:circle cx="110" cy="360" r="35.4" class="seat-hairline" />
+    <ns0:defs>
+      <ns0:radialGradient id="ctxWell" cx="42%" cy="36%" r="74%"><ns0:stop offset="0%" stop-color="#291132" /><ns0:stop offset="68%" stop-color="#110a1a" /><ns0:stop offset="100%" stop-color="#05070c" /></ns0:radialGradient>
+      <ns0:linearGradient id="ctxArtifactEdge" x1="0" y1="342" x2="0" y2="378" gradientUnits="userSpaceOnUse"><ns0:stop offset="0%" stop-color="#fdf4ff" /><ns0:stop offset="38%" stop-color="#e879f9" /><ns0:stop offset="100%" stop-color="#86198f" /></ns0:linearGradient>
+      <ns0:clipPath id="ctxRasterClipA"><ns0:rect x="114" y="347" width="14" height="6">
+        <ns0:animate attributeName="width" values="14;14;0;0;14;14" keyTimes="0;0.02;0.05;0.42;0.52;1" dur="8.4s" repeatCount="indefinite" />
+      </ns0:rect></ns0:clipPath>
+      <ns0:clipPath id="ctxRasterClipB"><ns0:rect x="114" y="357" width="14" height="6">
+        <ns0:animate attributeName="width" values="14;14;0;0;14;14" keyTimes="0;0.02;0.05;0.48;0.58;1" dur="8.4s" repeatCount="indefinite" />
+      </ns0:rect></ns0:clipPath>
+      <ns0:clipPath id="ctxRasterClipC"><ns0:rect x="114" y="366" width="14" height="6">
+        <ns0:animate attributeName="width" values="14;14;0;0;14;14" keyTimes="0;0.02;0.05;0.54;0.64;1" dur="8.4s" repeatCount="indefinite" />
+      </ns0:rect></ns0:clipPath>
+    </ns0:defs>
+    <ns0:circle cx="110" cy="360" r="30.2" class="ctx-well" />
+
+    <ns0:g class="ctx-min-voxel">
+      <ns0:polygon points="85,358 91,354 97,358 91,362" class="ctx-min-voxel-top" />
+      <ns0:polygon points="85,358 91,362 91,369 85,365" class="ctx-min-voxel-left" />
+      <ns0:polygon points="97,358 91,362 91,369 97,365" class="ctx-min-voxel-right" />
+      <ns0:circle cx="91" cy="358" r="1.35" class="ctx-min-neuron" />
+    </ns0:g>
+    <ns0:path d="M98 362H103" class="ctx-min-intake-lane" />
+    <ns0:path d="M107 342H103V378H107" class="ctx-min-boundary" />
+
+    <ns0:path d="M111 344H130V376H111" class="ctx-min-artifact" />
+    <ns0:path d="M116 348V352 M120.5 348V352 M127 348V352" class="ctx-min-raster ctx-min-raster-a" clip-path="url(#ctxRasterClipA)" />
+    <ns0:path d="M118 358V362 M124.5 358V362" class="ctx-min-raster ctx-min-raster-b" clip-path="url(#ctxRasterClipB)" />
+    <ns0:path d="M115.5 367V371 M120 367V371 M124 367V371 M127 367V371" class="ctx-min-raster ctx-min-raster-c" clip-path="url(#ctxRasterClipC)" />
+
+    <ns0:polygon points="88,362 91,360 94,362 91,364" class="ctx-min-token" opacity="0">
+      <ns0:animateTransform attributeName="transform" type="translate" values="0 0;0 0;12 0;12 0;0 0" keyTimes="0;0.10;0.27;0.90;1" dur="8.4s" repeatCount="indefinite" />
+      <ns0:animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.08;0.11;0.28;0.32;1" dur="8.4s" repeatCount="indefinite" />
+    </ns0:polygon>
+    <ns0:line x1="103" y1="346" x2="103" y2="352" class="ctx-min-scan" opacity="0">
+      <ns0:animateTransform attributeName="transform" type="translate" values="0 0;0 0;0 22;0 22;0 0" keyTimes="0;0.28;0.43;0.90;1" dur="8.4s" repeatCount="indefinite" />
+      <ns0:animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.26;0.29;0.41;0.44;1" dur="8.4s" repeatCount="indefinite" />
+    </ns0:line>
+    </ns0:g>
+  </ns0:g></ns0:svg>
