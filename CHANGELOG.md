@@ -6,6 +6,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — URI parser dependency
+
+- Updated the existing `fast-uri` override and both dependency locks to 3.1.7.
+  This fixes six upstream URI parsing advisories while retaining Ajv 8.20.0 and every unrelated dependency.
+- Renewed the package-smoke fixture digest after reviewing the exact dependency change.
+
 ### Changed — animated vector identity
 
 - Refined the population cube, validation bracket, and neural trace with solid facets and a metal rim.
