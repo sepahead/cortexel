@@ -326,6 +326,8 @@ knowledge-graph subpaths are experimental. No 3D, knowledge-graph,
 animation, NCP-adapter, or bundle skill/compiler exists in the FigureRequestV1 catalog;
 stable validation fails closed instead of inventing those capabilities.
 
+The [NCP modular architecture and status guide](https://github.com/sepahead/NCP/blob/main/local/modular/STATUS.md) describes related applications, without establishing a Cortexel adapter or live simulation connection.
+
 The experimental graph API is split deliberately:
 
 - `cortexel/knowledge-graph` is the agent/server boundary. It has no visualization
