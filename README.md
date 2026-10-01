@@ -41,8 +41,6 @@ scientific conclusions.
 Cortexel provides **scientific guardrails** for agents that create figures.
 The contract checks supported inputs, units, numeric bounds, provenance declarations,
 and required disclosures.
-[Provenance](./docs/PROVENANCE.md) records the declared data source and how the data was produced.
-Cortexel refuses ambiguous inputs. Its outputs can be inspected, compared, and challenged.
 
 Current development artifacts report `sourceRevision: "unreleased-worktree"`;
 exact commit recovery requires a separately retained full SHA until a release-stamping producer exists.

@@ -8,7 +8,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Documentation
 
-- Described scientific guardrails and retained provenance as the precise term for declared data origin and production.
+- Described scientific guardrails in the README.
 
 ### Security — URI parser dependency
 
