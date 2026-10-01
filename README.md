@@ -38,11 +38,14 @@ render boundary refuses any result that would require an incomplete table excerp
 Cortexel does not authenticate simulator output, the truth of caller declarations, or
 scientific conclusions.
 
-The value is in the **contract and its invariants**, not in a pile of chart code.
-Cortexel refuses to make a plausible-looking figure from an ambiguous input, and every
-output it does make can be inspected, compared, and challenged. Current development
-artifacts report `sourceRevision: "unreleased-worktree"`; exact commit recovery requires
-a separately retained full SHA until a release-stamping producer exists.
+Cortexel provides **scientific guardrails** for agents that create figures.
+The contract checks supported inputs, units, numeric bounds, provenance declarations,
+and required disclosures.
+[Provenance](./docs/PROVENANCE.md) records the declared data source and how the data was produced.
+Cortexel refuses ambiguous inputs. Its outputs can be inspected, compared, and challenged.
+
+Current development artifacts report `sourceRevision: "unreleased-worktree"`;
+exact commit recovery requires a separately retained full SHA until a release-stamping producer exists.
 
 ## What it is — and is not
 
