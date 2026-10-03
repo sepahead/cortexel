@@ -189,8 +189,8 @@ export function colormapSvgStops(name: ColormapName, stops = 8): string {
 // reader who learns "blue = excitatory / potentiation" in one view keeps it in
 // the next.
 //
-// ARCHITECTURE: Cortexel ships one default palette ('crameri') and a runtime
-// registration system. Hosts register their own palettes at startup:
+// ARCHITECTURE: Cortexel ships a default palette ('crameri'), reusable light/dark
+// themes, and a runtime registration system. Hosts can add palettes at startup:
 //
 //   import { registerPalette } from 'cortexel/core';
 //   registerPalette('okabe-ito', okabeItoPalette);
@@ -272,7 +272,7 @@ export const PALETTE_REGISTRY_POLICY = Object.freeze({
   fallbackIsNotValidation: true,
 });
 
-// Internal registry — starts with the default, hosts add more at runtime.
+// Internal registry — starts with the built-ins, hosts can add more at runtime.
 const _paletteRegistry = new Map<PaletteName, PaletteEntry>();
 
 /** Default palette — Crameri scientific colour maps (batlow + vik). */
@@ -433,6 +433,129 @@ export function registerPalette(
     metadata: storedMetadata,
   }));
 }
+
+export interface BuiltinPaletteTheme {
+  readonly name: PaletteName;
+  readonly label: string;
+  readonly themeMode: 'dark' | 'light';
+}
+
+interface ThemeColors {
+  readonly surfaces: readonly [string, string, string, string];
+  readonly text: readonly [string, string, string];
+  readonly accents: readonly [string, string, string, string, string, string];
+  readonly signedPair: readonly [string, string];
+}
+
+function registerBuiltinTheme(
+  name: string,
+  label: string,
+  themeMode: BuiltinPaletteTheme['themeMode'],
+  colors: ThemeColors,
+): Readonly<BuiltinPaletteTheme> {
+  const [voidNavy, deepNavy, panel, grid] = colors.surfaces;
+  const [ink, inkDim, inkFaint] = colors.text;
+  const [cyan, teal, violet, amber, orange, pink] = colors.accents;
+  const [excitatory, inhibitory] = colors.signedPair;
+  registerPalette(name, {
+    voidNavy, deepNavy, panel, grid,
+    cyan, teal, violet, amber, orange, pink,
+    membrane: teal,
+    spike: amber,
+    spikeHot: orange,
+    excitatory, inhibitory,
+    ltp: excitatory,
+    ltd: inhibitory,
+    ink, inkDim, inkFaint,
+  }, {
+    label,
+    source: 'Cortexel manually designed semantic theme; cool/warm signed categories. ' +
+      'Token contrast tests do not establish whole-view accessibility or perceptual conformance.',
+    diverging: true,
+  });
+  return Object.freeze({ name, label, themeMode });
+}
+
+/**
+ * Discoverable legacy VizSpec render themes. These change presentation only.
+ * The canonical graph still requires its exact light/dark host background;
+ * a theme does not change a source record, caption, or evidence status.
+ */
+export const BUILTIN_PALETTE_THEMES: readonly Readonly<BuiltinPaletteTheme>[] = Object.freeze([
+  Object.freeze({ name: 'crameri', label: 'Crameri', themeMode: 'dark' as const }),
+  registerBuiltinTheme('cortexel-midnight', 'Midnight', 'dark', {
+    surfaces: ['#070d1a', '#0b1324', '#121e32', '#35435b'],
+    text: ['#f1f5fb', '#c0cddd', '#a6b7cf'],
+    accents: ['#67c8f3', '#63d3c1', '#b6a0f4', '#e8c06a', '#efaa78', '#e8a5ca'],
+    signedPair: ['#70b8f5', '#ef987e'],
+  }),
+  registerBuiltinTheme('cortexel-graphite', 'Graphite', 'dark', {
+    surfaces: ['#101214', '#181b20', '#20252c', '#48515d'],
+    text: ['#f2f4f7', '#c3cbd5', '#aab6c7'],
+    accents: ['#88c5df', '#8ecab8', '#bcb1e3', '#d9c18a', '#ddb094', '#d8aaca'],
+    signedPair: ['#93bbeb', '#dfac9d'],
+  }),
+  registerBuiltinTheme('cortexel-ocean', 'Ocean', 'dark', {
+    surfaces: ['#04151c', '#08212b', '#0d2b35', '#315260'],
+    text: ['#edf9fa', '#b9d8df', '#9abfc9'],
+    accents: ['#6dcce6', '#69d5bd', '#a8b8ee', '#e4c47a', '#e7a181', '#dfb1d4'],
+    signedPair: ['#79bff1', '#eea183'],
+  }),
+  registerBuiltinTheme('cortexel-aurora', 'Aurora', 'dark', {
+    surfaces: ['#0b1220', '#111c2c', '#172738', '#3b5364'],
+    text: ['#eef9f7', '#c0ddd7', '#a9c9c3'],
+    accents: ['#80d3e8', '#88ddba', '#c2acf1', '#e7d080', '#edb18a', '#e9add5'],
+    signedPair: ['#8bc5ef', '#f0b18f'],
+  }),
+  registerBuiltinTheme('cortexel-amethyst', 'Amethyst', 'dark', {
+    surfaces: ['#130e22', '#1e1730', '#2a2040', '#564668'],
+    text: ['#f8f2fc', '#d5c5e7', '#bdadd2'],
+    accents: ['#91c6e9', '#88d4bc', '#c9a7f1', '#e8cd85', '#edb094', '#e4a4cd'],
+    signedPair: ['#93bff2', '#eeae96'],
+  }),
+  registerBuiltinTheme('cortexel-ember', 'Ember', 'dark', {
+    surfaces: ['#1a1210', '#251b18', '#342520', '#604b42'],
+    text: ['#fff4e8', '#e4cbb9', '#cdb69f'],
+    accents: ['#9dc6dc', '#a4d1ba', '#cbb5df', '#edc787', '#edaa82', '#e6b1bb'],
+    signedPair: ['#94c0e7', '#efa18a'],
+  }),
+  registerBuiltinTheme('cortexel-forest', 'Forest', 'dark', {
+    surfaces: ['#0d1713', '#14231c', '#1e3026', '#405c4b'],
+    text: ['#f0f7ed', '#c9dbbf', '#b0c5a6'],
+    accents: ['#8ecbda', '#9ad3ae', '#c2b5e4', '#dfcb84', '#e8b18a', '#dbb4c9'],
+    signedPair: ['#8bbfea', '#eeb093'],
+  }),
+  registerBuiltinTheme('cortexel-contrast', 'High contrast', 'dark', {
+    surfaces: ['#000000', '#080808', '#121212', '#656565'],
+    text: ['#ffffff', '#dedede', '#c5c5c5'],
+    accents: ['#83deff', '#8be0bd', '#d0b3ff', '#ffe18b', '#ffbb8f', '#ffc1de'],
+    signedPair: ['#8ccaff', '#ffb099'],
+  }),
+  registerBuiltinTheme('cortexel-paper', 'Paper', 'light', {
+    surfaces: ['#fbfcfe', '#f3f5f8', '#ffffff', '#c2cbd8'],
+    text: ['#172539', '#3a4b63', '#526078'],
+    accents: ['#14617e', '#206b59', '#7052a0', '#805b11', '#9b4a28', '#944567'],
+    signedPair: ['#245f94', '#a14730'],
+  }),
+  registerBuiltinTheme('cortexel-mist', 'Mist', 'light', {
+    surfaces: ['#f4f9fa', '#eaf2f4', '#ffffff', '#b8ced3'],
+    text: ['#15313a', '#345461', '#486672'],
+    accents: ['#176783', '#226c5d', '#6b5196', '#795c20', '#975035', '#8d466b'],
+    signedPair: ['#286294', '#a34b37'],
+  }),
+  registerBuiltinTheme('cortexel-sand', 'Sand', 'light', {
+    surfaces: ['#fbf8f0', '#f4eedf', '#fffdf7', '#d2c7ac'],
+    text: ['#342c24', '#554a3c', '#6a5b49'],
+    accents: ['#25637b', '#2d6857', '#6e5790', '#77591e', '#934b31', '#8b4d69'],
+    signedPair: ['#2b6090', '#9d4a35'],
+  }),
+  registerBuiltinTheme('cortexel-slate', 'Slate', 'light', {
+    surfaces: ['#f3f5f9', '#e9edf4', '#ffffff', '#bac4d5'],
+    text: ['#202c44', '#414f68', '#52627c'],
+    accents: ['#235f81', '#296b60', '#655397', '#7d5b21', '#955037', '#914b70'],
+    signedPair: ['#315e94', '#9f4939'],
+  }),
+]);
 
 /** Select a semantic palette by name. Falls back to the default ('crameri')
  *  if the name is not registered. In dev mode, warns on non-default fallback

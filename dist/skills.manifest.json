@@ -1169,6 +1169,78 @@
       "label": "Crameri",
       "source": "Crameri 2018, Nature Comms 2020 (batlow + vik)",
       "diverging": true
+    },
+    {
+      "name": "cortexel-midnight",
+      "label": "Midnight",
+      "source": "Cortexel manually designed semantic theme; cool/warm signed categories. Token contrast tests do not establish whole-view accessibility or perceptual conformance.",
+      "diverging": true
+    },
+    {
+      "name": "cortexel-graphite",
+      "label": "Graphite",
+      "source": "Cortexel manually designed semantic theme; cool/warm signed categories. Token contrast tests do not establish whole-view accessibility or perceptual conformance.",
+      "diverging": true
+    },
+    {
+      "name": "cortexel-ocean",
+      "label": "Ocean",
+      "source": "Cortexel manually designed semantic theme; cool/warm signed categories. Token contrast tests do not establish whole-view accessibility or perceptual conformance.",
+      "diverging": true
+    },
+    {
+      "name": "cortexel-aurora",
+      "label": "Aurora",
+      "source": "Cortexel manually designed semantic theme; cool/warm signed categories. Token contrast tests do not establish whole-view accessibility or perceptual conformance.",
+      "diverging": true
+    },
+    {
+      "name": "cortexel-amethyst",
+      "label": "Amethyst",
+      "source": "Cortexel manually designed semantic theme; cool/warm signed categories. Token contrast tests do not establish whole-view accessibility or perceptual conformance.",
+      "diverging": true
+    },
+    {
+      "name": "cortexel-ember",
+      "label": "Ember",
+      "source": "Cortexel manually designed semantic theme; cool/warm signed categories. Token contrast tests do not establish whole-view accessibility or perceptual conformance.",
+      "diverging": true
+    },
+    {
+      "name": "cortexel-forest",
+      "label": "Forest",
+      "source": "Cortexel manually designed semantic theme; cool/warm signed categories. Token contrast tests do not establish whole-view accessibility or perceptual conformance.",
+      "diverging": true
+    },
+    {
+      "name": "cortexel-contrast",
+      "label": "High contrast",
+      "source": "Cortexel manually designed semantic theme; cool/warm signed categories. Token contrast tests do not establish whole-view accessibility or perceptual conformance.",
+      "diverging": true
+    },
+    {
+      "name": "cortexel-paper",
+      "label": "Paper",
+      "source": "Cortexel manually designed semantic theme; cool/warm signed categories. Token contrast tests do not establish whole-view accessibility or perceptual conformance.",
+      "diverging": true
+    },
+    {
+      "name": "cortexel-mist",
+      "label": "Mist",
+      "source": "Cortexel manually designed semantic theme; cool/warm signed categories. Token contrast tests do not establish whole-view accessibility or perceptual conformance.",
+      "diverging": true
+    },
+    {
+      "name": "cortexel-sand",
+      "label": "Sand",
+      "source": "Cortexel manually designed semantic theme; cool/warm signed categories. Token contrast tests do not establish whole-view accessibility or perceptual conformance.",
+      "diverging": true
+    },
+    {
+      "name": "cortexel-slate",
+      "label": "Slate",
+      "source": "Cortexel manually designed semantic theme; cool/warm signed categories. Token contrast tests do not establish whole-view accessibility or perceptual conformance.",
+      "diverging": true
     }
   ],
   "skills": [

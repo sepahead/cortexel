@@ -1,4 +1,4 @@
-import { i as VizSpecRendererProps, n as RenderSceneArgs, r as VizSpecRenderer, t as CameraHint } from "../VizSpecRenderer-D8VXfMMx.cjs";
+import { i as VizSpecRendererProps, n as RenderSceneArgs, r as VizSpecRenderer, t as CameraHint } from "../VizSpecRenderer-Coj_WuXC.cjs";
 //#region react/usePopulationExpand.d.ts
 interface PopulationExpandController {
   selectedPopId: string | null;

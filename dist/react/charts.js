@@ -1,6 +1,6 @@
-import { b as getSkill, u as validateSkillParams } from "../authoring-C_HlbARb.js";
+import { b as getSkill, u as validateSkillParams } from "../authoring-DBi7UJx7.js";
 import { u as safeDiagnosticText } from "../knowledgeGraphLimits-Du09-etI.js";
-import { t as VizSpecRenderer } from "../VizSpecRenderer-BLGU6OQa.js";
+import { t as VizSpecRenderer } from "../VizSpecRenderer-DNXZ1bFL.js";
 import { useEffect, useId, useMemo, useState } from "react";
 import { jsx, jsxs } from "react/jsx-runtime";
 

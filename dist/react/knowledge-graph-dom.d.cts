@@ -1,5 +1,5 @@
-import { k as ReadonlySemanticPalette } from "../vizSpec-DXKitvuD.cjs";
-import { n as KnowledgeGraphViewPolicyV1, t as KnowledgeGraphCorpusFigureInputInternal } from "../KnowledgeGraphCorpusFrame.internal-Ca8p2VTN.cjs";
+import { j as ReadonlySemanticPalette } from "../vizSpec-COqRZuLY.cjs";
+import { n as KnowledgeGraphViewPolicyV1, t as KnowledgeGraphCorpusFigureInputInternal } from "../KnowledgeGraphCorpusFrame.internal-D_SH3P2z.cjs";
 //#region react/KnowledgeGraphDomFigure.d.ts
 interface KnowledgeGraphDomFigureCommonProps {
   /** Strict source-bound kind filters; omission means the complete graph. */

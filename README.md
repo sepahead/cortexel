@@ -96,6 +96,13 @@ Architecture diagrams (custom SVG, brand palette):
 
 ## Additive package surfaces
 
+The existing palette registry includes twelve named presentation themes.
+Dark choices include Midnight, Graphite, Ocean, Aurora, Amethyst, Ember, Forest, and High contrast.
+Light choices include Paper, Mist, Sand, and Slate.
+`BUILTIN_PALETTE_THEMES` exposes their identifiers, labels, and light or dark mode from `cortexel/core`.
+Use `listPalettes()` and `getPaletteEntry()` to inspect the full registry.
+Themes change presentation colors. They do not change data, evidence, or scientific roles.
+
 The installable artifact preserves every legacy entry (`cortexel`, `cortexel/core`,
 the React subpaths, and `cortexel/skills.manifest.json`) and adds explicit
 FigureRequestV1 capabilities alongside them:

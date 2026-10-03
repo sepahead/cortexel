@@ -1,7 +1,7 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
-const require_authoring = require('../authoring-MTqY6OMZ.cjs');
+const require_authoring = require('../authoring-CTVoMdHb.cjs');
 const require_knowledgeGraphLimits = require('../knowledgeGraphLimits-BnjbjxkI.cjs');
-const require_VizSpecRenderer = require('../VizSpecRenderer-B4Gh9pMQ.cjs');
+const require_VizSpecRenderer = require('../VizSpecRenderer-BF62YUtH.cjs');
 let react = require("react");
 let react_jsx_runtime = require("react/jsx-runtime");
 

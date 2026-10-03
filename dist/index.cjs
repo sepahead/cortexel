@@ -1,8 +1,8 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
-const require_authoring = require('./authoring-MTqY6OMZ.cjs');
+const require_authoring = require('./authoring-CTVoMdHb.cjs');
 const require_knowledgeGraphLimits = require('./knowledgeGraphLimits-BnjbjxkI.cjs');
 const require_canonicalize = require('./canonicalize-CM-RPRQS.cjs');
-const require_core = require('./core-inSDnyLg.cjs');
+const require_core = require('./core-Dy75HHvb.cjs');
 const require_limits = require('./limits-zgcdlCes.cjs');
 const require_safe_snapshot = require('./safe-snapshot-Bb70fzip.cjs');
 
@@ -11,6 +11,7 @@ exports.AdjacencyMatrixParamsSchema = require_authoring.AdjacencyMatrixParamsSch
 exports.AnimationReplayParamsSchema = require_authoring.AnimationReplayParamsSchema;
 exports.AstrocyteParamsSchema = require_authoring.AstrocyteParamsSchema;
 exports.BATLOW_GLSL = require_authoring.BATLOW_GLSL;
+exports.BUILTIN_PALETTE_THEMES = require_authoring.BUILTIN_PALETTE_THEMES;
 exports.CAMERA_PRESETS = require_authoring.CAMERA_PRESETS;
 exports.CATEGORICAL = require_authoring.CATEGORICAL;
 exports.CONSERVATIVE_PROVENANCE = require_authoring.CONSERVATIVE_PROVENANCE;

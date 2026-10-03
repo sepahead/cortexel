@@ -6,6 +6,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — built-in presentation themes
+
+- Added twelve named dark and light themes to the existing palette registry.
+- Exported an immutable theme roster with display labels and light or dark mode.
+- Preserved the default palette and the roles of excitatory, inhibitory, LTP, and LTD colors.
+- Added contrast and palette-isolation controls. These checks do not establish complete accessibility compliance.
+- Renewed the reviewed source-map closure after inspecting the palette source change.
+
 ### Documentation
 
 - Described scientific guardrails in the README.
