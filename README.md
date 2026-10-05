@@ -134,9 +134,9 @@ FigureRequestV1 capabilities alongside them:
   registries, schemas, and skill sources copied once under `dist/contract`;
 - `cortexel` (bin) — the offline CLI.
 
-These paths load no React, Three, R3F, or D3. Structural validation reads only the
-module-relative packaged contract files; it never resolves a schema from the working
-directory or network. **Packaged** describes the output of this repository's build and
+These paths load no React, Three, R3F, or D3. Structural validation uses validators compiled from the exact packaged contracts.
+Browser and Node validation need no filesystem reads or runtime code compilation.
+The build verifies these validators against the normative schemas. **Packaged** describes the output of this repository's build and
 tarball. It does not mean the package has been published, and it does not make any
 skill `releaseReady`; all nineteen remain `releaseReady: false`.
 

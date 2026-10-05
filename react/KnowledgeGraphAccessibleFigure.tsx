@@ -17,6 +17,7 @@ import {
   type KnowledgeGraphViewPolicyV1,
 } from './KnowledgeGraphCorpusFrame.internal';
 import type { KnowledgeGraphFigureHostPolicyV1 } from './knowledgeGraphFigure';
+import { assertGraphLayoutDimensions } from './knowledgeGraphLayout.internal';
 
 interface VisualBoundaryProps {
   /** Exact presentation or subordinate view rendered by the failed visual. */
@@ -110,6 +111,9 @@ export interface KnowledgeGraphAccessibleFigureCommonProps {
   /** Static by default; opt into continuous flow-marker motion explicitly. */
   readonly flowMotion?: 'static' | 'animated';
   readonly reducedMotion?: boolean;
+  /** True planar force layout or the existing spatial layout. The host owns
+   * front-facing camera policy and disables control rotation for dimension 2. */
+  readonly layoutDimensions?: 2 | 3;
   readonly nodePageSize?: number;
   readonly recordNodePageSize?: number;
   readonly recordEdgePageSize?: number;
@@ -145,6 +149,7 @@ interface KnowledgeGraphInteractiveRegionProps {
   readonly flowMotion: 'static' | 'animated' | undefined;
   readonly reducedMotion: boolean | undefined;
   readonly query: string;
+  readonly layoutDimensions: 2 | 3;
 }
 
 function KnowledgeGraphInteractiveRegion({
@@ -160,6 +165,7 @@ function KnowledgeGraphInteractiveRegion({
   flowMotion,
   reducedMotion,
   query,
+  layoutDimensions,
 }: KnowledgeGraphInteractiveRegionProps) {
   const {
     presentation,
@@ -176,7 +182,7 @@ function KnowledgeGraphInteractiveRegion({
   }
   const visualUnavailableStatus = (
     <p role="status">
-      The host-owned interactive 3D view is unavailable. The paginated graph-record
+      {`The host-owned interactive ${layoutDimensions}D view is unavailable.`} The paginated graph-record
       browser remains below; its controls expose every accepted record after hydration.
     </p>
   );
@@ -184,7 +190,7 @@ function KnowledgeGraphInteractiveRegion({
   const liveForceAvailable = liveForceAvailability.status === 'available';
   const liveForceLimitStatus = (
     <p role="status">
-      The host-owned interactive 3D force view was not mounted: this active view has{' '}
+      {`The host-owned interactive ${layoutDimensions}D force view was not mounted:`} this active view has{' '}
       {liveForceAvailability.nodeCount} nodes and {liveForceAvailability.edgeCount}{' '}
       relationships; the reviewed main-thread ceiling is{' '}
       {liveForceAvailability.maxNodes} nodes and {liveForceAvailability.maxEdges}{' '}
@@ -212,6 +218,7 @@ function KnowledgeGraphInteractiveRegion({
       flowMotion={flowMotion}
       themeMode={hostPolicy.themeMode}
       reducedMotion={reducedMotion}
+      layoutDimensions={layoutDimensions}
     />
   ) : null;
   return visualAvailable && liveForceAvailable && scene !== null ? (
@@ -230,7 +237,7 @@ function KnowledgeGraphInteractiveRegion({
 }
 
 /**
- * Canonical legacy 3D corpus-graph composition. It binds strict validation,
+ * Canonical legacy corpus-graph composition for planar or spatial display. It binds strict validation,
  * mapping, caption, legend, interactive DOM controls, and a paginated record
  * view to one detached presentation. Unit tests establish those narrow
  * composition invariants only—not whole-figure WCAG, browser, WebGL, or
@@ -256,6 +263,7 @@ export function KnowledgeGraphAccessibleFigure(
     particleColor,
     flowMotion,
     reducedMotion,
+    layoutDimensions = 3,
     nodePageSize,
     recordNodePageSize,
     recordEdgePageSize,
@@ -263,6 +271,7 @@ export function KnowledgeGraphAccessibleFigure(
     className,
     label = 'Interactive knowledge graph',
   } = props;
+  assertGraphLayoutDimensions(layoutDimensions);
   return (
     <KnowledgeGraphCorpusFrameInternal
       sourceInput={props}
@@ -289,6 +298,7 @@ export function KnowledgeGraphAccessibleFigure(
           particleColor={particleColor}
           flowMotion={flowMotion}
           reducedMotion={reducedMotion}
+          layoutDimensions={layoutDimensions}
           query={query}
         />
       )}

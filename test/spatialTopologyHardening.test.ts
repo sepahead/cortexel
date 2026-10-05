@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { aggregateTopologyScalar } from '../src/analysis/topology.js';
 import { TOPOLOGY_DYNAMICS_AUTHORITY_EVALUATORS } from '../src/authority/evaluators/topology-dynamics.js';
+import { resolveOutputAuthorityEvaluatorV1 } from '../src/authority/evaluators/registry.js';
 import { validateRequestValue } from '../src/core/request.js';
 import type { JsonValue } from '../src/core/parse-json.js';
 import {
@@ -14,6 +15,7 @@ import {
   spatialDomainAxisContains,
 } from '../src/core/spatial.js';
 import { buildFigure } from '../src/render/index.js';
+import { SKILL_CATALOG } from '../src/generated/catalog.js';
 
 type JsonRecord = Record<string, any>;
 
@@ -211,9 +213,19 @@ describe('spatial/topology scientific hardening', () => {
     const validated = validateRequestValue(request);
     expect(validated.ok).toBe(true);
     if (!validated.ok) return;
-    const evaluator = TOPOLOGY_DYNAMICS_AUTHORITY_EVALUATORS.find(
-      (candidate) => candidate.id === 'network.spatial_map_2d.output_authority.v4',
-    )!;
+    const catalog = SKILL_CATALOG['network.spatial_map_2d'];
+    const currentId = catalog.outputAuthority.evaluator.id;
+    expect(catalog.revision).toBeGreaterThan(1);
+    const priorId = `${catalog.id}.output_authority.v${catalog.revision - 1}`;
+    expect(resolveOutputAuthorityEvaluatorV1(priorId)).toBeNull();
+    expect(TOPOLOGY_DYNAMICS_AUTHORITY_EVALUATORS.find((candidate) => candidate.id === priorId))
+      .toBeUndefined();
+
+    const evaluator = resolveOutputAuthorityEvaluatorV1(currentId);
+    expect(evaluator?.id).toBe(currentId);
+    expect(TOPOLOGY_DYNAMICS_AUTHORITY_EVALUATORS.find((candidate) => candidate.id === currentId))
+      .toBe(evaluator);
+    if (!evaluator) throw new Error('The current spatial catalog evaluator is missing.');
     const fields = evaluator.evaluateCanonicalRequest(
       validated.request.canonicalRequest as JsonValue,
     ).fields as JsonRecord;

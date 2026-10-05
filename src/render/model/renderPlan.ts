@@ -223,6 +223,8 @@ export interface TextMark {
   readonly text: string;
   readonly anchor: 'start' | 'middle' | 'end';
   readonly fontSize: number;
+  /** Owned normative SVG width, independent of host font metrics; never caller input. */
+  readonly textLength?: number;
   readonly fill: string;
   readonly decorative?: boolean;
 }

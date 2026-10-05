@@ -21,8 +21,8 @@ PACKAGE_VERSION: str = "0.10.0-dev.0"
 PYTHON_DISTRIBUTION_VERSION: str = "0.10.0.dev0"
 REQUEST_CONTRACT: str = "cortexel-figure-request/1.0"
 ARTIFACT_CONTRACT: str = "cortexel-figure-artifact/1.0"
-CONTRACT_DIGEST: str = "sha256:ed43aea88c88af84c0e327e6441ecba8cdf6024e499d84b24748946b22af0475"
-CATALOG_DIGEST: str = "sha256:7e52385ef9fe7e58e94c5e005d4239c5ecb7575bb0e09a170e46758a190571b3"
+CONTRACT_DIGEST: str = "sha256:3c5c60c5a1751ce94c17a08601d49b94114b06c5fd50f5810e0ab354175c9bfc"
+CATALOG_DIGEST: str = "sha256:9db77ac767cf8b83c63ad9a67a07f9e7146541c3707bf7b0abb455421faf1e8e"
 CATALOG_DIGEST_DOMAIN: str = "cortexel-public-stable-catalog.v2"
 AUTHORING_SCHEMA_COMPILATION_PROFILE_V1: Final[Mapping[str, Any]] = _freeze({
     "id": "cortexel-authoring-schema-compilation-profile.v1",
@@ -66,7 +66,7 @@ STABLE_SKILL_IDS: Final[tuple[str, ...]] = _freeze([
 SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "network.adjacency_matrix": {
         "id": "network.adjacency_matrix",
-        "revision": 4,
+        "revision": 5,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -84,7 +84,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.matrix",
-            "revision": 5,
+            "revision": 6,
             "axisOrder": "target_rows_source_columns"
         },
         "semanticValidators": [
@@ -298,7 +298,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "network.adjacency_matrix.output_authority.v4"
+                "id": "network.adjacency_matrix.output_authority.v5"
             },
             "requestPaths": [
                 {
@@ -554,7 +554,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "network.connection_graph": {
         "id": "network.connection_graph",
-        "revision": 4,
+        "revision": 5,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -571,7 +571,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.connection_graph",
-            "revision": 5
+            "revision": 6
         },
         "semanticValidators": [
             {
@@ -855,7 +855,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "network.connection_graph.output_authority.v4"
+                "id": "network.connection_graph.output_authority.v5"
             },
             "requestPaths": [
                 {
@@ -1147,7 +1147,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "network.degree_distribution": {
         "id": "network.degree_distribution",
-        "revision": 4,
+        "revision": 5,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -1166,7 +1166,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.distribution",
-            "revision": 5
+            "revision": 6
         },
         "semanticValidators": [
             {
@@ -1336,7 +1336,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "network.degree_distribution.output_authority.v4"
+                "id": "network.degree_distribution.output_authority.v5"
             },
             "requestPaths": [
                 {
@@ -1577,7 +1577,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "network.delay_distribution": {
         "id": "network.delay_distribution",
-        "revision": 5,
+        "revision": 6,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -1597,7 +1597,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.distribution",
-            "revision": 5
+            "revision": 6
         },
         "semanticValidators": [
             {
@@ -1830,7 +1830,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "network.delay_distribution.output_authority.v5"
+                "id": "network.delay_distribution.output_authority.v6"
             },
             "requestPaths": [
                 {
@@ -2116,7 +2116,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "network.delay_matrix": {
         "id": "network.delay_matrix",
-        "revision": 5,
+        "revision": 6,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -2135,7 +2135,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.matrix",
-            "revision": 5,
+            "revision": 6,
             "axisOrder": "target_rows_source_columns"
         },
         "semanticValidators": [
@@ -2362,7 +2362,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "network.delay_matrix.output_authority.v5"
+                "id": "network.delay_matrix.output_authority.v6"
             },
             "requestPaths": [
                 {
@@ -2656,7 +2656,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "network.spatial_map_2d": {
         "id": "network.spatial_map_2d",
-        "revision": 4,
+        "revision": 5,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -2677,7 +2677,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.spatial_map_2d",
-            "revision": 5
+            "revision": 6
         },
         "semanticValidators": [
             {
@@ -2975,7 +2975,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "network.spatial_map_2d.output_authority.v4"
+                "id": "network.spatial_map_2d.output_authority.v5"
             },
             "requestPaths": [
                 {
@@ -3257,7 +3257,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "network.synaptic_weight_trace": {
         "id": "network.synaptic_weight_trace",
-        "revision": 4,
+        "revision": 5,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -3278,7 +3278,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.synaptic_weight_trace",
-            "revision": 5
+            "revision": 6
         },
         "semanticValidators": [
             {
@@ -3607,7 +3607,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "network.synaptic_weight_trace.output_authority.v4"
+                "id": "network.synaptic_weight_trace.output_authority.v5"
             },
             "requestPaths": [
                 {
@@ -3933,7 +3933,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "network.weight_distribution": {
         "id": "network.weight_distribution",
-        "revision": 4,
+        "revision": 5,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -3953,7 +3953,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.distribution",
-            "revision": 5
+            "revision": 6
         },
         "semanticValidators": [
             {
@@ -4148,7 +4148,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "network.weight_distribution.output_authority.v4"
+                "id": "network.weight_distribution.output_authority.v5"
             },
             "requestPaths": [
                 {
@@ -4419,7 +4419,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "network.weight_matrix": {
         "id": "network.weight_matrix",
-        "revision": 4,
+        "revision": 5,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -4436,7 +4436,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.matrix",
-            "revision": 5,
+            "revision": 6,
             "axisOrder": "target_rows_source_columns"
         },
         "semanticValidators": [
@@ -4676,7 +4676,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "network.weight_matrix.output_authority.v4"
+                "id": "network.weight_matrix.output_authority.v5"
             },
             "requestPaths": [
                 {
@@ -4966,7 +4966,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "neuro.analog_trace": {
         "id": "neuro.analog_trace",
-        "revision": 4,
+        "revision": 5,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -4984,7 +4984,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.analog_trace",
-            "revision": 5
+            "revision": 6
         },
         "semanticValidators": [
             {
@@ -5262,7 +5262,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "neuro.analog_trace.output_authority.v4"
+                "id": "neuro.analog_trace.output_authority.v5"
             },
             "requestPaths": [
                 {
@@ -5523,7 +5523,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "neuro.compartment_trace": {
         "id": "neuro.compartment_trace",
-        "revision": 4,
+        "revision": 5,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -5541,7 +5541,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.compartment_trace",
-            "revision": 5
+            "revision": 6
         },
         "semanticValidators": [
             {
@@ -5764,7 +5764,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "neuro.compartment_trace.output_authority.v4"
+                "id": "neuro.compartment_trace.output_authority.v5"
             },
             "requestPaths": [
                 {
@@ -6049,7 +6049,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "neuro.correlogram": {
         "id": "neuro.correlogram",
-        "revision": 4,
+        "revision": 5,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -6068,7 +6068,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.correlogram",
-            "revision": 5
+            "revision": 6
         },
         "semanticValidators": [
             {
@@ -6235,7 +6235,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "neuro.correlogram.output_authority.v4"
+                "id": "neuro.correlogram.output_authority.v5"
             },
             "requestPaths": [
                 {
@@ -6517,7 +6517,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "neuro.isi_distribution": {
         "id": "neuro.isi_distribution",
-        "revision": 4,
+        "revision": 5,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -6534,7 +6534,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.distribution",
-            "revision": 5
+            "revision": 6
         },
         "semanticValidators": [
             {
@@ -6762,7 +6762,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "neuro.isi_distribution.output_authority.v4"
+                "id": "neuro.isi_distribution.output_authority.v5"
             },
             "requestPaths": [
                 {
@@ -7012,7 +7012,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "neuro.multisignal_trace": {
         "id": "neuro.multisignal_trace",
-        "revision": 4,
+        "revision": 5,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -7029,7 +7029,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.multisignal_trace",
-            "revision": 5
+            "revision": 6
         },
         "semanticValidators": [
             {
@@ -7436,7 +7436,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "neuro.multisignal_trace.output_authority.v4"
+                "id": "neuro.multisignal_trace.output_authority.v5"
             },
             "requestPaths": [
                 {
@@ -7786,7 +7786,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "neuro.phase_plane": {
         "id": "neuro.phase_plane",
-        "revision": 5,
+        "revision": 6,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -7807,7 +7807,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.phase_plane",
-            "revision": 6
+            "revision": 7
         },
         "semanticValidators": [
             {
@@ -8040,7 +8040,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "neuro.phase_plane.output_authority.v5"
+                "id": "neuro.phase_plane.output_authority.v6"
             },
             "requestPaths": [
                 {
@@ -8318,7 +8318,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "neuro.population_rate": {
         "id": "neuro.population_rate",
-        "revision": 4,
+        "revision": 5,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -8332,7 +8332,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.population_rate",
-            "revision": 5
+            "revision": 6
         },
         "semanticValidators": [
             {
@@ -8488,7 +8488,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "neuro.population_rate.output_authority.v4"
+                "id": "neuro.population_rate.output_authority.v5"
             },
             "requestPaths": [
                 {
@@ -8695,7 +8695,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "neuro.psth": {
         "id": "neuro.psth",
-        "revision": 4,
+        "revision": 5,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -8712,7 +8712,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.psth",
-            "revision": 5
+            "revision": 6
         },
         "semanticValidators": [
             {
@@ -9055,7 +9055,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "neuro.psth.output_authority.v4"
+                "id": "neuro.psth.output_authority.v5"
             },
             "requestPaths": [
                 {
@@ -9337,7 +9337,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "neuro.response_curve": {
         "id": "neuro.response_curve",
-        "revision": 4,
+        "revision": 5,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -9356,7 +9356,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.response_curve",
-            "revision": 5
+            "revision": 6
         },
         "semanticValidators": [
             {
@@ -9681,7 +9681,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "neuro.response_curve.output_authority.v4"
+                "id": "neuro.response_curve.output_authority.v5"
             },
             "requestPaths": [
                 {
@@ -9962,7 +9962,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     },
     "neuro.spike_raster": {
         "id": "neuro.spike_raster",
-        "revision": 6,
+        "revision": 7,
         "status": "stable",
         "availability": "packaged",
         "releaseReady": False,
@@ -9980,7 +9980,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
         ],
         "renderer": {
             "id": "figure.spike_raster",
-            "revision": 7
+            "revision": 8
         },
         "semanticValidators": [
             {
@@ -10164,7 +10164,7 @@ SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
             "version": 1,
             "evaluator": {
                 "tag": "registered_evaluator",
-                "id": "neuro.spike_raster.output_authority.v6"
+                "id": "neuro.spike_raster.output_authority.v7"
             },
             "requestPaths": [
                 {
@@ -12629,25 +12629,25 @@ SKILL_AUTHORING_EXAMPLES: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
 })
 
 SKILL_REVISIONS: Final[Mapping[str, int]] = _freeze({
-    "network.adjacency_matrix": 4,
-    "network.connection_graph": 4,
-    "network.degree_distribution": 4,
-    "network.delay_distribution": 5,
-    "network.delay_matrix": 5,
-    "network.spatial_map_2d": 4,
-    "network.synaptic_weight_trace": 4,
-    "network.weight_distribution": 4,
-    "network.weight_matrix": 4,
-    "neuro.analog_trace": 4,
-    "neuro.compartment_trace": 4,
-    "neuro.correlogram": 4,
-    "neuro.isi_distribution": 4,
-    "neuro.multisignal_trace": 4,
-    "neuro.phase_plane": 5,
-    "neuro.population_rate": 4,
-    "neuro.psth": 4,
-    "neuro.response_curve": 4,
-    "neuro.spike_raster": 6
+    "network.adjacency_matrix": 5,
+    "network.connection_graph": 5,
+    "network.degree_distribution": 5,
+    "network.delay_distribution": 6,
+    "network.delay_matrix": 6,
+    "network.spatial_map_2d": 5,
+    "network.synaptic_weight_trace": 5,
+    "network.weight_distribution": 5,
+    "network.weight_matrix": 5,
+    "neuro.analog_trace": 5,
+    "neuro.compartment_trace": 5,
+    "neuro.correlogram": 5,
+    "neuro.isi_distribution": 5,
+    "neuro.multisignal_trace": 5,
+    "neuro.phase_plane": 6,
+    "neuro.population_rate": 5,
+    "neuro.psth": 5,
+    "neuro.response_curve": 5,
+    "neuro.spike_raster": 7
 })
 
 SKILL_ADAPTERS: Final[Mapping[str, tuple[Mapping[str, Any], ...]]] = _freeze({

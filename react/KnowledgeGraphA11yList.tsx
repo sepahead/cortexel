@@ -876,7 +876,7 @@ function renderKnowledgeGraphLegend({
               <span aria-hidden="true" style={swatchStyle(renderedColor)} />
               {safeDiagnosticText(entry.kind, 80)}: {entry.count}{' '}
               {entry.count === 1 ? 'node' : 'nodes'}; source color{' '}
-              {safeDiagnosticText(entry.color, 80)}; intended undimmed optional 3D
+              {safeDiagnosticText(entry.color, 80)}; intended undimmed optional interactive
               scene color{' '}
               {safeDiagnosticText(renderedColor, 80)}; glyph{' '}
               {knowledgeGraphNodeGlyphDescription(entry.nodeGlyph)}; visual radius{' '}
@@ -907,7 +907,7 @@ function renderKnowledgeGraphLegend({
               {safeDiagnosticText(entry.kind, 80)}: {entry.count}{' '}
               {entry.count === 1 ? 'relationship' : 'relationships'};{' '}
               {entry.directed ? 'directed' : 'undirected'}; source color{' '}
-              {safeDiagnosticText(entry.color, 80)}; intended undimmed optional 3D
+              {safeDiagnosticText(entry.color, 80)}; intended undimmed optional interactive
               scene color{' '}
               {safeDiagnosticText(
                 knowledgeGraphContrastSafeColor(entry.color, themeMode),
@@ -919,13 +919,13 @@ function renderKnowledgeGraphLegend({
         </ul>
       )}
       <p role="note">
-        In the optional 3D scene, the listed colors are the intended undimmed baseline
+        In the optional interactive scene, the listed colors are the intended undimmed baseline
         and glyph shells use {themeMode === 'light' ? '#0f172a' : '#f8fafc'} before
         dimming. That scene's focus and query interactions dim peripheral node fills,
         glyph shells, relationships, arrows, and flow markers without changing their
         kind glyph, stroke pattern, direction, or DOM record. Layout positions and
         distances are schematic, not quantitative evidence. This legend does not imply
-        that a 3D scene is mounted.
+        that an interactive scene is mounted.
       </p>
     </aside>
   );

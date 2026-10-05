@@ -658,20 +658,22 @@ export interface GraphPoint3 {
 
 /** Write the shared quadratic control point for one routed edge. The Frisvad
  * tangent basis is deterministic in world space and independent of the camera,
- * so orbiting, reduced motion, and still capture preserve lane identity. */
+ * so orbiting, reduced motion, and still capture preserve lane identity. Planar
+ * layouts use the canonical XY perpendicular so no lane disappears into Z. */
 export function graphEdgeControlPointInto<T extends GraphPoint3>(
   source: Readonly<GraphPoint3>,
   target: Readonly<GraphPoint3>,
   lane: Pick<GraphEdgeLane, 'laneOffset' | 'canonicalDirectionSign'>,
   out: T,
+  dimensions: 2 | 3 = 3,
 ): T {
   const midpointX = (source.x + target.x) * 0.5;
   const midpointY = (source.y + target.y) * 0.5;
-  const midpointZ = (source.z + target.z) * 0.5;
+  const midpointZ = dimensions === 2 ? 0 : (source.z + target.z) * 0.5;
   const sign = lane.canonicalDirectionSign;
   let dx = (target.x - source.x) * sign;
   let dy = (target.y - source.y) * sign;
-  let dz = (target.z - source.z) * sign;
+  let dz = dimensions === 2 ? 0 : (target.z - source.z) * sign;
   const length = Math.hypot(dx, dy, dz);
   if (!(length > 1e-12) || lane.laneOffset === 0) {
     out.x = midpointX;
@@ -686,7 +688,11 @@ export function graphEdgeControlPointInto<T extends GraphPoint3>(
   let basisX: number;
   let basisY: number;
   let basisZ: number;
-  if (dz < -0.9999999) {
+  if (dimensions === 2) {
+    basisX = -dy;
+    basisY = dx;
+    basisZ = 0;
+  } else if (dz < -0.9999999) {
     basisX = 0;
     basisY = -1;
     basisZ = 0;

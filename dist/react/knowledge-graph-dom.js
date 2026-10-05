@@ -1,4 +1,4 @@
-import { t as KnowledgeGraphCorpusFrameInternal } from "../KnowledgeGraphCorpusFrame.internal-CXuaQ6Bj.js";
+import { t as KnowledgeGraphCorpusFrameInternal } from "../KnowledgeGraphCorpusFrame.internal-B6Fze8F9.js";
 import { jsx } from "react/jsx-runtime";
 
 //#region react/KnowledgeGraphDomFigure.tsx

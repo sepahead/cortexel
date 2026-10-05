@@ -72,6 +72,7 @@ import type {
   KnowledgeGraph3DNode,
 } from './knowledgeGraphPresentation.types';
 import {
+  assertGraphLayoutDimensions,
   planGraphLayoutCache,
   publishGraphLayoutCache,
   snapshotGraphLayoutInputs,
@@ -197,10 +198,15 @@ export interface KnowledgeGraph3DSceneProps
   presentation: PreparedGenericKnowledgeGraphPresentationV1;
 }
 
+/** The same guarded scene and interactions with a genuine planar force layout.
+ * The host supplies a front-facing camera and disables control rotation. */
+export type KnowledgeGraph2DSceneProps = KnowledgeGraph3DSceneProps;
+
 interface KnowledgeGraphCorpus3DSceneInternalProps
   extends KnowledgeGraph3DSceneCommonProps {
   /** Corpus presentations remain package-internal to caption-bound compositions. */
   presentation: PreparedCorpusKnowledgeGraphPresentationV1;
+  layoutDimensions?: 2 | 3;
 }
 
 type KnowledgeGraph3DSceneSurfaceProps =
@@ -210,6 +216,7 @@ type KnowledgeGraph3DSceneSurfaceProps =
 interface KnowledgeGraph3DSceneInstanceProps
   extends Omit<KnowledgeGraph3DSceneCommonProps, 'view'> {
   readonly graphIdentity: string;
+  readonly layoutDimensions: 2 | 3;
   readonly nodes: readonly KnowledgeGraph3DNode[];
   readonly edges: readonly KnowledgeGraph3DEdge[];
 }
@@ -395,10 +402,11 @@ function setEdgeCurve(
   source: SimGraphNode,
   target: SimGraphNode,
   lane: Pick<GraphEdgeLane, 'laneOffset' | 'canonicalDirectionSign'>,
+  dimensions: 2 | 3,
 ): void {
   _a.set(source.x ?? 0, source.y ?? 0, source.z ?? 0);
   _b.set(target.x ?? 0, target.y ?? 0, target.z ?? 0);
-  graphEdgeControlPointInto(_a, _b, lane, _curveControl);
+  graphEdgeControlPointInto(_a, _b, lane, _curveControl, dimensions);
 }
 
 /** Allocation-free glyph upload shared by the three closed node-kind groups. */
@@ -463,6 +471,17 @@ export function KnowledgeGraph3DScene(props: KnowledgeGraph3DSceneProps) {
   return renderKnowledgeGraph3DScene(props);
 }
 
+export function KnowledgeGraph2DScene(props: KnowledgeGraph2DSceneProps) {
+  assertPreparedGenericKnowledgeGraphPresentation(props.presentation);
+  if (props.view !== undefined) {
+    assertPreparedKnowledgeGraphView(props.view, props.presentation);
+  }
+  const nodes = props.view?.nodes ?? props.presentation.nodes;
+  const edges = props.view?.edges ?? props.presentation.edges;
+  assertKnowledgeGraphLiveForceBudget(nodes.length, edges.length);
+  return renderKnowledgeGraph3DScene(props, 2);
+}
+
 /** Package-internal corpus renderer used only below the canonical caption. */
 export function KnowledgeGraphCorpus3DSceneInternal(
   props: KnowledgeGraphCorpus3DSceneInternalProps,
@@ -474,10 +493,15 @@ export function KnowledgeGraphCorpus3DSceneInternal(
   const nodes = props.view?.nodes ?? props.presentation.nodes;
   const edges = props.view?.edges ?? props.presentation.edges;
   assertKnowledgeGraphLiveForceBudget(nodes.length, edges.length);
-  return renderKnowledgeGraph3DScene(props);
+  const dimensions = props.layoutDimensions ?? 3;
+  assertGraphLayoutDimensions(dimensions);
+  return renderKnowledgeGraph3DScene(props, dimensions);
 }
 
-function renderKnowledgeGraph3DScene(props: KnowledgeGraph3DSceneSurfaceProps) {
+function renderKnowledgeGraph3DScene(
+  props: KnowledgeGraph3DSceneSurfaceProps,
+  layoutDimensions: 2 | 3 = 3,
+) {
   const { presentation, view, ...interactionProps } = props;
   assertPreparedKnowledgeGraphPresentation(presentation);
   if (view !== undefined) assertPreparedKnowledgeGraphView(view, presentation);
@@ -503,12 +527,13 @@ function renderKnowledgeGraph3DScene(props: KnowledgeGraph3DSceneSurfaceProps) {
   // for a different declared graph namespace, while preserving same-key views.
   return (
     <KnowledgeGraph3DSceneInstance
-      key={graphIdentity}
+      key={JSON.stringify([graphIdentity, layoutDimensions])}
       {...interactionProps}
       selectedId={selectedId}
       hoverId={hoverId}
       autoFrame={nodes.length > 0 ? props.autoFrame : false}
       graphIdentity={graphIdentity}
+      layoutDimensions={layoutDimensions}
       nodes={nodes}
       edges={edges}
     />
@@ -517,6 +542,7 @@ function renderKnowledgeGraph3DScene(props: KnowledgeGraph3DSceneSurfaceProps) {
 
 function KnowledgeGraph3DSceneInstance({
   graphIdentity,
+  layoutDimensions,
   nodes,
   edges,
   selectedId,
@@ -615,8 +641,8 @@ function KnowledgeGraph3DSceneInstance({
   // routing/style/readiness. Fresh but equivalent arrays retain both identities,
   // while a palette-only edge change updates rendering without reheating D3.
   const layoutInput = useMemo(
-    () => snapshotGraphLayoutInputs(nodes, edges),
-    [nodes, edges],
+    () => snapshotGraphLayoutInputs(nodes, edges, layoutDimensions),
+    [nodes, edges, layoutDimensions],
   );
   const graphKey = layoutInput.graphKey;
   const layoutKey = layoutInput.layoutKey;
@@ -788,6 +814,7 @@ function KnowledgeGraph3DSceneInstance({
       layoutNodes,
       posMap.current,
       MAX_REMEMBERED_POSITIONS,
+      layoutDimensions,
     );
     const simNodes = plan.nodes;
     const runtimeLinks: SimLink[] = simLinks.map(({ source, target }) => ({ source, target }));
@@ -798,7 +825,7 @@ function KnowledgeGraph3DSceneInstance({
     // Warm restart: if we already have remembered positions (a filter/toggle on
     // an existing layout), re-heat gently so settled nodes barely move; only a
     // genuinely fresh graph pays the full cold layout.
-    const sim = forceSimulation<SimGraphNode>(simNodes, 3)
+    const sim = forceSimulation<SimGraphNode>(simNodes, layoutDimensions)
       .force('charge', forceManyBody().strength(-140).distanceMax(600))
       .force('link', linkForce)
       .force('center', forceCenter(0, 0, 0).strength(0.04))
@@ -853,6 +880,7 @@ function KnowledgeGraph3DSceneInstance({
     };
   }, [
     layoutKey,
+    layoutDimensions,
     layoutNodes,
     simLinks,
     index,
@@ -1146,7 +1174,7 @@ function KnowledgeGraph3DSceneInstance({
         const e = lane.edge;
         const s = simNodes[index.get(e.source) as number];
         const t = simNodes[index.get(e.target) as number];
-        setEdgeCurve(s, t, lane);
+        setEdgeCurve(s, t, lane, layoutDimensions);
         _curvePoint.copy(_a);
         for (let chord = 0; chord < GRAPH_EDGE_CURVE_SEGMENTS; chord++) {
           graphEdgeCurvePointInto(
@@ -1188,7 +1216,7 @@ function KnowledgeGraph3DSceneInstance({
           const source = simNodes[index.get(edge.source) as number];
           const targetIndex = index.get(edge.target) as number;
           const target = simNodes[targetIndex];
-          setEdgeCurve(source, target, lane);
+          setEdgeCurve(source, target, lane, layoutDimensions);
           const targetExtent = knowledgeGraphRenderedNodeRadialExtent(
             target.r,
             visualNodes[targetIndex].nodeGlyph,
@@ -1249,7 +1277,7 @@ function KnowledgeGraph3DSceneInstance({
         const e = lane.edge;
         const s = simNodes[index.get(e.source) as number];
         const t = simNodes[index.get(e.target) as number];
-        setEdgeCurve(s, t, lane);
+        setEdgeCurve(s, t, lane, layoutDimensions);
         // Focus/query-dimmed edges collapse their particles to zero size so the
         // subdued periphery does not keep sparkling through the emphasis state.
         const queryIncident = graphEdgeMatchesQuery(
@@ -1450,10 +1478,16 @@ function KnowledgeGraph3DSceneInstance({
           );
         }
         const sphere = _box.getBoundingSphere(_sphere);
-        const currentDistance = controls
-          ? camera.position.distanceTo(controls.target)
-          : camera.position.distanceTo(sphere.center);
-        if (controls && camera.position.distanceToSquared(controls.target) > 1e-12) {
+        // The first planar fit is independent of the host's initial distance.
+        // Later stages observe the camera; pointer intent cancels both stages.
+        const currentDistance = layoutDimensions === 2 && autoFrameStageRef.current === 0
+          ? 0
+          : controls
+            ? camera.position.distanceTo(controls.target)
+            : camera.position.distanceTo(sphere.center);
+        if (layoutDimensions === 2) {
+          _direction.set(0, 0, 1);
+        } else if (controls && camera.position.distanceToSquared(controls.target) > 1e-12) {
           _direction.copy(camera.position).sub(controls.target).normalize();
         } else {
           camera.getWorldDirection(_direction).multiplyScalar(-1);

@@ -14,6 +14,7 @@ import {
 } from '../src/core/output-authority.js';
 import type { JsonValue } from '../src/core/parse-json.js';
 import { validateRequestValue } from '../src/core/request.js';
+import { RENDERERS, SKILL_CATALOG } from '../src/generated/catalog.js';
 
 type JsonRecord = Record<string, any>;
 
@@ -164,14 +165,33 @@ function observedFromEvaluation(
 }
 
 describe('bounded NetworkScope authority summaries', () => {
-  it('pins current skill, renderer, and evaluator identities across the delay erratum', () => {
+  it('binds current scope identities and rejects prior revisions across the delay erratum', () => {
     for (const skillId of SKILLS) {
       const contract = source(skillId);
-      const expectedSkillRevision = skillId === 'network.delay_distribution' ? 5 : 4;
-      expect(contract.revision, skillId).toBe(expectedSkillRevision);
-      expect(contract.renderer.revision, skillId).toBe(5);
+      const catalog = SKILL_CATALOG[skillId];
+      expect(contract.revision, skillId).toBe(catalog.revision);
+      expect(contract.renderer, skillId).toEqual(catalog.renderer);
       expect(contract.outputAuthority.evaluator.id, skillId)
-        .toBe(`${skillId}.output_authority.v${expectedSkillRevision}`);
+        .toBe(catalog.outputAuthority.evaluator.id);
+      expect(catalog.outputAuthority.evaluator.id, skillId)
+        .toBe(`${skillId}.output_authority.v${catalog.revision}`);
+      expect(resolveOutputAuthorityEvaluatorV1(catalog.outputAuthority.evaluator.id)?.id)
+        .toBe(catalog.outputAuthority.evaluator.id);
+      expect(resolveOutputAuthorityEvaluatorV1(
+        `${skillId}.output_authority.v${catalog.revision - 1}`,
+      )).toBeNull();
+
+      const request = structuredClone(contract.examples.valid[0]);
+      request.skill.revision = catalog.revision - 1;
+      const prior = validateRequestValue(request);
+      expect(prior.ok, skillId).toBe(false);
+      if (!prior.ok) expect(prior.errors).toContainEqual(expect.objectContaining({
+        code: 'CONTRACT_SKILL_REVISION_UNSUPPORTED',
+        stage: 'identity',
+        instancePath: '/skill/revision',
+      }));
+      request.skill.revision = catalog.revision;
+      expect(validateRequestValue(request).ok, skillId).toBe(true);
       const contractText = JSON.stringify(contract);
       expect(contractText, `${skillId} shape-only wording`).toContain('shape_only');
       expect(contractText, `${skillId} unbound wording`).toContain('unbound');
@@ -199,8 +219,9 @@ describe('bounded NetworkScope authority summaries', () => {
       'figure.connection_graph',
       'figure.spatial_map_2d',
       'figure.synaptic_weight_trace',
-    ]) {
-      expect(registry.renderers.find((entry: JsonRecord) => entry.id === id)?.revision, id).toBe(5);
+    ] as const) {
+      expect(registry.renderers.find((entry: JsonRecord) => entry.id === id)?.revision, id)
+        .toBe(RENDERERS[id].revision);
     }
     for (const id of ['figure.connection_graph', 'figure.spatial_map_2d']) {
       expect(registry.renderers.find((entry: JsonRecord) => entry.id === id)?.marks, id)

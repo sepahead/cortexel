@@ -220,9 +220,11 @@ const SHARED_CAPABILITY_BUILD_LIMITS = Object.freeze({
   pluginMembers: 128,
   pluginNameUnits: 256,
   modules: 2_048,
-  moduleCodeUnits: 4 * 1024 * 1024,
+  // The reviewed standalone gate has 4.92M code units and 866k syntax nodes.
+  // Every transformed module still receives the same bounded ownership audit.
+  moduleCodeUnits: 8 * 1024 * 1024,
   aggregateCodeUnits: 64 * 1024 * 1024,
-  syntaxNodesPerModule: 500_000,
+  syntaxNodesPerModule: 1_000_000,
   edgesPerModule: 1_024,
   aggregateEdges: 8_192,
   bundleOutputs: 1_024,
@@ -2694,9 +2696,8 @@ export const CORTEXEL_PACKAGE_BUILD_CONFIG = deepFreezeBuildConfig({
   // Preserve the package's established .js/.cjs and .d.ts/.d.cts contract
   // instead of tsdown's fixed .mjs/.cjs Node default.
   fixedExtension: false,
-  // The validator locates installed contract data relative to its module. The
-  // ESM and CommonJS bundles therefore both require their format-appropriate
-  // dirname shim; schema lookup must never depend on cwd or the network.
+  // CLI filesystem paths retain their format-specific shims. Structural
+  // validation uses precompiled functions and performs no filesystem lookup.
   shims: true,
   treeshake: true,
   // Source-level bare builtins are prefixed by tsdown. Rolldown's CommonJS

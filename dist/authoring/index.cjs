@@ -1,7 +1,7 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
-const require_identity = require('../identity-Dt42RQe6.cjs');
-const require_catalog = require('../catalog-DG5yXxju.cjs');
-const require_source_catalog = require('../source-catalog-By32MtE_.cjs');
+const require_identity = require('../identity-WmWIxK_t.cjs');
+const require_catalog = require('../catalog-Y8HvVZCF.cjs');
+const require_source_catalog = require('../source-catalog-buQerjUj.cjs');
 const require_source_example = require('../source-example-Cy4zoYav.cjs');
 
 exports.AUTHORING_SCHEMA_COMPILATION_PROFILE_V1 = require_source_catalog.AUTHORING_SCHEMA_COMPILATION_PROFILE_V1;

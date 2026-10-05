@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { MATRIX_AUTHORITY_EVALUATORS } from '../src/authority/evaluators/matrices.js';
+import { resolveOutputAuthorityEvaluatorV1 } from '../src/authority/evaluators/registry.js';
 import { canonicalize } from '../src/core/canonicalize.js';
 import { deriveDisclosures } from '../src/core/disclosures.js';
 import {
@@ -21,6 +22,7 @@ import {
   deriveCallerSourceStatements,
   type CallerSourceStatement,
 } from '../src/core/source-statements.js';
+import { lookupSkillCatalogEntry, SKILL_CATALOG } from '../src/generated/catalog.js';
 import { buildFigure } from '../src/render/index.js';
 import { extractObservedOutputAuthorityV1 } from '../src/render/output-authority-extract.js';
 
@@ -32,12 +34,6 @@ const MATRIX_SKILLS = [
   'network.weight_matrix',
   'network.delay_matrix',
 ] as const;
-const MATRIX_SKILL_REVISIONS = {
-  'network.adjacency_matrix': 4,
-  'network.weight_matrix': 4,
-  'network.delay_matrix': 5,
-} as const;
-
 function source(skillId: string): JsonRecord {
   return JSON.parse(readFileSync(
     path.join(ROOT, `contract/skills/${skillId}.v1.json`),
@@ -46,9 +42,10 @@ function source(skillId: string): JsonRecord {
 }
 
 function evaluator(skillId: string) {
-  const revision = MATRIX_SKILL_REVISIONS[skillId as keyof typeof MATRIX_SKILL_REVISIONS];
+  const catalog = lookupSkillCatalogEntry(skillId);
+  if (!catalog) throw new Error(`missing skill catalog entry ${skillId}`);
   const found = MATRIX_AUTHORITY_EVALUATORS.find(
-    (candidate) => candidate.id === `${skillId}.output_authority.v${revision}`,
+    (candidate) => candidate.id === catalog.outputAuthority.evaluator.id,
   );
   if (!found) throw new Error(`missing matrix authority evaluator ${skillId}`);
   return found;
@@ -672,15 +669,37 @@ describe('independent matrix OutputAuthority evaluators', () => {
     }
   });
 
-  it('pins matrix identities while the global SVG change moves renderer revision 5', () => {
+  it('binds current matrix identities and refuses prior evaluator and request revisions', () => {
     for (const skillId of MATRIX_SKILLS) {
       const contract = source(skillId);
-      const expectedSkillRevision = MATRIX_SKILL_REVISIONS[skillId];
-      expect(contract.revision).toBe(expectedSkillRevision);
-      expect(contract.renderer).toMatchObject({ id: 'figure.matrix', revision: 5 });
+      const catalog = SKILL_CATALOG[skillId];
+      expect(contract.revision).toBe(catalog.revision);
+      expect(contract.renderer).toEqual(catalog.renderer);
+      expect(contract.renderer.id).toBe('figure.matrix');
       expect(contract.outputAuthority.evaluator.id).toBe(
-        `${skillId}.output_authority.v${expectedSkillRevision}`,
+        catalog.outputAuthority.evaluator.id,
       );
+      expect(catalog.outputAuthority.evaluator.id).toBe(
+        `${skillId}.output_authority.v${catalog.revision}`,
+      );
+      expect(resolveOutputAuthorityEvaluatorV1(catalog.outputAuthority.evaluator.id))
+        .toBe(evaluator(skillId));
+      const priorEvaluatorId = `${skillId}.output_authority.v${catalog.revision - 1}`;
+      expect(resolveOutputAuthorityEvaluatorV1(priorEvaluatorId)).toBeNull();
+      expect(MATRIX_AUTHORITY_EVALUATORS.some((entry) => entry.id === priorEvaluatorId))
+        .toBe(false);
+
+      const request = structuredClone(contract.examples.valid[0]);
+      request.skill.revision = catalog.revision - 1;
+      const prior = validateRequestValue(request);
+      expect(prior.ok).toBe(false);
+      if (!prior.ok) expect(prior.errors).toContainEqual(expect.objectContaining({
+        code: 'CONTRACT_SKILL_REVISION_UNSUPPORTED',
+        stage: 'identity',
+        instancePath: '/skill/revision',
+      }));
+      request.skill.revision = catalog.revision;
+      expect(validateRequestValue(request).ok).toBe(true);
       expect(contract.accessibility.tableColumns.map((column: JsonRecord) => column.key))
         .toContain('scopeSummary');
       expect(contract.accessibility.tableColumns.map((column: JsonRecord) => column.key))
@@ -696,8 +715,7 @@ describe('independent matrix OutputAuthority evaluators', () => {
     expect(delayColumns).not.toContain('snapshotTime');
     expect(MATRIX_AUTHORITY_EVALUATORS.map((entry) => entry.id).sort()).toEqual(
       MATRIX_SKILLS
-        .map((skillId) =>
-          `${skillId}.output_authority.v${MATRIX_SKILL_REVISIONS[skillId]}`)
+        .map((skillId) => SKILL_CATALOG[skillId].outputAuthority.evaluator.id)
         .sort(),
     );
     const renderers = JSON.parse(readFileSync(
@@ -707,7 +725,7 @@ describe('independent matrix OutputAuthority evaluators', () => {
     const matrixRenderer = renderers.renderers.find(
       (renderer: JsonRecord) => renderer.id === 'figure.matrix',
     );
-    expect(matrixRenderer.revision).toBe(5);
+    expect(matrixRenderer.revision).toBe(SKILL_CATALOG['network.weight_matrix'].renderer.revision);
     expect(matrixRenderer.notes).toContain(
       'not_observed is distinct from observed absence and is never drawn as absent',
     );

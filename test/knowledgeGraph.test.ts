@@ -5,7 +5,9 @@ import { createElement, Profiler } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { act, create } from 'react-test-renderer';
 import * as THREE from 'three';
+import { forceSimulation, forceLink, forceManyBody } from 'd3-force-3d';
 import { CORTEXEL_PALETTE } from '../core/colormaps';
+import { getExamplePayload } from '../core/skills/examples';
 import {
   assignGraphEdgeLanes,
   buildAdjacency,
@@ -111,6 +113,7 @@ import {
   reducedMotionFlowParticleFraction,
 } from '../react/knowledgeGraphParticles.internal';
 import {
+  KnowledgeGraph2DScene,
   KnowledgeGraph3DScene,
   knowledgeGraphNodeUsesFocusScale,
   type KnowledgeGraph3DNode,
@@ -1570,9 +1573,9 @@ describe('graph helpers', () => {
       ...props,
       graphIdentity: 'graph:two',
     }));
-    expect(first.key).toBe('graph:one');
+    expect(first.key).toBe(JSON.stringify(['graph:one', 3]));
     expect(same.key).toBe(first.key);
-    expect(other.key).toBe('graph:two');
+    expect(other.key).toBe(JSON.stringify(['graph:two', 3]));
     expect(other.type).toBe(first.type);
 
     const a11yFirstProps = withPreparedPresentation({
@@ -2477,7 +2480,7 @@ describe('graph helpers', () => {
     expect(accessibleText).toContain('connected to Model C');
     expect(accessibleText).not.toContain('points to Model B');
     expect(legendText).toContain(
-      'family: 1 node; source color #ff00ff; intended undimmed optional 3D ' +
+      'family: 1 node; source color #ff00ff; intended undimmed optional interactive ' +
       'scene color #ff00ff; ' +
       'glyph outlined sphere',
     );
@@ -2816,7 +2819,7 @@ describe('graph helpers', () => {
       }),
     ));
     expect(html).toContain(
-      'paper: 2 nodes; source color #00ffff; intended undimmed optional 3D ' +
+      'paper: 2 nodes; source color #00ffff; intended undimmed optional interactive ' +
       'scene color #00ffff; ' +
       'glyph outlined sphere',
     );
@@ -2824,12 +2827,12 @@ describe('graph helpers', () => {
       'visual radius 4–6; Caller-declared: visual size has no declared quantitative interpretation',
     );
     expect(html).toContain(
-      'model: 2 nodes; source color #ffaa00; intended undimmed optional 3D ' +
+      'model: 2 nodes; source color #ffaa00; intended undimmed optional interactive ' +
       'scene color #ffaa00; ' +
       'glyph sphere with box shell',
     );
     expect(html).toContain(
-      'family: 1 node; source color #aa55ff; intended undimmed optional 3D ' +
+      'family: 1 node; source color #aa55ff; intended undimmed optional interactive ' +
       'scene color #aa55ff; ' +
       'glyph sphere with diamond shell',
     );
@@ -2844,18 +2847,18 @@ describe('graph helpers', () => {
     }
     expect(html).toContain(
       'same_as: 1 relationship; undirected; source color #ff8800; ' +
-      'intended undimmed optional 3D scene color #ff8800; solid stroke',
+      'intended undimmed optional interactive scene color #ff8800; solid stroke',
     );
     expect(html).toContain(
       'cites: 1 relationship; directed; source color #11ff11; ' +
-      'intended undimmed optional 3D scene color #11ff11; solid stroke; flow markers',
+      'intended undimmed optional interactive scene color #11ff11; solid stroke; flow markers',
     );
     expect(html).toContain('instantiates: 1 relationship; directed; source color ' +
-      '#00aaaa; intended undimmed optional 3D scene color #00aaaa; short-dash stroke');
+      '#00aaaa; intended undimmed optional interactive scene color #00aaaa; short-dash stroke');
     expect(html).toContain('belongs_to_family: 1 relationship; directed; source color ' +
-      '#888888; intended undimmed optional 3D scene color #888888; dotted stroke');
+      '#888888; intended undimmed optional interactive scene color #888888; dotted stroke');
     expect(html).toContain('variant_of: 1 relationship; directed; source color ' +
-      '#ff0088; intended undimmed optional 3D scene color #ff0088; long-dash stroke');
+      '#ff0088; intended undimmed optional interactive scene color #ff0088; long-dash stroke');
     expect(html).toContain(
       'Layout positions and distances are schematic, not quantitative evidence.',
     );
@@ -2955,6 +2958,156 @@ describe('graph helpers', () => {
     expect(isKnowledgeGraphInstanceId(Number.NaN, 1)).toBe(false);
     expect(isKnowledgeGraphInstanceId(1, 1)).toBe(false);
     expect(isKnowledgeGraphInstanceId(0, Number.NaN)).toBe(false);
+  });
+});
+
+describe('planar knowledge-graph layout', () => {
+  it('fits rendered planar nodes and every reverse or parallel lane at square and unequal aspects', () => {
+    const edges = Array.from({ length: MAX_GRAPH_PARALLEL_EDGES }, (_value, index) => ({
+      id: `edge-${index}`,
+      source: index % 2 === 0 ? 'a' : 'b',
+      target: index % 2 === 0 ? 'b' : 'a',
+    }));
+    const lanes = assignGraphEdgeLanes(edges);
+    for (const scale of [1, 40, 4_000]) {
+      const source = { x: -13 * scale, y: 7 * scale, z: 0 };
+      const target = { x: 27 * scale, y: -4 * scale, z: 0 };
+      const isolate = { x: -37 * scale, y: -31 * scale, z: 0 };
+      const bounds = new THREE.Box3();
+      for (const node of [source, target, isolate]) {
+        bounds.expandByPoint(new THREE.Vector3(node.x - 8, node.y - 8, -8));
+        bounds.expandByPoint(new THREE.Vector3(node.x + 8, node.y + 8, 8));
+      }
+      bounds.expandByScalar(MAX_GRAPH_EDGE_LANE_OFFSET + 2);
+      const sphere = bounds.getBoundingSphere(new THREE.Sphere());
+      for (const aspect of [0.4, 1, 3]) {
+        const fit = planKnowledgeGraphCameraFit({
+          contentRadius: sphere.radius,
+          currentDistance: 0,
+          projection: { kind: 'perspective', verticalFovDegrees: 45, aspect },
+        });
+        const clipping = planKnowledgeGraphCameraClipping({
+          kind: 'perspective', currentNear: 0.1, currentFar: 1_000,
+          distance: fit.distance, contentRadius: sphere.radius,
+        });
+        const camera = new THREE.PerspectiveCamera(45, aspect, clipping.near, clipping.far);
+        camera.position.copy(sphere.center).add(new THREE.Vector3(0, 0, fit.distance));
+        camera.lookAt(sphere.center);
+        camera.updateMatrixWorld();
+        const assertVisible = (point: { x: number; y: number; z: number }) => {
+          const projected = new THREE.Vector3(point.x, point.y, point.z).project(camera);
+          expect([projected.x, projected.y, projected.z].every(Number.isFinite)).toBe(true);
+          expect(Math.abs(projected.x)).toBeLessThan(1);
+          expect(Math.abs(projected.y)).toBeLessThan(1);
+          expect(Math.abs(projected.z)).toBeLessThan(1);
+        };
+        for (const node of [source, target, isolate]) assertVisible(node);
+        for (const lane of lanes) {
+          const [start, end] = lane.edge.source === 'a' ? [source, target] : [target, source];
+          const control = graphEdgeControlPointInto(start, end, lane, { x: 0, y: 0, z: 0 }, 2);
+          for (let step = 0; step <= GRAPH_EDGE_CURVE_SEGMENTS; step += 1) {
+            assertVisible(graphEdgeCurvePointInto(start, control, end, step / GRAPH_EDGE_CURVE_SEGMENTS, { x: 0, y: 0, z: 0 }));
+          }
+        }
+      }
+    }
+    expect(isKnowledgeGraphPerspectiveProjectionReady(45, 0)).toBe(false);
+    expect(isKnowledgeGraphPerspectiveProjectionReady(45, 1)).toBe(true);
+  });
+
+  it('separates runtime identities and removes stale Z from detached planar caches', () => {
+    const nodes = [{ id: 'a', radius: 4 }, { id: 'isolate', radius: 4 }];
+    const remembered = new Map<string, [number, number, number]>([['a', [10, 20, 30]]]);
+    const planar = snapshotGraphLayoutInputs(nodes, [], 2);
+    const spatial = snapshotGraphLayoutInputs(nodes, [], 3);
+    expect(planar.graphKey).not.toBe(spatial.graphKey);
+    expect(planar.layoutKey).not.toBe(spatial.layoutKey);
+    expect(planar.nodes).toEqual(spatial.nodes);
+    const plan = planGraphLayoutCache(nodes, remembered, 4, 2);
+    expect(plan.nodes).toMatchObject([{ id: 'a', x: 10, y: 20, z: 0 }, { id: 'isolate', z: 0 }]);
+    for (const buffer of plan.cacheBuffers) {
+      expect([...buffer.cache.values()].every((position) => position[2] === 0)).toBe(true);
+    }
+    expect(remembered.get('a')).toEqual([10, 20, 30]);
+    expect(planGraphLayoutCache(nodes, remembered, 4, 3).nodes[0].z).toBe(30);
+    expect(() => snapshotGraphLayoutInputs(nodes, [], 1 as never)).toThrow(/2 or 3/);
+    expect(() => planGraphLayoutCache(nodes, remembered, 4, '2' as never)).toThrow(/2 or 3/);
+    expect(snapshotGraphLayoutInputs(nodes, [], 2)).toEqual(planar);
+  });
+
+  it('keeps opposite assertion lanes in XY with finite target-bound direction markers', () => {
+    const source = { x: -13, y: 7, z: 0 };
+    const target = { x: 27, y: -4, z: 0 };
+    const lanes = assignGraphEdgeLanes([
+      { id: 'forward', source: 'a', target: 'b' },
+      { id: 'reverse', source: 'b', target: 'a' },
+    ]);
+    const controls = lanes.map((lane, index) => {
+      const start = index === 0 ? source : target;
+      const end = index === 0 ? target : source;
+      const control = graphEdgeControlPointInto(start, end, lane, { x: 0, y: 0, z: 0 }, 2);
+      const point = { x: 0, y: 0, z: 0 };
+      const direction = { x: 0, y: 0, z: 0 };
+      expect(graphEdgeTargetBoundaryInto(start, control, end, 4, point, direction)).toBe(true);
+      expect(point.z).toBe(0);
+      expect(direction.z).toBe(0);
+      expect(Math.hypot(point.x - end.x, point.y - end.y)).toBeCloseTo(4, 5);
+      expect(graphEdgeCurvePointInto(start, control, end, 0, point)).toEqual(start);
+      expect(graphEdgeCurvePointInto(start, control, end, 1, point)).toEqual(end);
+      return control;
+    });
+    expect(controls[0]).not.toEqual(controls[1]);
+    expect(controls.every((point) => point.z === 0 && Number.isFinite(point.x) && Number.isFinite(point.y))).toBe(true);
+    const coincident = graphEdgeControlPointInto(source, source, lanes[0], { x: 0, y: 0, z: 0 }, 2);
+    expect(coincident).toEqual(source);
+  });
+
+  it('uses the installed two-dimensional force solver for linked and disconnected nodes', () => {
+    const planned = planGraphLayoutCache(
+      [{ id: 'a', radius: 4 }, { id: 'b', radius: 4 }, { id: 'isolate', radius: 4 }],
+      new Map(), 4, 2,
+    );
+    const simulation = forceSimulation(planned.nodes, 2)
+      .force('link', forceLink([{ source: 'a', target: 'b' }]).id((node) => String(node.id)))
+      .force('charge', forceManyBody().strength(-140))
+      .stop();
+    try {
+      simulation.tick(reducedMotionLayoutTickBudget(3, 1));
+      expect(simulation.numDimensions()).toBe(2);
+      expect(planned.nodes.map((node) => node.id)).toEqual(['a', 'b', 'isolate']);
+      expect(planned.nodes.every((node) => Number.isFinite(node.x) && Number.isFinite(node.y) && node.z === 0)).toBe(true);
+      expect(planned.nodes[0].x).not.toBe(planned.nodes[1].x);
+    } finally {
+      simulation.stop();
+    }
+  });
+
+  it('keeps the public planar primitive generic-only and bounds all accepted input', () => {
+    const raw = {
+      graphIdentity: 'graph:planar', nodes: [], edges: [], selectedId: null,
+      query: '', onSelect: () => {}, hoverId: null, onHover: () => {},
+    };
+    const props = withPreparedPresentation(raw);
+    const planar = KnowledgeGraph2DScene(props);
+    const spatial = KnowledgeGraph3DScene(props);
+    expect(planar.type).toBe(spatial.type);
+    expect(planar.key).not.toBe(spatial.key);
+    expect(planar.props).toMatchObject({ graphIdentity: raw.graphIdentity, layoutDimensions: 2 });
+    expect(() => KnowledgeGraph2DScene({ ...props, presentation: { ...props.presentation } } as never)).toThrow(/capability/);
+    const corpus = mapCorpusKnowledgeGraph(getExamplePayload('corpus.knowledge_graph')!.params as KnowledgeGraph3DParams, P);
+    expect(() => KnowledgeGraph2DScene({ ...props, presentation: corpus } as never)).toThrow(/generic/);
+    const tooMany = withPreparedPresentation({
+      ...raw,
+      nodes: Array.from({ length: MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES + 1 }, (_, index) => ({
+        id: String(index), label: String(index), kind: 'model' as const, color: '#fff', radius: 4,
+      })),
+    });
+    expect(() => KnowledgeGraph2DScene(tooMany)).toThrow(/live knowledge-graph force/);
+    expect(() => withPreparedPresentation({
+      ...raw, nodes: [{ id: 'a', label: 'A', kind: 'model' as const, color: '#fff', radius: 4 }],
+      edges: [{ source: 'a', target: 'a', color: '#fff', kind: 'relates_to' }],
+    })).toThrow(/self-loop/);
+    expect(KnowledgeGraph2DScene(props).props.layoutDimensions).toBe(2);
   });
 });
 

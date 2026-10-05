@@ -13,16 +13,16 @@ type JsonRecord = Record<string, any>;
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const NEURO_SKILLS = [
-  ['neuro.analog_trace', 4, 'figure.analog_trace', 5],
-  ['neuro.compartment_trace', 4, 'figure.compartment_trace', 5],
-  ['neuro.correlogram', 4, 'figure.correlogram', 5],
-  ['neuro.isi_distribution', 4, 'figure.distribution', 5],
-  ['neuro.multisignal_trace', 4, 'figure.multisignal_trace', 5],
-  ['neuro.phase_plane', 5, 'figure.phase_plane', 6],
-  ['neuro.population_rate', 4, 'figure.population_rate', 5],
-  ['neuro.psth', 4, 'figure.psth', 5],
-  ['neuro.response_curve', 4, 'figure.response_curve', 5],
-  ['neuro.spike_raster', 6, 'figure.spike_raster', 7],
+  ['neuro.analog_trace', 5, 'figure.analog_trace', 6],
+  ['neuro.compartment_trace', 5, 'figure.compartment_trace', 6],
+  ['neuro.correlogram', 5, 'figure.correlogram', 6],
+  ['neuro.isi_distribution', 5, 'figure.distribution', 6],
+  ['neuro.multisignal_trace', 5, 'figure.multisignal_trace', 6],
+  ['neuro.phase_plane', 6, 'figure.phase_plane', 7],
+  ['neuro.population_rate', 5, 'figure.population_rate', 6],
+  ['neuro.psth', 5, 'figure.psth', 6],
+  ['neuro.response_curve', 5, 'figure.response_curve', 6],
+  ['neuro.spike_raster', 7, 'figure.spike_raster', 8],
 ] as const;
 
 function skillSource(skillId: string): JsonRecord {

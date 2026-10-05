@@ -133,12 +133,12 @@ const findContinuousOffGridExample = (contract: DelayContract): DelayExample | u
   });
 
 describe('model-conditioned NEST delay-resolution claims', () => {
-  it('publishes the scientific erratum as skill revision 5 and the global renderer revision 5', () => {
+  it('publishes the scientific erratum with skill revision 6 and renderer revision 6', () => {
     for (const { contract, relativePath } of contracts) {
-      expect(contract.revision, relativePath).toBe(5);
-      expect(contract.renderer.revision, relativePath).toBe(5);
+      expect(contract.revision, relativePath).toBe(6);
+      expect(contract.renderer.revision, relativePath).toBe(6);
       expect(contract.outputAuthority.evaluator.id, relativePath)
-        .toBe(`${contract.id}.output_authority.v5`);
+        .toBe(`${contract.id}.output_authority.v6`);
     }
   });
 

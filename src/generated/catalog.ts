@@ -128,7 +128,7 @@ export type StableSkillId = (typeof STABLE_SKILL_IDS)[number];
 export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> = freezeGenerated({
   "network.adjacency_matrix": {
     "id": "network.adjacency_matrix",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -146,7 +146,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 5,
+      "revision": 6,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -360,7 +360,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.adjacency_matrix.output_authority.v4"
+        "id": "network.adjacency_matrix.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -616,7 +616,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "network.connection_graph": {
     "id": "network.connection_graph",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -633,7 +633,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.connection_graph",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -917,7 +917,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.connection_graph.output_authority.v4"
+        "id": "network.connection_graph.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -1209,7 +1209,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "network.degree_distribution": {
     "id": "network.degree_distribution",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -1228,7 +1228,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -1398,7 +1398,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.degree_distribution.output_authority.v4"
+        "id": "network.degree_distribution.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -1639,7 +1639,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "network.delay_distribution": {
     "id": "network.delay_distribution",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -1659,7 +1659,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -1892,7 +1892,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.delay_distribution.output_authority.v5"
+        "id": "network.delay_distribution.output_authority.v6"
       },
       "requestPaths": [
         {
@@ -2178,7 +2178,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "network.delay_matrix": {
     "id": "network.delay_matrix",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -2197,7 +2197,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 5,
+      "revision": 6,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -2424,7 +2424,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.delay_matrix.output_authority.v5"
+        "id": "network.delay_matrix.output_authority.v6"
       },
       "requestPaths": [
         {
@@ -2718,7 +2718,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "network.spatial_map_2d": {
     "id": "network.spatial_map_2d",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -2739,7 +2739,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.spatial_map_2d",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -3037,7 +3037,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.spatial_map_2d.output_authority.v4"
+        "id": "network.spatial_map_2d.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -3319,7 +3319,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "network.synaptic_weight_trace": {
     "id": "network.synaptic_weight_trace",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -3340,7 +3340,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.synaptic_weight_trace",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -3669,7 +3669,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.synaptic_weight_trace.output_authority.v4"
+        "id": "network.synaptic_weight_trace.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -3995,7 +3995,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "network.weight_distribution": {
     "id": "network.weight_distribution",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -4015,7 +4015,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -4210,7 +4210,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.weight_distribution.output_authority.v4"
+        "id": "network.weight_distribution.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -4481,7 +4481,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "network.weight_matrix": {
     "id": "network.weight_matrix",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -4498,7 +4498,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 5,
+      "revision": 6,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -4738,7 +4738,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.weight_matrix.output_authority.v4"
+        "id": "network.weight_matrix.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -5028,7 +5028,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "neuro.analog_trace": {
     "id": "neuro.analog_trace",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -5046,7 +5046,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.analog_trace",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -5324,7 +5324,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.analog_trace.output_authority.v4"
+        "id": "neuro.analog_trace.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -5585,7 +5585,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "neuro.compartment_trace": {
     "id": "neuro.compartment_trace",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -5603,7 +5603,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.compartment_trace",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -5826,7 +5826,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.compartment_trace.output_authority.v4"
+        "id": "neuro.compartment_trace.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -6111,7 +6111,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "neuro.correlogram": {
     "id": "neuro.correlogram",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -6130,7 +6130,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.correlogram",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -6297,7 +6297,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.correlogram.output_authority.v4"
+        "id": "neuro.correlogram.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -6579,7 +6579,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "neuro.isi_distribution": {
     "id": "neuro.isi_distribution",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -6596,7 +6596,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -6824,7 +6824,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.isi_distribution.output_authority.v4"
+        "id": "neuro.isi_distribution.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -7074,7 +7074,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "neuro.multisignal_trace": {
     "id": "neuro.multisignal_trace",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -7091,7 +7091,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.multisignal_trace",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -7498,7 +7498,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.multisignal_trace.output_authority.v4"
+        "id": "neuro.multisignal_trace.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -7848,7 +7848,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "neuro.phase_plane": {
     "id": "neuro.phase_plane",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -7869,7 +7869,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.phase_plane",
-      "revision": 6
+      "revision": 7
     },
     "semanticValidators": [
       {
@@ -8102,7 +8102,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.phase_plane.output_authority.v5"
+        "id": "neuro.phase_plane.output_authority.v6"
       },
       "requestPaths": [
         {
@@ -8380,7 +8380,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "neuro.population_rate": {
     "id": "neuro.population_rate",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -8394,7 +8394,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.population_rate",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -8550,7 +8550,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.population_rate.output_authority.v4"
+        "id": "neuro.population_rate.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -8757,7 +8757,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "neuro.psth": {
     "id": "neuro.psth",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -8774,7 +8774,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.psth",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -9117,7 +9117,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.psth.output_authority.v4"
+        "id": "neuro.psth.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -9399,7 +9399,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "neuro.response_curve": {
     "id": "neuro.response_curve",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -9418,7 +9418,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.response_curve",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -9743,7 +9743,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.response_curve.output_authority.v4"
+        "id": "neuro.response_curve.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -10024,7 +10024,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "neuro.spike_raster": {
     "id": "neuro.spike_raster",
-    "revision": 6,
+    "revision": 7,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -10042,7 +10042,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.spike_raster",
-      "revision": 7
+      "revision": 8
     },
     "semanticValidators": [
       {
@@ -10226,7 +10226,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.spike_raster.output_authority.v6"
+        "id": "neuro.spike_raster.output_authority.v7"
       },
       "requestPaths": [
         {
@@ -11423,7 +11423,7 @@ export const LEGACY_SKILL_MAP: Readonly<Record<string, LegacyMapEntry>> = freeze
 export const RENDERERS = freezeGenerated({
   "figure.analog_trace": {
     "id": "figure.analog_trace",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "marks": [
       "line",
@@ -11435,7 +11435,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.multisignal_trace": {
     "id": "figure.multisignal_trace",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "marks": [
       "line",
@@ -11447,7 +11447,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.compartment_trace": {
     "id": "figure.compartment_trace",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "marks": [
       "line",
@@ -11458,7 +11458,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.spike_raster": {
     "id": "figure.spike_raster",
-    "revision": 7,
+    "revision": 8,
     "status": "stable",
     "marks": [
       "rule",
@@ -11469,7 +11469,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.population_rate": {
     "id": "figure.population_rate",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "marks": [
       "path",
@@ -11481,7 +11481,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.psth": {
     "id": "figure.psth",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "marks": [
       "rect",
@@ -11493,7 +11493,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.correlogram": {
     "id": "figure.correlogram",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "marks": [
       "rule",
@@ -11505,7 +11505,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.distribution": {
     "id": "figure.distribution",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "marks": [
       "rect",
@@ -11517,7 +11517,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.response_curve": {
     "id": "figure.response_curve",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "marks": [
       "point",
@@ -11529,7 +11529,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.phase_plane": {
     "id": "figure.phase_plane",
-    "revision": 6,
+    "revision": 7,
     "status": "stable",
     "marks": [
       "line",
@@ -11542,7 +11542,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.connection_graph": {
     "id": "figure.connection_graph",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "marks": [
       "line",
@@ -11555,7 +11555,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.matrix": {
     "id": "figure.matrix",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "marks": [
       "rect",
@@ -11566,7 +11566,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.spatial_map_2d": {
     "id": "figure.spatial_map_2d",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "marks": [
       "point",
@@ -11579,7 +11579,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.synaptic_weight_trace": {
     "id": "figure.synaptic_weight_trace",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "marks": [
       "path",

@@ -266,7 +266,7 @@ function canonicalizeRequest(
   out.presentation = {
     themeId: 'light',
     width: 720,
-    height: 440,
+    height: 'auto',
     budgetProfile: 'standard',
     ...presentation,
   };

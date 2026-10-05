@@ -780,6 +780,65 @@ describe('PreparedKnowledgeGraphPresentationV1 authority', () => {
 });
 
 describe('coherent knowledge-graph surfaces', () => {
+  it('changes layout dimensions without replacing the prepared source or controlled selection', async () => {
+    const spec = corpusSpec();
+    const contexts: Parameters<ComponentProps<typeof KnowledgeGraphAccessibleFigure>['renderVisual']>[1][] = [];
+    const dimensions: unknown[] = [];
+    const onSelect = vi.fn();
+    const props = {
+      spec,
+      selectedId: (spec as { params: KnowledgeGraph3DParams }).params.nodes[0].id,
+      onSelect,
+      hoverId: null,
+      onHover: () => {},
+      reducedMotion: true,
+      renderVisual: (scene: ReactElement, context: Parameters<ComponentProps<typeof KnowledgeGraphAccessibleFigure>['renderVisual']>[1]) => {
+        contexts.push(context);
+        dimensions.push((scene as ReactElement<{ layoutDimensions: 2 | 3 }>).props.layoutDimensions);
+        return <div>controlled visual</div>;
+      },
+    };
+    let renderer!: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = create(<KnowledgeGraphAccessibleFigure {...props} layoutDimensions={3} />);
+    });
+    const spatial = JSON.stringify(renderer.toJSON());
+    await act(async () => {
+      renderer.update(<KnowledgeGraphAccessibleFigure {...props} layoutDimensions={2} />);
+    });
+    expect(dimensions).toEqual([3, 2]);
+    expect(contexts[1].presentation).toBe(contexts[0].presentation);
+    expect(contexts[1].liveForceAvailability).toEqual(contexts[0].liveForceAvailability);
+    expect(JSON.stringify(renderer.toJSON())).toBe(spatial);
+    expect(onSelect).not.toHaveBeenCalled();
+    await act(async () => renderer.unmount());
+    expect(() => renderToStaticMarkup(
+      <KnowledgeGraphAccessibleFigure {...props} layoutDimensions={1 as never} />,
+    )).toThrow(/2 or 3/);
+    expect(renderToStaticMarkup(
+      <KnowledgeGraphAccessibleFigure {...props} layoutDimensions={2} visualAvailable={false} />,
+    )).toContain('interactive 2D view is unavailable');
+  });
+
+  it('retains caption and records when planar force capacity is unavailable', () => {
+    const renderVisual = vi.fn(() => <div>unreachable visual</div>);
+    const html = renderToStaticMarkup(
+      <KnowledgeGraphAccessibleFigure
+        spec={oversizedFilterableCorpusSpec()}
+        layoutDimensions={2}
+        selectedId={null}
+        onSelect={() => {}}
+        hoverId={null}
+        onHover={() => {}}
+        renderVisual={renderVisual}
+      />,
+    );
+    expect(renderVisual).not.toHaveBeenCalled();
+    expect(html).toContain('interactive 2D force view was not mounted');
+    expect(html).toContain('Advisory graph');
+    expect(html).toContain('Deterministic paginated knowledge graph record view');
+  });
+
   it('offers one minimal caption-bound React-only DOM composition', () => {
     expect(Object.keys(reactKnowledgeGraphDomPublic).sort()).toEqual([
       'KnowledgeGraphDomFigure',

@@ -4,13 +4,13 @@ const require_exact_binary64 = require('../exact-binary64-B9QJo1AS.cjs');
 const require_deep_freeze = require('../deep-freeze-CX4sIEIO.cjs');
 const require_limits = require('../limits-zgcdlCes.cjs');
 const require_errors = require('../errors-DaUwoa4p.cjs');
-const require_identity = require('../identity-Dt42RQe6.cjs');
-const require_catalog = require('../catalog-DG5yXxju.cjs');
+const require_identity = require('../identity-WmWIxK_t.cjs');
+const require_catalog = require('../catalog-Y8HvVZCF.cjs');
 const require_response_curve_basis = require('../response-curve-basis-BoFkbgrp.cjs');
-const require_contract_identity = require('../contract-identity-Cna7a4hn.cjs');
+const require_contract_identity = require('../contract-identity-CQdBXmkP.cjs');
 const require_disclosures = require('../disclosures-KX6A7VTY.cjs');
 const require_nest_time = require('../nest-time-CaEztfRm.cjs');
-const require_structural_validator = require('../structural-validator-C5wX5pu1.cjs');
+const require_structural_validator = require('../structural-validator-Kdfv8ABY.cjs');
 let _cortexel_request_capability = require("#cortexel-request-capability");
 
 //#region src/core/source-statements.ts
@@ -2029,8 +2029,23 @@ function formatCoordinate(value) {
 //#region src/render/layout.ts
 /** Shared deterministic layout constants used by compilers and the SVG serializer. */
 const LEGEND_ROW_HEIGHT = 18;
+/** Automatic layout is bounded; explicit dimensions never receive a hidden repair. */
+const DEFAULT_CANVAS_HEIGHT = 440;
+const MAX_CANVAS_HEIGHT = 4096;
+var RenderLayoutCapacityError = class extends Error {};
+function resolveCanvasHeight(requestedHeight, automatic, minimumHeight) {
+	if (!Number.isFinite(requestedHeight) || !(requestedHeight > 0) || !Number.isFinite(minimumHeight) || !(minimumHeight > 0)) throw new RenderLayoutCapacityError("Canvas dimensions and complete content capacity must be finite and positive.");
+	if (!automatic) return requestedHeight;
+	const resolved = Math.max(440, Math.ceil(minimumHeight));
+	if (resolved > 4096) throw new RenderLayoutCapacityError("The complete header, panels, gaps and mandatory footer exceed the 4096 CSS pixel automatic canvas bound.");
+	return resolved;
+}
 const DISCLOSURE_LINE_HEIGHT = 14;
 const DISCLOSURE_PLOT_GAP = 10;
+const TITLE_FONT_SIZE = 16;
+const TITLE_LINE_HEIGHT = 20;
+const SUBTITLE_FONT_SIZE = 12;
+const SUBTITLE_LINE_HEIGHT = 16;
 const DISCLOSURE_GLYPH_ADVANCE = 6;
 function wrapTextToCapacity(text, capacity) {
 	if (text.length === 0) return [""];
@@ -2049,6 +2064,27 @@ function wrapTextToCapacity(text, capacity) {
 		start = end;
 	}
 	return lines;
+}
+/** Owned SVG advance preserves readable font sizes without host font measurements. */
+function headerRenderedTextLength(text, width, fontSize) {
+	return Math.min(Math.max(1, width - 48), Math.max(1, Array.from(text).length * fontSize * .6));
+}
+/** Allocate exact, concatenable header rows before any plot coordinates exist. */
+function headerTextLayout(width, title, subtitle) {
+	if (!Number.isFinite(width) || width <= 48) throw new RenderLayoutCapacityError("The canvas must leave positive width for complete title and subtitle text.");
+	const availableWidth = width - 48;
+	const lines = (text, fontSize) => wrapTextToCapacity(text, Math.max(1, Math.floor(availableWidth / (fontSize * .6))));
+	const titleLines = lines(title, 16);
+	const subtitleLines = subtitle === void 0 ? [] : lines(subtitle, 12);
+	const titleInset = (titleLines.length - 1) * 20;
+	const extraInset = titleInset + Math.max(0, subtitleLines.length - 1) * 16;
+	return {
+		titleLines,
+		subtitleLines,
+		subtitleStartY: 46 + titleInset,
+		extraInset,
+		legendStartY: legendStartY(subtitle !== void 0) + extraInset
+	};
 }
 function disclosureAvailableWidth(width) {
 	return Math.max(1, width - 48);
@@ -2122,7 +2158,7 @@ function legendTextLayout(width, labels) {
 }
 /** Vertical plot inset needed for a one-row-per-series legend above the panels. */
 function legendPlotInset(width, itemCount, hasSubtitle, labels = []) {
-	if (itemCount <= 0) return 0;
+	if (itemCount <= 0) return hasSubtitle ? 16 : 0;
 	const effectiveLabels = labels.length === itemCount ? labels : Array.from({ length: itemCount }, () => "");
 	return (hasSubtitle ? 16 : 0) + legendTextLayout(width, effectiveLabels).totalHeight;
 }
@@ -2288,14 +2324,15 @@ var RenderPlanGeometryError = class extends Error {
 		this.name = "RenderPlanGeometryError";
 	}
 };
-function assertArrowGeometry(marks, panelId, prefix = "marks") {
+function assertMarkGeometry(marks, panelId, prefix = "marks") {
 	for (let markIndex = 0; markIndex < marks.length; markIndex++) {
 		const mark = marks[markIndex];
 		const markPath = `${prefix}/${markIndex}`;
 		if (mark.type === "group") {
-			assertArrowGeometry(mark.marks, panelId, `${markPath}/marks`);
+			assertMarkGeometry(mark.marks, panelId, `${markPath}/marks`);
 			continue;
 		}
+		if (mark.type === "text" && mark.textLength !== void 0 && (!Number.isFinite(mark.textLength) || !(mark.textLength > 0))) throw new RenderPlanGeometryError(panelId, `${markPath}/textLength`, "owned textLength must be finite and strictly positive");
 		if (mark.type !== "arrow") continue;
 		if (!Number.isFinite(mark.size) || !(mark.size > 0)) throw new RenderPlanGeometryError(panelId, `${markPath}/size`, `arrow size must be finite and strictly positive; got ${String(mark.size)}`);
 		for (let arrowIndex = 0; arrowIndex < mark.arrows.length; arrowIndex++) {
@@ -2310,9 +2347,9 @@ function assertArrowGeometry(marks, panelId, prefix = "marks") {
 		}
 	}
 }
-/** Validate direction-bearing geometry before resource accounting or byte emission. */
+/** Validate directed geometry and owned text widths before resource or byte emission. */
 function assertRenderPlanGeometry(plan) {
-	for (const panel of plan.panels) assertArrowGeometry(panel.marks, panel.id);
+	for (const panel of plan.panels) assertMarkGeometry(panel.marks, panel.id);
 }
 /** Escape text content: the five XML text-significant characters. */
 function escapeText(value) {
@@ -2536,7 +2573,7 @@ function emitText(writer, mark, rotation) {
 	if (rotation) {
 		const pivot = `${formatCoordinate(rotation.pivotX)} ${formatCoordinate(rotation.pivotY)}`;
 		attrs.push(["transform", `rotate(${rotation.angle} ${pivot})`], ["textLength", formatCoordinate(rotation.textLength)], ["lengthAdjust", "spacingAndGlyphs"]);
-	}
+	} else if (mark.textLength !== void 0) attrs.push(["textLength", formatCoordinate(mark.textLength)], ["lengthAdjust", "spacingAndGlyphs"]);
 	writer.text("text", mark.text, attrs);
 }
 const AXIS_LABEL_FONT_SIZE = 12;
@@ -2713,7 +2750,8 @@ function countMarks(marks) {
 function countPlanResources(plan) {
 	assertRenderPlanGeometry(plan);
 	let markCount = 0;
-	let textCount = 1 + (plan.subtitle ? 1 : 0) + disclosureLineCount(plan.width, [...plan.disclosures, ...plan.sourceStatements]);
+	const header = headerTextLayout(plan.width, plan.title, plan.subtitle);
+	let textCount = header.titleLines.length + header.subtitleLines.length + disclosureLineCount(plan.width, [...plan.disclosures, ...plan.sourceStatements]);
 	for (const panel of plan.panels) {
 		if (panel.label) textCount++;
 		if (panel.noData) {
@@ -2808,28 +2846,43 @@ function emitFigureTree(plan, digestOf, container) {
 		["height", plan.height],
 		["fill", colors.background]
 	]);
-	emitText(writer, {
-		type: "text",
-		x: 24,
-		y: 28,
-		text: plan.title,
-		anchor: "start",
-		fontSize: 16,
-		fill: colors.text,
-		decorative: true
-	});
-	if (plan.subtitle) emitText(writer, {
-		type: "text",
-		x: 24,
-		y: 46,
-		text: plan.subtitle,
-		anchor: "start",
-		fontSize: 12,
-		fill: colors.mutedText,
-		decorative: true
-	});
+	const header = headerTextLayout(plan.width, plan.title, plan.subtitle);
+	writer.open("g", [["data-header", "title"], ["data-header-text", plan.title]]);
+	for (let index = 0; index < header.titleLines.length; index += 1) {
+		const line = header.titleLines[index];
+		emitText(writer, {
+			type: "text",
+			x: 24,
+			y: 28 + index * 20,
+			text: line,
+			anchor: "start",
+			fontSize: 16,
+			textLength: headerRenderedTextLength(line, plan.width, 16),
+			fill: colors.text,
+			decorative: true
+		});
+	}
+	writer.close("g");
+	if (plan.subtitle !== void 0) {
+		writer.open("g", [["data-header", "subtitle"], ["data-header-text", plan.subtitle]]);
+		for (let index = 0; index < header.subtitleLines.length; index += 1) {
+			const line = header.subtitleLines[index];
+			emitText(writer, {
+				type: "text",
+				x: 24,
+				y: header.subtitleStartY + index * 16,
+				text: line,
+				anchor: "start",
+				fontSize: 12,
+				textLength: headerRenderedTextLength(line, plan.width, 12),
+				fill: colors.mutedText,
+				decorative: true
+			});
+		}
+		writer.close("g");
+	}
 	if (plan.legend && plan.legend.length > 0) {
-		const startY = legendStartY(plan.subtitle !== void 0);
+		const startY = header.legendStartY;
 		const legendLayout = legendTextLayout(plan.width, plan.legend.map((item) => item.label));
 		const { columns, itemWidth } = legendLayout;
 		writer.open("g", [["data-legend", "true"], ["aria-hidden", "true"]]);
@@ -3474,19 +3527,34 @@ function finiteExtentBy(values, project) {
 
 //#endregion
 //#region src/render/compile.ts
-const MARGIN$1 = {
+const MARGIN = {
 	top: 60,
 	right: 32,
 	bottom: 56,
 	left: 64
 };
-function panelBox$1(context) {
+/** Resolve complete content capacity once, before any coordinate or carrier exists. */
+function allocateCanvas(context, options = {}) {
+	const labels = options.legendLabels ?? [];
+	const count = options.panelCount ?? 1;
+	const gap = options.panelGap ?? 0;
+	const rowMinimum = options.minimumPanelHeight ?? 48;
+	if (!Number.isSafeInteger(count) || count < 1 || !Number.isFinite(gap) || gap < 0 || !Number.isFinite(rowMinimum) || !(rowMinimum > 0)) throw new RenderLayoutCapacityError("Complete panel count, row minima and gaps must be finite and nonnegative.");
 	const disclosureSpace = disclosureFooterHeight(context.width, [...context.disclosures, ...context.sourceStatements]);
+	const header = headerTextLayout(context.width, context.title, context.subtitle).extraInset + legendPlotInset(context.width, labels.length, context.subtitle !== void 0, labels);
+	const minimum = MARGIN.top + MARGIN.bottom + disclosureSpace + header + count * rowMinimum + (count - 1) * gap;
+	const height = resolveCanvasHeight(context.height, context.automaticHeight === true, minimum);
 	return {
-		x: MARGIN$1.left,
-		y: MARGIN$1.top,
-		width: context.width - MARGIN$1.left - MARGIN$1.right,
-		height: context.height - MARGIN$1.top - MARGIN$1.bottom - disclosureSpace
+		context: {
+			...context,
+			height
+		},
+		box: {
+			x: MARGIN.left,
+			y: MARGIN.top + header,
+			width: context.width - MARGIN.left - MARGIN.right,
+			height: height - MARGIN.top - MARGIN.bottom - disclosureSpace - header
+		}
 	};
 }
 function seriesColor(themeId, index) {
@@ -3524,7 +3592,9 @@ function frame$1(context, disclosures) {
 }
 /** Binned counts/rates -> a step panel (literal bins, drawn as horizontal steps). */
 function compileStepFigure(context, binStart, binEnd, values, xLabel, yLabel, skillId, outputAuthorityClassId) {
-	const box = panelBox$1(context);
+	const allocation = allocateCanvas(context);
+	context = allocation.context;
+	const box = allocation.box;
 	const noData = values.length === 0;
 	let panel;
 	if (noData) panel = {
@@ -3623,21 +3693,6 @@ function compileStepFigure(context, binStart, binEnd, values, xLabel, yLabel, sk
 
 //#endregion
 //#region src/render/compileFamilies.ts
-const MARGIN = {
-	top: 60,
-	right: 32,
-	bottom: 56,
-	left: 64
-};
-function panelBox(context) {
-	const disclosureSpace = disclosureFooterHeight(context.width, [...context.disclosures, ...context.sourceStatements]);
-	return {
-		x: MARGIN.left,
-		y: MARGIN.top,
-		width: context.width - MARGIN.left - MARGIN.right,
-		height: context.height - MARGIN.top - MARGIN.bottom - disclosureSpace
-	};
-}
 function accent(themeId) {
 	return require_catalog.THEMES[themeId]?.focus ?? "#0072b2";
 }
@@ -3967,10 +4022,15 @@ function compileTraceFigure(context, panels, options, skillId) {
 		...uncertaintyLegendEntries.map((entry) => `${entry.series.label || entry.series.id}: ${entry.uncertainty.label}`),
 		...panels.flatMap((panel) => (panel.referenceLines ?? []).map((reference) => reference.label))
 	];
-	const base = panelBox(context);
-	const legendInset = legendPlotInset(context.width, legendLabels.length, context.subtitle !== void 0, legendLabels);
 	const panelGap = panels.length > 1 ? options.sharedXAxis ? 22 : 50 : 0;
-	const availableHeight = base.height - legendInset - panelGap * Math.max(0, panels.length - 1);
+	const allocation = allocateCanvas(context, {
+		legendLabels,
+		panelCount: Math.max(1, panels.length),
+		panelGap
+	});
+	context = allocation.context;
+	const base = allocation.box;
+	const availableHeight = base.height - panelGap * Math.max(0, panels.length - 1);
 	const panelHeight = panels.length > 0 ? availableHeight / panels.length : availableHeight;
 	const globalYValues = allSeries.flatMap((entry) => traceYValues(entry, options.showSamplePoints === true));
 	const globalYExtent = options.sharedYDomain ? finiteExtent(globalYValues) : void 0;
@@ -3978,7 +4038,7 @@ function compileTraceFigure(context, panels, options, skillId) {
 	const compiledPanels = panels.map((panelSpec, panelIndex) => {
 		const box = {
 			x: base.x,
-			y: base.y + legendInset + panelIndex * (panelHeight + panelGap),
+			y: base.y + panelIndex * (panelHeight + panelGap),
 			width: base.width,
 			height: panelHeight
 		};
@@ -4114,7 +4174,6 @@ function compileTraceFigure(context, panels, options, skillId) {
 		...frame(context, skillId),
 		panels: compiledPanels.length > 0 ? compiledPanels : [emptyPanel({
 			...base,
-			y: base.y + legendInset,
 			height: availableHeight
 		}, "no trace panels declared")],
 		legend: [
@@ -4228,7 +4287,9 @@ function yAxis(label, scale) {
 * spans exactly [edge_i, edge_{i+1}), so an unequal-width bin is drawn at its true width.
 */
 function compileBarFigure(context, edges, values, xLabel, yLabel, skillId, xScaleKind = "linear", options = {}) {
-	const box = panelBox(context);
+	const allocation = allocateCanvas(context, { legendLabels: [] });
+	context = allocation.context;
+	const box = allocation.box;
 	const table = barTable(edges, values, yLabel, options.tableMetadata ?? []);
 	const accessibility = {
 		summary: context.summary,
@@ -4415,14 +4476,11 @@ const PSTH_TABLE_COLUMNS = [
 * generic non-negative histogram scale.
 */
 function compilePsthFigure(context, psth, options, skillId) {
-	const baseBox = panelBox(context);
-	const legendLabels = [options.seriesLabel, ...psth.missingBinCount > 0 ? ["No included trial covered this bin"] : []];
-	const legendInset = legendPlotInset(context.width, legendLabels.length, context.subtitle !== void 0, legendLabels);
-	const box = {
-		...baseBox,
-		y: baseBox.y + legendInset,
-		height: baseBox.height - legendInset
-	};
+	const finiteDisplay = psth.displayValues.filter((value) => value !== null && Number.isFinite(value));
+	const legendLabels = finiteDisplay.length > 0 ? [options.seriesLabel, ...psth.missingBinCount > 0 ? ["No included trial covered this bin"] : []] : [];
+	const allocation = allocateCanvas(context, { legendLabels });
+	context = allocation.context;
+	const box = allocation.box;
 	const rowsTotal = psth.counts.length;
 	const rows = Array.from({ length: rowsTotal }, (_unused, index) => [
 		options.seriesId,
@@ -4463,7 +4521,6 @@ function compilePsthFigure(context, psth, options, skillId) {
 		rowsInline: rows.length,
 		rowsTotal
 	};
-	const finiteDisplay = psth.displayValues.filter((value) => value !== null && Number.isFinite(value));
 	const plottedExtent = finiteExtent(finiteDisplay);
 	const xScale = linearScale(psth.edges[0], psth.edges[psth.edges.length - 1], box.x, box.x + box.width);
 	const xAxisModel = xAxis(`time from ${options.alignmentLabel} (${psth.binUnit})`, xScale);
@@ -4616,7 +4673,14 @@ function compilePsthFigure(context, psth, options, skillId) {
 }
 /** Multiple declared histogram groups, normalized independently and drawn side by side. */
 function compileGroupedBarFigure(context, edges, groups, xLabel, yLabel, skillId, xScaleKind = "linear", options = {}) {
-	const box = panelBox(context);
+	const legend = groups.length === 0 || edges.length < 2 ? [] : groups.map((group, index) => ({
+		label: group.label,
+		color: categoricalStyle(index).color,
+		glyph: "series"
+	}));
+	const allocation = allocateCanvas(context, { legendLabels: legend.map((entry) => entry.label) });
+	context = allocation.context;
+	const box = allocation.box;
 	const accessibility = {
 		summary: context.summary,
 		panelSummaries: [...options.summaryStatements ?? []]
@@ -4737,11 +4801,7 @@ function compileGroupedBarFigure(context, edges, groups, xLabel, yLabel, skillId
 			rowsInline: rows.length,
 			rowsTotal
 		},
-		legend: groups.map((group, index) => ({
-			label: group.label,
-			color: categoricalStyle(index).color,
-			glyph: "series"
-		})),
+		legend,
 		accessibility
 	};
 }
@@ -4796,7 +4856,9 @@ function barTable(edges, values, valueHeader = "Value", metadata = []) {
 * human labels are deliberately separate and are never used for lookup.
 */
 function compileRasterFigure(context, events, rows, windowStart, windowStop, timeLabel, markStyle, skillId) {
-	const box = panelBox(context);
+	const allocation = allocateCanvas(context, { legendLabels: [] });
+	context = allocation.context;
+	const box = allocation.box;
 	if (rows.length === 0) return {
 		...frame(context, skillId),
 		panels: [emptyPanel(box, "no declared event rows")],
@@ -4951,13 +5013,16 @@ function yAxisRowTicks(order, box, rowHeight) {
 * colour domain, so missingness cannot become zero or a partial aggregate.
 */
 function compileMatrixFigure(context, spec, skillId) {
-	const baseBox = panelBox(context);
-	if (spec.rowIds.length === 0 || spec.columnIds.length === 0) return {
-		...frame(context, skillId),
-		panels: [emptyPanel(baseBox, "empty node universe")],
-		table: emptyTable(),
-		legend: []
-	};
+	if (spec.rowIds.length === 0 || spec.columnIds.length === 0) {
+		const allocation = allocateCanvas(context);
+		context = allocation.context;
+		return {
+			...frame(context, skillId),
+			panels: [emptyPanel(allocation.box, "empty node universe")],
+			table: emptyTable(),
+			legend: []
+		};
+	}
 	const valued = spec.cells.filter((cell) => cell.value !== null && (cell.state === "present" || cell.state === "valued"));
 	const extent = finiteExtentBy(valued, (cell) => cell.value);
 	const missingPartial = spec.cells.filter((cell) => cell.state === "present_with_missing_value");
@@ -4995,12 +5060,9 @@ function compileMatrixFigure(context, spec, skillId) {
 			glyph: "band"
 		}] : []
 	];
-	const legendInset = legendPlotInset(context.width, legend.length, context.subtitle !== void 0, legend.map((entry) => entry.label));
-	const box = {
-		...baseBox,
-		y: baseBox.y + legendInset,
-		height: baseBox.height - legendInset
-	};
+	const allocation = allocateCanvas(context, { legendLabels: legend.map((entry) => entry.label) });
+	context = allocation.context;
+	const box = allocation.box;
 	const cellW = box.width / spec.columnIds.length;
 	const cellH = box.height / spec.rowIds.length;
 	const cellRect = (cell, fill) => ({
@@ -5217,13 +5279,16 @@ function insetArrow(from, target, radius) {
 }
 /** Measured 2-D nodes plus every declared connection, with no invented node geometry. */
 function compileSpatialMapFigure(context, spec, skillId) {
-	const baseBox = panelBox(context);
-	if (spec.nodes.length === 0) return {
-		...frame(context, skillId),
-		panels: [emptyPanel(baseBox, "no positioned nodes")],
-		table: emptyTable(),
-		legend: []
-	};
+	if (spec.nodes.length === 0) {
+		const allocation = allocateCanvas(context);
+		context = allocation.context;
+		return {
+			...frame(context, skillId),
+			panels: [emptyPanel(allocation.box, "no positioned nodes")],
+			table: emptyTable(),
+			legend: []
+		};
+	}
 	const nodeOrdinal = new Map(spec.nodes.map((node, index) => [node.id, index]));
 	const canonicalPair = (source, target) => nodeOrdinal.get(source) <= nodeOrdinal.get(target) ? [source, target] : [target, source];
 	const pairKey = (source, target) => {
@@ -5264,12 +5329,9 @@ function compileSpatialMapFigure(context, spec, skillId) {
 			glyph: "series"
 		}] : []
 	];
-	const legendInset = legendPlotInset(context.width, legend.length, context.subtitle !== void 0, legend.map((entry) => entry.label));
-	const box = {
-		...baseBox,
-		y: baseBox.y + legendInset,
-		height: baseBox.height - legendInset
-	};
+	const allocation = allocateCanvas(context, { legendLabels: legend.map((entry) => entry.label) });
+	context = allocation.context;
+	const box = allocation.box;
 	const mapper = equalScaleMapper(box, spec.nodes.map((node) => node.x), spec.nodes.map((node) => node.y), spec.domain);
 	const pageById = new Map(spec.nodes.map((node) => [node.id, mapper.map(node.x, node.y)]));
 	const scientificById = new Map(spec.nodes.map((node) => [node.id, {
@@ -5492,9 +5554,16 @@ function compileSpatialMapFigure(context, spec, skillId) {
 }
 /** One fixed-screen rectangle per accepted sample; missing values remain explicit marks. */
 function compileCompartmentHeatmapFigure(context, rows, window, xLabel, colorLabel, colorSpec, skillId) {
-	const box = panelBox(context);
 	const finite = rows.flatMap((row) => row.values.filter((value) => value !== null));
 	const extent = finiteExtent(finite);
+	const legend = [{
+		label: `${colorLabel}; global ${colorSpec.family} colour domain${extent ? ` ${formatNumber(extent.min)} to ${formatNumber(extent.max)}` : " unavailable"}`,
+		color: accent(context.themeId),
+		glyph: "series"
+	}];
+	const allocation = allocateCanvas(context, { legendLabels: legend.map((entry) => entry.label) });
+	context = allocation.context;
+	const box = allocation.box;
 	const xScale = linearScale(window[0], window[1], box.x, box.x + box.width);
 	const rowHeight = box.height / Math.max(1, rows.length);
 	const marks = [];
@@ -5543,16 +5612,14 @@ function compileCompartmentHeatmapFigure(context, rows, window, xLabel, colorLab
 			marks
 		}],
 		table: emptyTable(),
-		legend: [{
-			label: `${colorLabel}; global ${colorSpec.family} colour domain${extent ? ` ${formatNumber(extent.min)} to ${formatNumber(extent.max)}` : " unavailable"}`,
-			color: accent(context.themeId),
-			glyph: "series"
-		}]
+		legend
 	};
 }
 /** Correlogram stems: an independent vertical stem per lag bin; no bridging, no invented lag-zero. */
 function compileStemFigure(context, binCenters, counts, xLabel, yLabel, skillId) {
-	const box = panelBox(context);
+	const allocation = allocateCanvas(context, { legendLabels: [] });
+	context = allocation.context;
+	const box = allocation.box;
 	if (counts.length === 0) return {
 		...frame(context, skillId),
 		panels: [emptyPanel(box, "no pairs to plot")],
@@ -5761,7 +5828,6 @@ const RESPONSE_CURVE_TABLE_COLUMNS = [
 * `deriveResponseCurve` and its derivation receipt before this function runs.
 */
 function compileResponseCurveFigure(context, curve, options, skillId) {
-	const box = panelBox(context);
 	const rowsTotal = options.tableRows.length;
 	const table = {
 		policy: "complete_returned",
@@ -5771,6 +5837,38 @@ function compileResponseCurveFigure(context, curve, options, skillId) {
 		rowsTotal
 	};
 	const estimates = curve.conditions.map((condition) => condition.estimate).filter((value) => value !== null && Number.isFinite(value));
+	const guideConditionRuns = [];
+	let currentRun = [];
+	for (let index = 0; index < curve.conditions.length; index++) if (curve.conditions[index].estimate === null) {
+		if (currentRun.length >= 2) guideConditionRuns.push(currentRun);
+		currentRun = [];
+	} else currentRun.push(index);
+	if (currentRun.length >= 2) guideConditionRuns.push(currentRun);
+	const hasOrderedGuide = curve.axis !== "nominal" && guideConditionRuns.length > 0;
+	const missingLegend = curve.conditions.some((condition) => condition.estimate === null) ? [{
+		label: "Declared condition with undefined response (x position only)",
+		color: missingColor(context.themeId),
+		glyph: "series",
+		dash: "2 3"
+	}] : [];
+	const legend = estimates.length === 0 ? missingLegend : [
+		{
+			label: options.curveLabel,
+			color: accent(context.themeId),
+			glyph: "series",
+			marker: "circle"
+		},
+		...hasOrderedGuide ? [{
+			label: "Ordered-condition guide (not a fit or interpolation)",
+			color: missingColor(context.themeId),
+			glyph: "series",
+			dash: "4 3"
+		}] : [],
+		...missingLegend
+	];
+	const allocation = allocateCanvas(context, { legendLabels: legend.map((entry) => entry.label) });
+	context = allocation.context;
+	const box = allocation.box;
 	const panelSummaries = [...options.summaryStatements ?? []];
 	const xValues = curve.conditions.map((condition) => curve.axis === "numeric" ? condition.input : condition.displayOrdinal);
 	const xExtent = finiteExtent(xValues);
@@ -5803,12 +5901,6 @@ function compileResponseCurveFigure(context, curve, options, skillId) {
 		strokeWidth: 1,
 		dash: "2 3"
 	} : void 0;
-	const missingLegend = missingConditionLines.length > 0 ? [{
-		label: "Declared condition with undefined response (x position only)",
-		color: missingColor(context.themeId),
-		glyph: "series",
-		dash: "2 3"
-	}] : [];
 	if (estimates.length === 0) return {
 		...frame(context, skillId),
 		panels: [{
@@ -5819,7 +5911,7 @@ function compileResponseCurveFigure(context, curve, options, skillId) {
 			noData: { reason: "no declared condition has a usable response estimate" }
 		}],
 		table,
-		legend: missingLegend,
+		legend,
 		accessibility: {
 			summary: context.summary,
 			panelSummaries,
@@ -5846,17 +5938,9 @@ function compileResponseCurveFigure(context, curve, options, skillId) {
 			}];
 		}
 	} : linearNumericScale(yMinimum, yExtent.max, box.y + box.height, box.y);
-	const points = [];
-	const guideSubpaths = [];
-	let currentGuide = [];
-	for (let index = 0; index < curve.conditions.length; index++) {
-		const condition = curve.conditions[index];
-		if (condition.estimate === null) {
-			if (currentGuide.length >= 2) guideSubpaths.push(currentGuide);
-			currentGuide = [];
-			continue;
-		}
-		const point = {
+	const conditionPoints = curve.conditions.map((condition, index) => {
+		if (condition.estimate === null) return null;
+		return {
 			x: xScale.map(xValues[index]),
 			y: yScale.map(condition.estimate),
 			authority: {
@@ -5869,24 +5953,26 @@ function compileResponseCurveFigure(context, curve, options, skillId) {
 				}
 			}
 		};
-		points.push(point);
-		currentGuide.push({
+	});
+	const points = conditionPoints.filter((point) => point !== null);
+	const guideSubpaths = guideConditionRuns.map((run) => run.map((index) => {
+		const point = conditionPoints[index];
+		return {
 			x: point.x,
 			y: point.y,
 			authority: {
 				tag: "data_carrier",
 				classId: "series_paths",
 				provenance: {
-					conditionId: condition.conditionId,
-					displayOrdinal: condition.displayOrdinal,
+					conditionId: curve.conditions[index].conditionId,
+					displayOrdinal: curve.conditions[index].displayOrdinal,
 					role: "ordered_guide_vertex"
 				}
 			}
-		});
-	}
-	if (currentGuide.length >= 2) guideSubpaths.push(currentGuide);
+		};
+	}));
 	const marks = missingConditionMark ? [missingConditionMark] : [];
-	if (curve.axis !== "nominal" && guideSubpaths.length > 0) marks.push({
+	if (hasOrderedGuide) marks.push({
 		type: "line",
 		subpaths: guideSubpaths,
 		stroke: missingColor(context.themeId),
@@ -5909,21 +5995,7 @@ function compileResponseCurveFigure(context, curve, options, skillId) {
 			marks
 		}],
 		table,
-		legend: [
-			{
-				label: options.curveLabel,
-				color: accent(context.themeId),
-				glyph: "series",
-				marker: "circle"
-			},
-			...curve.axis !== "nominal" && guideSubpaths.length > 0 ? [{
-				label: "Ordered-condition guide (not a fit or interpolation)",
-				color: missingColor(context.themeId),
-				glyph: "series",
-				dash: "4 3"
-			}] : [],
-			...missingLegend
-		],
+		legend,
 		accessibility: {
 			summary: context.summary,
 			panelSummaries,
@@ -5965,19 +6037,6 @@ function splitStatePath(xs, ys) {
 }
 /** Every simultaneously supplied phase-plane carrier shares one domain and one panel. */
 function compilePhasePlaneFigure(context, spec, skillId) {
-	const baseBox = panelBox(context);
-	const provisionalLegendLabels = [
-		...spec.vectorField ? ["Caller-supplied vector field with declared magnitude scaling and direction"] : [],
-		...(spec.nullclines?.ids ?? []).map((id, index) => spec.nullclines?.labels[index] ?? id),
-		...(spec.trajectories?.ids ?? []).map((id, index) => spec.trajectories?.labels[index] ?? id),
-		...(spec.fixedPoints?.ids ?? []).map((id, index) => `${spec.fixedPoints?.labels[index] ?? id} (convergence status)`)
-	];
-	const legendInset = legendPlotInset(context.width, provisionalLegendLabels.length, context.subtitle !== void 0, provisionalLegendLabels);
-	const box = {
-		...baseBox,
-		y: baseBox.y + legendInset,
-		height: baseBox.height - legendInset
-	};
 	const xs = [
 		...spec.trajectories?.xs ?? [],
 		...spec.vectorField?.xs ?? [],
@@ -5992,18 +6051,71 @@ function compilePhasePlaneFigure(context, spec, skillId) {
 		...spec.fixedPoints?.ys ?? [],
 		...spec.vectorField?.domain ? [spec.vectorField.domain.yMin, spec.vectorField.domain.yMax] : []
 	].filter((value) => typeof value === "number" && Number.isFinite(value));
-	if (xs.length === 0 || ys.length === 0) return {
-		...frame(context, skillId),
-		panels: [emptyPanel(box, "no finite phase-plane carrier")],
-		table: emptyTable(),
-		legend: []
-	};
+	if (xs.length === 0 || ys.length === 0) {
+		const allocation = allocateCanvas(context);
+		context = allocation.context;
+		return {
+			...frame(context, skillId),
+			panels: [emptyPanel(allocation.box, "no finite phase-plane carrier")],
+			table: emptyTable(),
+			legend: []
+		};
+	}
+	const legend = [];
+	const legendField = spec.vectorField;
+	if (legendField) {
+		const maximumFieldMagnitude = legendField.magnitudes.reduce((maximum, magnitude) => magnitude > maximum ? magnitude : maximum, 0);
+		legend.push({
+			label: legendField.scaling === "unit_length" ? `Caller-supplied vector field; unit_length (direction only; magnitude does not affect arrow length); each nonzero vector has ${formatNumber(legendField.maxArrowLengthFraction * 100)}% of the shorter plot-axis length; ${legendField.magnitudeBasis} magnitudes remain in the table` : `Caller-supplied vector field; ${legendField.scaling}${legendField.scaling === "sqrt_magnitude" ? " (compressed magnitude)" : ""}; textual ${legendField.magnitudeBasis} magnitude key: ${formatNumber(maximumFieldMagnitude)} ${legendField.magnitudeUnit} maps to at most ${formatNumber(legendField.maxArrowLengthFraction * 100)}% of the shorter plot axis`,
+			color: neutralDataStroke(context.themeId),
+			glyph: "series"
+		});
+	}
+	const hasFiniteState = (id, carrier) => carrier.pointIds.some((pointId, index) => pointId === id && carrier.xs[index] !== null && carrier.ys[index] !== null && Number.isFinite(carrier.xs[index]) && Number.isFinite(carrier.ys[index]));
+	for (const [index, id] of (spec.nullclines?.ids ?? []).entries()) {
+		const style = categoricalStyle(index + 3);
+		legend.push({
+			label: `${spec.nullclines.labels[index] ?? id}${hasFiniteState(id, spec.nullclines) ? "" : " (declared; no drawable finite points)"}`,
+			color: style.color,
+			glyph: "series",
+			dash: style.dash,
+			marker: style.marker
+		});
+	}
+	for (const [index, id] of (spec.trajectories?.ids ?? []).entries()) {
+		const style = categoricalStyle(index);
+		legend.push({
+			label: `${spec.trajectories.labels[index] ?? id}${hasFiniteState(id, spec.trajectories) ? "" : " (declared; no recorded points)"}`,
+			color: style.color,
+			glyph: "series",
+			dash: style.dash,
+			marker: style.marker
+		});
+	}
+	for (const [index, id] of (spec.fixedPoints?.ids ?? []).entries()) {
+		const converged = spec.fixedPoints.converged[index];
+		const style = converged ? {
+			color: uncertaintyStroke(context.themeId),
+			marker: "diamond"
+		} : {
+			color: missingColor(context.themeId),
+			marker: "cross"
+		};
+		legend.push({
+			label: `${spec.fixedPoints.labels[index] ?? id} (${converged ? "converged" : "unconverged candidate"})`,
+			color: style.color,
+			glyph: "series",
+			marker: style.marker
+		});
+	}
+	const allocation = allocateCanvas(context, { legendLabels: legend.map((entry) => entry.label) });
+	context = allocation.context;
+	const box = allocation.box;
 	const xExtent = finiteExtent(xs);
 	const yExtent = finiteExtent(ys);
 	const xScale = linearScale(xExtent.min, xExtent.max, box.x, box.x + box.width);
 	const yScale = linearScale(yExtent.min, yExtent.max, box.y + box.height, box.y);
 	const marks = [];
-	const legend = [];
 	const field = spec.vectorField;
 	if (field) {
 		const normalized = field.xs.map((_x, index) => {
@@ -6092,12 +6204,6 @@ function compilePhasePlaneFigure(context, spec, skillId) {
 				}]
 			});
 		}
-		const maximumFieldMagnitude = field.magnitudes.reduce((maximum, magnitude) => magnitude > maximum ? magnitude : maximum, 0);
-		legend.push({
-			label: field.scaling === "unit_length" ? `Caller-supplied vector field; unit_length (direction only; magnitude does not affect arrow length); each nonzero vector has ${formatNumber(field.maxArrowLengthFraction * 100)}% of the shorter plot-axis length; ${field.magnitudeBasis} magnitudes remain in the table` : `Caller-supplied vector field; ${field.scaling}${field.scaling === "sqrt_magnitude" ? " (compressed magnitude)" : ""}; textual ${field.magnitudeBasis} magnitude key: ${formatNumber(maximumFieldMagnitude)} ${field.magnitudeUnit} maps to at most ${formatNumber(field.maxArrowLengthFraction * 100)}% of the shorter plot axis`,
-			color: neutralDataStroke(context.themeId),
-			glyph: "series"
-		});
 	}
 	const nullclines = spec.nullclines;
 	if (nullclines) for (let curveIndex = 0; curveIndex < nullclines.ids.length; curveIndex++) {
@@ -6172,13 +6278,6 @@ function compilePhasePlaneFigure(context, spec, skillId) {
 			type: "group",
 			id: `nullcline-${id}`,
 			marks: curveMarks
-		});
-		legend.push({
-			label: `${nullclines.labels[curveIndex] ?? id}${curveMarks.length === 0 ? " (declared; no drawable finite points)" : ""}`,
-			color: style.color,
-			glyph: "series",
-			dash: style.dash,
-			marker: style.marker
 		});
 	}
 	const trajectories = spec.trajectories;
@@ -6292,13 +6391,6 @@ function compilePhasePlaneFigure(context, spec, skillId) {
 			id: `trajectory-${id}`,
 			marks: trajectoryMarks
 		});
-		legend.push({
-			label: `${trajectories.labels[trajectoryIndex] ?? id}${trajectoryMarks.length === 0 ? " (declared; no recorded points)" : ""}`,
-			color: style.color,
-			glyph: "series",
-			dash: style.dash,
-			marker: style.marker
-		});
 	}
 	const fixed = spec.fixedPoints;
 	if (fixed) for (let index = 0; index < fixed.ids.length; index++) {
@@ -6331,12 +6423,6 @@ function compilePhasePlaneFigure(context, spec, skillId) {
 				shape: style.marker
 			}]
 		});
-		legend.push({
-			label: `${fixed.labels[index] ?? fixed.ids[index]} (${fixed.converged[index] ? "converged" : "unconverged candidate"})`,
-			color: style.color,
-			glyph: "series",
-			marker: style.marker
-		});
 	}
 	return {
 		...frame(context, skillId),
@@ -6352,82 +6438,15 @@ function compilePhasePlaneFigure(context, spec, skillId) {
 }
 /** Deterministic directed multigraph geometry with one auditable group per stroke. */
 function compileGraphFigure(context, spec, skillId) {
-	const baseBox = panelBox(context);
-	if (spec.nodes.length === 0) return {
-		...frame(context, skillId),
-		panels: [emptyPanel(baseBox, "empty node universe")],
-		table: emptyTable(),
-		legend: []
-	};
-	const provisionalLegendLabels = [
-		...spec.nodeColorByGroup ? [...new Map(spec.nodes.map((node) => [node.groupIndex ?? -1, node])).values()].map((node) => node.group ?? "ungrouped") : [],
-		...spec.edgeEncoding ? [`Edge ${spec.edgeEncoding.channel} encodes the declared value and its complete scale authority`] : [],
-		...spec.encodeDegreeAsArea ? ["Node marker area above the visibility baseline is proportional to declared degree"] : []
-	];
-	const legendInset = legendPlotInset(context.width, provisionalLegendLabels.length, context.subtitle !== void 0, provisionalLegendLabels);
-	const box = {
-		...baseBox,
-		y: baseBox.y + legendInset,
-		height: baseBox.height - legendInset
-	};
-	const position = /* @__PURE__ */ new Map();
-	let measuredMapper;
-	if (spec.layout === "measured_positions") {
-		measuredMapper = equalScaleMapper(box, spec.nodes.map((node) => node.x), spec.nodes.map((node) => node.y));
-		for (const node of spec.nodes) position.set(node.id, measuredMapper.map(node.x, node.y));
-	} else if (spec.layout === "schematic_layered") {
-		const grouped = /* @__PURE__ */ new Map();
-		for (const node of spec.nodes) {
-			const index = node.groupIndex ?? Number.MAX_SAFE_INTEGER;
-			const entries = grouped.get(index);
-			if (entries) entries.push(node);
-			else grouped.set(index, [node]);
-		}
-		const columns = [...grouped.entries()].sort((left, right) => left[0] - right[0]);
-		for (let column = 0; column < columns.length; column++) {
-			const members = columns[column][1];
-			for (let row = 0; row < members.length; row++) position.set(members[row].id, {
-				x: box.x + (column + .5) * box.width / columns.length,
-				y: box.y + (row + .5) * box.height / members.length
-			});
-		}
-	} else if (spec.layout === "schematic_grouped_circular") {
-		const grouped = /* @__PURE__ */ new Map();
-		for (const node of spec.nodes) {
-			const index = node.groupIndex ?? Number.MAX_SAFE_INTEGER;
-			const entries = grouped.get(index);
-			if (entries) entries.push(node);
-			else grouped.set(index, [node]);
-		}
-		const sectors = [...grouped.entries()].sort((left, right) => left[0] - right[0]);
-		const gap = 4 * Math.PI / 180;
-		const available = Math.max(0, 2 * Math.PI - gap * sectors.length);
-		let cursor = -Math.PI / 2;
-		const radius = Math.max(12, Math.min(box.width, box.height) / 2 - 24);
-		const cx = box.x + box.width / 2;
-		const cy = box.y + box.height / 2;
-		for (const [, members] of sectors) {
-			const sector = available * members.length / spec.nodes.length;
-			for (let index = 0; index < members.length; index++) {
-				const angle = cursor + sector * (index + .5) / members.length;
-				position.set(members[index].id, {
-					x: cx + radius * Math.cos(angle),
-					y: cy + radius * Math.sin(angle)
-				});
-			}
-			cursor += sector + gap;
-		}
-	} else {
-		const radius = Math.max(12, Math.min(box.width, box.height) / 2 - 24);
-		const cx = box.x + box.width / 2;
-		const cy = box.y + box.height / 2;
-		spec.nodes.forEach((node, index) => {
-			const angle = 2 * Math.PI * index / spec.nodes.length - Math.PI / 2;
-			position.set(node.id, {
-				x: cx + radius * Math.cos(angle),
-				y: cy + radius * Math.sin(angle)
-			});
-		});
+	if (spec.nodes.length === 0) {
+		const allocation = allocateCanvas(context);
+		context = allocation.context;
+		return {
+			...frame(context, skillId),
+			panels: [emptyPanel(allocation.box, "empty node universe")],
+			table: emptyTable(),
+			legend: []
+		};
 	}
 	let maximumDegree = 1;
 	for (const node of spec.nodes) {
@@ -6496,6 +6515,118 @@ function compileGraphFigure(context, spec, skillId) {
 		return [Math.abs(transformed)];
 	});
 	const magnitudeExtent = finiteExtent(magnitudeValues);
+	const legend = [
+		...spec.nodeColorByGroup ? [...new Map(spec.nodes.map((node) => [node.groupIndex ?? -1, node])).values()].map((node) => {
+			const style = categoricalStyle(node.groupIndex ?? 0);
+			return {
+				label: node.group ?? "ungrouped",
+				color: style.color,
+				glyph: "series",
+				marker: style.marker
+			};
+		}) : [],
+		...spec.degreeLabel ? [{
+			label: `Node labels show ${spec.degreeLabel}`,
+			color: accent(context.themeId),
+			glyph: "series"
+		}] : [],
+		...spec.edgeEncoding ? [{
+			label: `Edge ${spec.edgeEncoding.channel} encodes the declared value${spec.edgeEncoding.channel === "width" || spec.edgeEncoding.channel === "width_and_color" ? `; the observed magnitude from ${spec.edgeEncoding.colorKind === "diverging" ? `center ${formatNumber(spec.edgeEncoding.center ?? 0)}` : "zero"} maps to 1 to 5 px` : ""}${spec.edgeEncoding.scale === "symlog" ? ` after the contract-owned sign(value - reference) log1p(|value - reference| / 1 declared unit) transform` : ""}${paintValues.some((value) => value !== null && value < (spec.edgeEncoding.colorKind === "diverging" ? spec.edgeEncoding.center ?? 0 : 0)) ? "; values below the reference are dashed" : ""}`,
+			color: accent(context.themeId),
+			glyph: "series"
+		}] : [],
+		...spec.encodeDegreeAsArea ? [{
+			label: "Node marker area above the 3 px-radius visibility baseline is proportional to the declared degree; zero-degree nodes retain that baseline marker",
+			color: accent(context.themeId),
+			glyph: "series"
+		}] : []
+	];
+	const circularAngles = /* @__PURE__ */ new Map();
+	if (spec.layout === "schematic_grouped_circular") {
+		const grouped = /* @__PURE__ */ new Map();
+		for (const node of spec.nodes) {
+			const index = node.groupIndex ?? Number.MAX_SAFE_INTEGER;
+			const entries = grouped.get(index);
+			if (entries) entries.push(node);
+			else grouped.set(index, [node]);
+		}
+		const sectors = [...grouped.entries()].sort((left, right) => left[0] - right[0]);
+		const gap = 4 * Math.PI / 180;
+		const available = 2 * Math.PI - gap * sectors.length;
+		if (!(available > 0)) throw new RenderLayoutCapacityError("Complete graph sectors leave no positive angle after the declared group gaps.");
+		let cursor = -Math.PI / 2;
+		for (const [, members] of sectors) {
+			const sector = available * members.length / spec.nodes.length;
+			for (let index = 0; index < members.length; index++) circularAngles.set(members[index].id, cursor + sector * (index + .5) / members.length);
+			cursor += sector + gap;
+		}
+	} else if (spec.layout === "schematic_circular") spec.nodes.forEach((node, index) => {
+		circularAngles.set(node.id, 2 * Math.PI * index / spec.nodes.length - Math.PI / 2);
+	});
+	const degreeFontSize = 9;
+	const degreeOffset = 4;
+	const degreeGlyphAdvance = 6;
+	let circularInset = 24;
+	let minimumPanelHeight = 48;
+	if (circularAngles.size > 0) {
+		let footprint = 0;
+		for (const node of spec.nodes) {
+			const markerRadius = radiusById.get(node.id);
+			const markerEnvelope = Math.SQRT2 * markerRadius;
+			const labelEnvelope = spec.degreeLabel && node.degree !== void 0 ? Math.hypot(markerRadius + degreeOffset + String(node.degree).length * degreeGlyphAdvance + 2, 21) : 0;
+			footprint = Math.max(footprint, markerEnvelope, labelEnvelope);
+		}
+		const angles = [...circularAngles.values()].sort((left, right) => left - right);
+		let minimumAngle = 2 * Math.PI;
+		if (angles.length > 1) {
+			minimumAngle = angles[0] + 2 * Math.PI - angles[angles.length - 1];
+			for (let index = 1; index < angles.length; index++) minimumAngle = Math.min(minimumAngle, angles[index] - angles[index - 1]);
+		}
+		if (!(minimumAngle > 0)) throw new RenderLayoutCapacityError("Complete circular graph nodes need distinct declared angles.");
+		const requiredRadius = angles.length === 1 ? 12 : (2 * footprint + 4) / (2 * Math.sin(minimumAngle / 2));
+		circularInset = Math.max(24, Math.ceil(footprint) + 2);
+		minimumPanelHeight = 2 * (Math.max(12, requiredRadius) + circularInset);
+	}
+	const allocation = allocateCanvas(context, {
+		legendLabels: legend.map((entry) => entry.label),
+		minimumPanelHeight
+	});
+	context = allocation.context;
+	const box = allocation.box;
+	if (circularAngles.size > 0 && (box.width < minimumPanelHeight || box.height < minimumPanelHeight)) throw new RenderLayoutCapacityError("The requested width and height cannot contain every circular graph node and complete degree label. Increase the dimensions.");
+	const position = /* @__PURE__ */ new Map();
+	let measuredMapper;
+	if (spec.layout === "measured_positions") {
+		measuredMapper = equalScaleMapper(box, spec.nodes.map((node) => node.x), spec.nodes.map((node) => node.y));
+		for (const node of spec.nodes) position.set(node.id, measuredMapper.map(node.x, node.y));
+	} else if (spec.layout === "schematic_layered") {
+		const grouped = /* @__PURE__ */ new Map();
+		for (const node of spec.nodes) {
+			const index = node.groupIndex ?? Number.MAX_SAFE_INTEGER;
+			const entries = grouped.get(index);
+			if (entries) entries.push(node);
+			else grouped.set(index, [node]);
+		}
+		const columns = [...grouped.entries()].sort((left, right) => left[0] - right[0]);
+		for (let column = 0; column < columns.length; column++) {
+			const members = columns[column][1];
+			for (let row = 0; row < members.length; row++) position.set(members[row].id, {
+				x: box.x + (column + .5) * box.width / columns.length,
+				y: box.y + (row + .5) * box.height / members.length
+			});
+		}
+	} else {
+		const radius = Math.max(12, Math.min(box.width, box.height) / 2 - circularInset);
+		const cx = box.x + box.width / 2;
+		const cy = box.y + box.height / 2;
+		spec.nodes.forEach((node) => {
+			const angle = circularAngles.get(node.id);
+			position.set(node.id, {
+				x: cx + radius * Math.cos(angle),
+				y: cy + radius * Math.sin(angle)
+			});
+		});
+	}
 	const marks = [];
 	for (let groupIndex = 0; groupIndex < paintGroups.length; groupIndex++) {
 		const group = paintGroups[groupIndex];
@@ -6653,13 +6784,15 @@ function compileGraphFigure(context, spec, skillId) {
 		}];
 		if (spec.degreeLabel && node.degree !== void 0) {
 			const point = position.get(node.id);
+			const circular = circularAngles.size > 0;
 			nodeMarks.push({
 				type: "text",
-				x: point.x,
-				y: point.y - radiusById.get(node.id) - 4,
-				text: `${spec.degreeLabel} ${node.degree}`,
-				anchor: "middle",
-				fontSize: 9,
+				x: circular ? point.x - radiusById.get(node.id) - degreeOffset : point.x,
+				y: circular ? point.y + degreeFontSize / 3 : point.y - radiusById.get(node.id) - degreeOffset,
+				text: String(node.degree),
+				anchor: circular ? "end" : "middle",
+				fontSize: degreeFontSize,
+				...circular ? { textLength: String(node.degree).length * degreeGlyphAdvance } : {},
 				fill: color,
 				decorative: true
 			});
@@ -6671,15 +6804,6 @@ function compileGraphFigure(context, spec, skillId) {
 		});
 	}
 	const axes = measuredMapper ? [xAxis(spec.xLabel ?? `x (${spec.positionUnit ?? ""})`, measuredMapper.xScale), yAxis(spec.yLabel ?? `y (${spec.positionUnit ?? ""})`, measuredMapper.yScale)] : [];
-	const groupLegend = spec.nodeColorByGroup ? [...new Map(spec.nodes.map((node) => [node.groupIndex ?? -1, node])).values()].map((node) => {
-		const style = categoricalStyle(node.groupIndex ?? 0);
-		return {
-			label: node.group ?? "ungrouped",
-			color: style.color,
-			glyph: "series",
-			marker: style.marker
-		};
-	}) : [];
 	return {
 		...frame(context, skillId),
 		panels: [{
@@ -6689,19 +6813,7 @@ function compileGraphFigure(context, spec, skillId) {
 			marks
 		}],
 		table: emptyTable(),
-		legend: [
-			...groupLegend,
-			...spec.edgeEncoding ? [{
-				label: `Edge ${spec.edgeEncoding.channel} encodes the declared value${spec.edgeEncoding.channel === "width" || spec.edgeEncoding.channel === "width_and_color" ? `; the observed magnitude from ${spec.edgeEncoding.colorKind === "diverging" ? `center ${formatNumber(spec.edgeEncoding.center ?? 0)}` : "zero"} maps to 1 to 5 px` : ""}${spec.edgeEncoding.scale === "symlog" ? ` after the contract-owned sign(value - reference) log1p(|value - reference| / 1 declared unit) transform` : ""}${paintValues.some((value) => value !== null && value < (spec.edgeEncoding.colorKind === "diverging" ? spec.edgeEncoding.center ?? 0 : 0)) ? "; values below the reference are dashed" : ""}`,
-				color: accent(context.themeId),
-				glyph: "series"
-			}] : [],
-			...spec.encodeDegreeAsArea ? [{
-				label: "Node marker area above the 3 px-radius visibility baseline is proportional to the declared degree; zero-degree nodes retain that baseline marker",
-				color: accent(context.themeId),
-				glyph: "series"
-			}] : []
-		]
+		legend
 	};
 }
 function emptyTable() {
@@ -7354,7 +7466,7 @@ function degreeModel(requestValue) {
 		} : {} })
 	};
 }
-const DEGREE_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("network.degree_distribution", 4), (request) => modelFields$2(degreeModel(request)));
+const DEGREE_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("network.degree_distribution", 5), (request) => modelFields$2(degreeModel(request)));
 function populationRateModel(requestValue) {
 	const request = record$4(requestValue);
 	const data = record$4(request.data);
@@ -7439,7 +7551,7 @@ function populationRateModel(requestValue) {
 		})
 	};
 }
-const POPULATION_RATE_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.population_rate", 4), (request) => modelFields$2(populationRateModel(request)));
+const POPULATION_RATE_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.population_rate", 5), (request) => modelFields$2(populationRateModel(request)));
 function rasterPartition(data) {
 	const eventTimes = record$4(data.eventTimes);
 	const window = record$4(data.window);
@@ -7632,7 +7744,7 @@ function rasterModel(requestValue) {
 		})
 	};
 }
-const RASTER_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.spike_raster", 6), (request) => modelFields$2(rasterModel(request)));
+const RASTER_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.spike_raster", 7), (request) => modelFields$2(rasterModel(request)));
 function aggregate$1(values, method) {
 	const ordered = [...values].sort((left, right) => left - right);
 	if (ordered.length === 0) throw new Error("cannot aggregate an empty ordered pair");
@@ -7822,7 +7934,7 @@ function delayModel$1(requestValue) {
 		})
 	};
 }
-DELAY_AUTHORITY$1 = defineAuthorityEvaluator(authorityEvaluatorId("network.delay_distribution", 5), (request) => modelFields$2(delayModel$1(request)));
+DELAY_AUTHORITY$1 = defineAuthorityEvaluator(authorityEvaluatorId("network.delay_distribution", 6), (request) => modelFields$2(delayModel$1(request)));
 function weightGroups(data, parameters, bins) {
 	const connections = record$4(data.connections);
 	const weights = record$4(connections.weights);
@@ -7980,7 +8092,7 @@ function weightModel$2(requestValue) {
 		})
 	};
 }
-WEIGHT_AUTHORITY$2 = defineAuthorityEvaluator(authorityEvaluatorId("network.weight_distribution", 4), (request) => modelFields$2(weightModel$2(request)));
+WEIGHT_AUTHORITY$2 = defineAuthorityEvaluator(authorityEvaluatorId("network.weight_distribution", 5), (request) => modelFields$2(weightModel$2(request)));
 function isiTrainKey(sender, trial) {
 	return tupleKey(trial === void 0 ? ["sender", sender] : [
 		"sender-trial",
@@ -8124,7 +8236,7 @@ function isiModel(requestValue) {
 		disclosures: baseDisclosureFacts$2(request, { ...facts.intervalUnit !== bins.unit ? { unitConversions: [conversionDisclosure("inter-spike intervals", facts.intervalUnit, bins.unit)] } : {} })
 	};
 }
-ISI_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.isi_distribution", 4), (request) => modelFields$2(isiModel(request)));
+ISI_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.isi_distribution", 5), (request) => modelFields$2(isiModel(request)));
 function correlogramAxis$1(parameters) {
 	const range = record$4(parameters.lagRange);
 	const declaration = record$4(parameters.bins);
@@ -8455,7 +8567,7 @@ function correlogramModel(requestValue) {
 		})
 	};
 }
-CORRELOGRAM_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.correlogram", 4), (request) => modelFields$2(correlogramModel(request)));
+CORRELOGRAM_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.correlogram", 5), (request) => modelFields$2(correlogramModel(request)));
 function psthNormalizedValues(counts, denominators, bins, selectedSenderCount, normalization, valueUnit) {
 	return counts.map((count, index) => {
 		const denominator = denominators[index];
@@ -8688,7 +8800,7 @@ function psthModel(requestValue) {
 		})
 	};
 }
-PSTH_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.psth", 4), (request) => modelFields$2(psthModel(request)));
+PSTH_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.psth", 5), (request) => modelFields$2(psthModel(request)));
 const DISTRIBUTION_AUTHORITY_EVALUATORS = [
 	DEGREE_AUTHORITY,
 	DELAY_AUTHORITY$1,
@@ -8715,25 +8827,25 @@ const DISTRIBUTION_AUTHORITY_EVALUATORS = [
 * environment reads, clocks, or generated data.
 */
 const OUTPUT_AUTHORITY_IMPLEMENTATION_IDS_V1 = Object.freeze([
-	"network.adjacency_matrix.output_authority.v4",
-	"network.connection_graph.output_authority.v4",
-	"network.degree_distribution.output_authority.v4",
-	"network.delay_distribution.output_authority.v5",
-	"network.delay_matrix.output_authority.v5",
-	"network.spatial_map_2d.output_authority.v4",
-	"network.synaptic_weight_trace.output_authority.v4",
-	"network.weight_distribution.output_authority.v4",
-	"network.weight_matrix.output_authority.v4",
-	"neuro.analog_trace.output_authority.v4",
-	"neuro.compartment_trace.output_authority.v4",
-	"neuro.correlogram.output_authority.v4",
-	"neuro.isi_distribution.output_authority.v4",
-	"neuro.multisignal_trace.output_authority.v4",
-	"neuro.phase_plane.output_authority.v5",
-	"neuro.population_rate.output_authority.v4",
-	"neuro.psth.output_authority.v4",
-	"neuro.response_curve.output_authority.v4",
-	"neuro.spike_raster.output_authority.v6"
+	"network.adjacency_matrix.output_authority.v5",
+	"network.connection_graph.output_authority.v5",
+	"network.degree_distribution.output_authority.v5",
+	"network.delay_distribution.output_authority.v6",
+	"network.delay_matrix.output_authority.v6",
+	"network.spatial_map_2d.output_authority.v5",
+	"network.synaptic_weight_trace.output_authority.v5",
+	"network.weight_distribution.output_authority.v5",
+	"network.weight_matrix.output_authority.v5",
+	"neuro.analog_trace.output_authority.v5",
+	"neuro.compartment_trace.output_authority.v5",
+	"neuro.correlogram.output_authority.v5",
+	"neuro.isi_distribution.output_authority.v5",
+	"neuro.multisignal_trace.output_authority.v5",
+	"neuro.phase_plane.output_authority.v6",
+	"neuro.population_rate.output_authority.v5",
+	"neuro.psth.output_authority.v5",
+	"neuro.response_curve.output_authority.v5",
+	"neuro.spike_raster.output_authority.v7"
 ]);
 const IMPLEMENTATION_ID = /^[a-z][a-z0-9_.-]*$/u;
 const DANGEROUS_MAP_KEYS = /* @__PURE__ */ new Set([
@@ -9328,9 +9440,9 @@ function delayModel(requestValue) {
 		})
 	};
 }
-const ADJACENCY_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("network.adjacency_matrix", 4), (request) => modelFields$1(adjacencyModel(request)));
-const WEIGHT_AUTHORITY$1 = defineAuthorityEvaluator(authorityEvaluatorId("network.weight_matrix", 4), (request) => modelFields$1(weightModel$1(request)));
-const DELAY_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("network.delay_matrix", 5), (request) => modelFields$1(delayModel(request)));
+const ADJACENCY_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("network.adjacency_matrix", 5), (request) => modelFields$1(adjacencyModel(request)));
+const WEIGHT_AUTHORITY$1 = defineAuthorityEvaluator(authorityEvaluatorId("network.weight_matrix", 5), (request) => modelFields$1(weightModel$1(request)));
+const DELAY_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("network.delay_matrix", 6), (request) => modelFields$1(delayModel(request)));
 const MATRIX_AUTHORITY_EVALUATORS = [
 	ADJACENCY_AUTHORITY,
 	WEIGHT_AUTHORITY$1,
@@ -9720,7 +9832,7 @@ function graphModel(requestValue) {
 		})
 	};
 }
-const GRAPH_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("network.connection_graph", 4), (request) => modelFields(graphModel(request)));
+const GRAPH_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("network.connection_graph", 5), (request) => modelFields(graphModel(request)));
 function spatialModel(requestValue) {
 	const request = record$2(requestValue);
 	const data = record$2(request.data);
@@ -9953,7 +10065,7 @@ function spatialModel(requestValue) {
 		})
 	};
 }
-const SPATIAL_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("network.spatial_map_2d", 4), (request) => modelFields(spatialModel(request)));
+const SPATIAL_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("network.spatial_map_2d", 5), (request) => modelFields(spatialModel(request)));
 function convertedCarrier(value, targetUnit) {
 	const node = record$2(value);
 	const sourceUnit = String(node.unit);
@@ -10377,7 +10489,7 @@ function phaseModel(requestValue) {
 		})
 	};
 }
-const PHASE_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.phase_plane", 5), (request) => modelFields(phaseModel(request)));
+const PHASE_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.phase_plane", 6), (request) => modelFields(phaseModel(request)));
 function responseEstimate(values, estimator, trimFraction) {
 	if (values.length === 0) return null;
 	if (estimator === "mean") return require_exact_binary64.exactBinary64Mean(values);
@@ -10751,7 +10863,7 @@ function responseModel(requestValue) {
 		})
 	};
 }
-const RESPONSE_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.response_curve", 4), (request) => modelFields(responseModel(request)));
+const RESPONSE_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.response_curve", 5), (request) => modelFields(responseModel(request)));
 const TOPOLOGY_DYNAMICS_AUTHORITY_EVALUATORS = [
 	GRAPH_AUTHORITY,
 	SPATIAL_AUTHORITY,
@@ -11547,7 +11659,7 @@ function analogModel(requestValue) {
 		disclosures: traceDisclosureFacts(request, parameters, traces, traces.map(() => uncertainty))
 	};
 }
-const ANALOG_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.analog_trace", 4), (request) => {
+const ANALOG_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.analog_trace", 5), (request) => {
 	const model = analogModel(request);
 	return {
 		"table.rows": rowSequence(model.rows),
@@ -11704,7 +11816,7 @@ function multisignalModel(requestValue) {
 		disclosures: traceDisclosureFacts(request, parameters, traces, uncertainties)
 	};
 }
-const MULTISIGNAL_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.multisignal_trace", 4), (request) => {
+const MULTISIGNAL_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.multisignal_trace", 5), (request) => {
 	const model = multisignalModel(request);
 	return {
 		"table.rows": rowSequence(model.rows),
@@ -11992,7 +12104,7 @@ function compartmentModel(requestValue) {
 		})
 	};
 }
-const COMPARTMENT_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.compartment_trace", 4), (request) => {
+const COMPARTMENT_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("neuro.compartment_trace", 5), (request) => {
 	const model = compartmentModel(request);
 	return {
 		"table.rows": rowSequence(model.rows),
@@ -13037,7 +13149,7 @@ function weightModel(requestValue) {
 		})
 	};
 }
-const WEIGHT_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("network.synaptic_weight_trace", 4), (request) => {
+const WEIGHT_AUTHORITY = defineAuthorityEvaluator(authorityEvaluatorId("network.synaptic_weight_trace", 5), (request) => {
 	const model = weightModel(request);
 	return {
 		"table.rows": rowSequence(model.rows),
@@ -20741,8 +20853,12 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
 		const yAxisRecord = rec(axes?.y) ?? {};
 		const xAxisUnit = String(xAxisRecord.unit);
 		const yAxisUnit = String(yAxisRecord.unit);
-		const xLabel = `${String(xAxisRecord.label ?? "x")} (${require_response_curve_basis.unitLabel(xAxisUnit)})`;
-		const yLabel = `${String(yAxisRecord.label ?? "y")} (${require_response_curve_basis.unitLabel(yAxisUnit)})`;
+		const xUnitLabel = xAxisUnit === "1" ? "dimensionless" : require_response_curve_basis.unitLabel(xAxisUnit);
+		const yUnitLabel = yAxisUnit === "1" ? "dimensionless" : require_response_curve_basis.unitLabel(yAxisUnit);
+		const xQuantityLabel = String(xAxisRecord.label ?? "x");
+		const yQuantityLabel = String(yAxisRecord.label ?? "y");
+		const xLabel = xUnitLabel ? `${xQuantityLabel} (${xUnitLabel})` : xQuantityLabel;
+		const yLabel = yUnitLabel ? `${yQuantityLabel} (${yUnitLabel})` : yQuantityLabel;
 		const vectorField = rec(data.vectorField);
 		const nullclines = rec(data.nullclines);
 		const fixedPoints = rec(data.fixedPoints);
@@ -21974,6 +22090,7 @@ function buildFigureFromValidated(validated) {
 		}]
 	};
 	const forced = forcedDisclosures(validated.skillId, request);
+	const defaultTitle = validated.skillId === "network.degree_distribution" ? `${rec(request.parameters)?.direction === "out" ? "Out" : "In"}-degree distribution` : catalog.title;
 	const makeContext = (_rowsTotal, extraFacts = {}) => {
 		const facts = disclosureFacts(request, {
 			...extraFacts,
@@ -21985,8 +22102,10 @@ function buildFigureFromValidated(validated) {
 			sourceRequestDigest: validated.requestDigest,
 			width: num(presentation.width) ?? 720,
 			height: num(presentation.height) ?? 440,
+			automaticHeight: presentation.height === "auto",
 			themeId: presentation.themeId ?? "light",
-			title: presentation.title ?? catalog.title,
+			title: presentation.title ?? defaultTitle,
+			...typeof presentation.subtitle === "string" ? { subtitle: presentation.subtitle } : {},
 			disclosures,
 			sourceStatements,
 			summary: catalog.accessibility.summaryTemplate.replace(/\{[^}]+\}/g, "…"),
@@ -21997,6 +22116,16 @@ function buildFigureFromValidated(validated) {
 	try {
 		compiled = compile(validated, makeContext, limits.pairwiseOperations, returnedTableLimit);
 	} catch (error) {
+		if (error instanceof RenderLayoutCapacityError) return {
+			ok: false,
+			errors: [require_errors.makeError({
+				code: "RENDER_LAYOUT_UNAVAILABLE",
+				stage: "render",
+				skillId: validated.skillId,
+				instancePath: "/presentation",
+				message: error.message
+			})]
+		};
 		return {
 			ok: false,
 			errors: [require_errors.makeError({

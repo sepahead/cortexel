@@ -31,6 +31,7 @@ import { parseJsonStrict, type JsonParseLimits } from '../src/core/parse-json.js
 import { parseAndValidateRequest, validateRequestValue } from '../src/core/request.js';
 import { validateStructure } from '../src/core/structural-validator.js';
 import { deriveExactAggregateCountRateInUnit } from '../src/core/units.js';
+import { SKILL_CATALOG } from '../src/generated/catalog.js';
 import { UNITS, UNIT_ALIASES } from '../src/generated/registry.js';
 import { buildFigure } from '../src/render/buildFigure.js';
 
@@ -768,7 +769,7 @@ describe('cross-language parity — TypeScript vs Python', () => {
 
     const contract = contracts.find(({ id }) => id === 'neuro.response_curve');
     if (!contract) throw new Error('neuro.response_curve contract not found');
-    expect(contract.revision).toBe(4);
+    expect(contract.revision).toBe(SKILL_CATALOG['neuro.response_curve'].revision);
 
     const current = structuredClone(contract.examples.valid[0]);
     current.skill = { ...(current.skill as Record<string, unknown>), revision: contract.revision };

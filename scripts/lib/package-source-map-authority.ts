@@ -127,6 +127,8 @@ export const REVIEWED_PACKAGE_SOURCE_MAP_INPUTS = Object.freeze([
   'src/generated/catalog.ts',
   'src/generated/identity.ts',
   'src/generated/registry.ts',
+  'src/generated/structuralValidatorCatalog.ts',
+  'src/generated/structuralValidators.js',
   'src/render/buildFigure.ts',
   'src/render/compile.ts',
   'src/render/compileFamilies.ts',
@@ -145,7 +147,7 @@ const REVIEWED_SOURCE_SET: ReadonlySet<string> = new Set(
 
 /** SHA-256(JSON(sorted [identity, decoded UTF-8 source text] pairs)). */
 export const REVIEWED_PACKAGE_SOURCE_MAP_INPUT_CLOSURE_DIGEST =
-  'cd1a8b3ff0ea17a7cce36633b08110c3126e6a3a70e9044204972e3c03780e1f' as const;
+  '164ffac34fc4b7725e700c19be2904e196be9fa64894756aaf2ee539d27bc221' as const;
 
 export type SourceMapOwnerKind = 'runtime' | 'declaration';
 

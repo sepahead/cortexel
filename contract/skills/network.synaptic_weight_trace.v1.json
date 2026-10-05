@@ -1,6 +1,6 @@
 {
   "id": "network.synaptic_weight_trace",
-  "revision": 4,
+  "revision": 5,
   "status": "stable",
   "releaseReady": false,
   "title": "Synaptic weight over time, for identified synapses or a declared group",
@@ -1067,7 +1067,7 @@
   ],
   "renderer": {
     "id": "figure.synaptic_weight_trace",
-    "revision": 5
+    "revision": 6
   },
   "budgets": {
     "maxObservations": 2000000,
@@ -1107,7 +1107,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "network.synaptic_weight_trace.output_authority.v4"
+      "id": "network.synaptic_weight_trace.output_authority.v5"
     },
     "requestPaths": [
       {

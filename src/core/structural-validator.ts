@@ -1,40 +1,20 @@
 /**
- * Structural validation: does the request have the right SHAPE?
+ * Structural validation checks the exact request shape without data coercion.
  *
- * JSON Schema Draft 2020-12, compiled by Ajv in strict mode. Coercion, defaults,
- * property removal, and type conversion are all switched OFF. That matters more
- * than it sounds: with coercion on, the string `"5"` becomes the number `5`, and a
- * spike count that arrived as text would be silently accepted as a measurement.
- * Normalization is an explicit, recorded stage — it is not something a validator
- * does behind your back.
- *
- * Schemas are the ones in `contract/`. They are loaded from disk, not duplicated
- * here, so there is exactly one definition of what a request is.
- *
- * ---
- * On Ajv being a runtime dependency.
- *
- * The blueprint's stated target is `dependencies: {}`, with structural validators
- * precompiled ahead of time (Ajv's `standaloneCode`) so that no schema compiler —
- * and no `new Function` — reaches the runtime. That is the better architecture, and
- * it is not what the current development implementation does. Ajv 8 is a declared
- * runtime dependency; the development lockfile pins the exact version exercised by
- * this checkout. It appears in the SBOM, and the packed-artifact tests exercise it.
- *
- * The blueprint permits exactly this, provided the reason is written down rather
- * than glossed over, so: precompilation is a size-and-CSP optimization, not a
- * correctness one. The acceptance decisions are identical either way, and they are
- * pinned by the conformance corpus rather than by the validator's implementation.
- * It is recorded as a known limitation (docs/KNOWN_LIMITATIONS.md) and as an
- * unproven gate in the evidence ledger, not quietly omitted.
+ * The contract generator precompiles the complete Draft 2020-12 schema closure
+ * with Ajv standalone. Runtime validation needs no compiler, dynamic code
+ * generation, filesystem, or network access. The declared Ajv dependency still
+ * supplies two pure helpers. Independent live-Ajv parity and generated freshness
+ * remain separate gates; shape acceptance alone does not grant render authority.
  */
 
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import type { ErrorObject, ValidateFunction } from 'ajv';
 
-import Ajv2020, { type ErrorObject, type ValidateFunction } from 'ajv/dist/2020.js';
-
+import { CONTRACT_DIGEST } from '../generated/identity.js';
+import {
+  STRUCTURAL_VALIDATOR_CONTRACT_DIGEST,
+  STRUCTURAL_VALIDATORS,
+} from '../generated/structuralValidatorCatalog.js';
 import { canonicalDigest, canonicalDigestExcluding } from './canonicalize.js';
 import { finalizeErrors, makeError, type CortexelError } from './errors.js';
 import { projectNestWindowEndpointsV310 } from './semantics/nest-time.js';
@@ -51,145 +31,19 @@ import {
   normalizeDerivativeByExactAxisExtent,
 } from './units.js';
 
-// `import.meta.url` works in native ESM source runners as well as the ESM/CJS
-// shims. `__dirname` is absent under tools such as tsx and made source execution fail
-// before the CLI could even print its identity.
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-
-/**
- * Locate `contract/` from either the source tree or the packed artifact. The
- * schemas ship WITH the package — a validator that cannot find its contract is a
- * validator that validates nothing.
- */
-function findContractRoot(): string {
-  const candidates = [
-    // ESM code splitting may place shared validator code directly in dist/ rather
-    // than beside the public entry that imports it.
-    path.resolve(HERE, 'contract'),
-    // Installed bundles live at dist/<entry>/index.{js,cjs}; the closest contract
-    // directory must win even when a repository checkout also has contract/ above dist.
-    path.resolve(HERE, '../contract'),
-    // Source development loads this module from src/core/. The deeper adapters bundle
-    // also reaches dist/contract through this candidate.
-    path.resolve(HERE, '../../contract'),
-  ];
-  for (const candidate of candidates) {
-    if (existsSync(path.join(candidate, 'manifest.v1.json'))) return candidate;
-  }
-  throw new Error(
-    'cannot locate the Cortexel contract directory; the package is incomplete or was not packed correctly',
-  );
+if (STRUCTURAL_VALIDATOR_CONTRACT_DIGEST !== CONTRACT_DIGEST) {
+  throw new Error('generated structural validators do not match this build contract identity');
 }
 
-const CONTRACT_ROOT = findContractRoot();
-
-function loadSchema(relative: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(path.join(CONTRACT_ROOT, relative), 'utf8')) as Record<
-    string,
-    unknown
-  >;
+function getValidator(relative: string): ValidateFunction | undefined {
+  return Object.hasOwn(STRUCTURAL_VALIDATORS, relative)
+    ? STRUCTURAL_VALIDATORS[relative]
+    : undefined;
 }
 
-let ajv: Ajv2020 | undefined;
-const compiled = new Map<string, ValidateFunction>();
-
-function getAjv(): Ajv2020 {
-  if (ajv) return ajv;
-
-  const instance = new Ajv2020({
-    strict: true,
-    allErrors: true,
-
-    // Every one of these is off on purpose.
-    coerceTypes: false, // "5" must not become the number 5
-    useDefaults: false, // a default is materialized in an explicit, recorded stage
-    removeAdditional: false, // an unknown key must FAIL, not vanish
-    allowUnionTypes: true,
-    validateFormats: false, // no `format` keyword is load-bearing in the contract
-
-    // Two strict checks are switched off. Both are lints that cannot express an
-    // exception the contract genuinely needs — so each is re-implemented in
-    // scripts/generate-contract.ts, where the exception CAN be stated.
-    //
-    // `strictRequired` rejects a `required` naming a property not declared in the SAME
-    // schema object. That is exactly what a conditional does:
-    //
-    //   { properties: { scope: {...} },
-    //     if:   { properties: { kind: { const: "sampled" } } },
-    //     then: { required: ["retainedConnectionCount"] } }
-    //
-    // The property lives in the enclosing schema; the `then` only says when it becomes
-    // mandatory. With this on, the pattern cannot be expressed at all, so several
-    // skills would have to drop their conditional requirements — making the contract
-    // weaker, not stricter.
-    strictRequired: false,
-
-    // `strictTypes` rejects a type-specific keyword used without a `type`. The intent
-    // is good — `{maxLength: 5}` applied to a number is silently ignored — but it
-    // cannot be satisfied inside a `not`, where adding a type CHANGES THE MEANING:
-    //
-    //   not: { required: ["x"] }                 rejects any value carrying `x`
-    //   not: { type: "object", required: ["x"] } rejects only an OBJECT carrying `x`,
-    //                                            and now ACCEPTS a bare string
-    //
-    // Ajv cannot tell those apart, so satisfying it here would mean silently widening
-    // several negative constraints. The generator performs the same check with a `not`
-    // exemption instead, which is the version that is actually correct.
-    strictTypes: false,
-  });
-
-  // The shared $defs, plus the generated enums. Registering them by $id lets the
-  // per-skill schemas $ref them without a network fetch — Cortexel never resolves a
-  // schema over the wire.
-  instance.addSchema(loadSchema('schemas/common.v1.schema.json'));
-  instance.addSchema(loadSchema('schemas/generated/registry-enums.v1.schema.json'));
-  instance.addSchema(loadSchema('schemas/validation-error.v1.schema.json'));
-  const skillSchemaDirectory = path.join(CONTRACT_ROOT, 'schemas', 'skills');
-  for (const filename of readdirSync(skillSchemaDirectory)
-    .filter((name) => name.endsWith('.request.v1.schema.json'))
-    .sort()) {
-    instance.addSchema(loadSchema(path.join('schemas', 'skills', filename)));
-  }
-  instance.addSchema(loadSchema('schemas/stable-figure-request-union.v1.schema.json'));
-
-  ajv = instance;
-  return instance;
-}
-
-/** Compile (once) the request schema for a skill. */
+/** Select the installed precompiled request schema for one known skill. */
 function getSkillValidator(skillId: string): ValidateFunction | undefined {
-  const existing = compiled.get(skillId);
-  if (existing) return existing;
-
-  const file = path.join(CONTRACT_ROOT, 'schemas', 'skills', `${skillId}.request.v1.schema.json`);
-  if (!existsSync(file)) return undefined;
-
-  const schema = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
-
-  const registered = typeof schema.$id === 'string' ? getAjv().getSchema(schema.$id) : undefined;
-  if (registered) {
-    compiled.set(skillId, registered);
-    return registered;
-  }
-
-  let validate: ValidateFunction;
-  try {
-    validate = getAjv().compile(schema);
-  } catch (error) {
-    // A schema that will not compile is a CONTRACT defect, and it must say so.
-    // Swallowing it would be worse than useless: Ajv registers the $id before it
-    // reports the error, so a second attempt fails with "schema already exists" —
-    // which points at the cache and hides the actual broken keyword completely.
-    throw new Error(
-      `the request schema for "${skillId}" failed to compile: ${
-        error instanceof Error ? error.message : String(error)
-      }\nThis is a defect in contract/skills/${skillId}.v1.json, not in the request being validated.`,
-      { cause: error },
-    );
-  }
-
-  compiled.set(skillId, validate);
-  return validate;
+  return getValidator(`schemas/skills/${skillId}.request.v1.schema.json`);
 }
 
 /**
@@ -272,8 +126,8 @@ export interface StructuralResult {
   readonly errors: readonly CortexelError[];
 }
 
-let artifactValidator: ValidateFunction | undefined;
-let artifactValidatorCompileError: Error | undefined;
+const artifactValidator = getValidator('schemas/figure-artifact.v1.schema.json');
+const envelopeValidator = getValidator('schemas/figure-request.v1.schema.json');
 
 type JsonRecord = Record<string, unknown>;
 
@@ -2908,32 +2762,11 @@ function validateArtifactRelations(artifact: unknown): CortexelError[] {
  * output verification because this function receives no SVG or table bytes.
  */
 export function validateArtifactStructure(artifact: unknown): StructuralResult {
-  if (artifactValidatorCompileError) {
+  if (!artifactValidator) {
     return {
       ok: false,
-      errors: [relationError(
-        '',
-        `FigureArtifactV1 could not compile: ${artifactValidatorCompileError.message}.`,
-      )],
+      errors: [relationError('', 'the installed FigureArtifactV1 structural validator is missing.')],
     };
-  }
-  if (!artifactValidator) {
-    try {
-      artifactValidator = getAjv().compile(
-        loadSchema('schemas/figure-artifact.v1.schema.json'),
-      );
-    } catch (error) {
-      artifactValidatorCompileError = error instanceof Error
-        ? error
-        : new Error(String(error));
-      return {
-        ok: false,
-        errors: [relationError(
-          '',
-          `FigureArtifactV1 could not compile: ${artifactValidatorCompileError.message}.`,
-        )],
-      };
-    }
   }
   if (artifactValidator(artifact)) {
     try {
@@ -3013,11 +2846,12 @@ export function validateStructure(request: unknown, skillId: string): Structural
 
 /** The request envelope, for reading `skill.id` before dispatch. */
 export function validateEnvelope(request: unknown): StructuralResult {
-  const key = '__envelope__';
-  let validate = compiled.get(key);
+  const validate = envelopeValidator;
   if (!validate) {
-    validate = getAjv().compile(loadSchema('schemas/figure-request.v1.schema.json'));
-    compiled.set(key, validate);
+    return {
+      ok: false,
+      errors: [relationError('', 'the installed FigureRequestV1 envelope validator is missing.')],
+    };
   }
   if (validate(request)) return { ok: true, errors: [] };
   return {
@@ -3025,5 +2859,3 @@ export function validateEnvelope(request: unknown): StructuralResult {
     errors: (validate.errors ?? []).map((error) => translate(error, 'unknown')),
   };
 }
-
-export { CONTRACT_ROOT };

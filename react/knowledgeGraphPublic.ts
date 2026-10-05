@@ -8,8 +8,10 @@
 
 export {
   KnowledgeGraph3DScene,
+  KnowledgeGraph2DScene,
   type ControlsHandle,
   type KnowledgeGraph3DSceneProps,
+  type KnowledgeGraph2DSceneProps,
   type KnowledgeGraph3DEdge,
   type KnowledgeGraph3DNode,
 } from './KnowledgeGraph3DScene';

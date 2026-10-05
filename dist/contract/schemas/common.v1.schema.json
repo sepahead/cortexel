@@ -520,7 +520,14 @@
         "themeId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/generated/registry-enums.v1.schema.json#/$defs/themeId", "default": "light" },
         "paletteId": { "$ref": "#/$defs/label" },
         "width": { "type": "integer", "minimum": 160, "maximum": 4096, "default": 720 },
-        "height": { "type": "integer", "minimum": 120, "maximum": 4096, "default": 440 },
+        "height": {
+          "description": "An explicit integer fixes the canvas. Auto resolves complete content capacity before geometry, within 440 to 4096 CSS pixels.",
+          "anyOf": [
+            { "type": "integer", "minimum": 120, "maximum": 4096 },
+            { "type": "string", "const": "auto" }
+          ],
+          "default": "auto"
+        },
         "budgetProfile": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/generated/registry-enums.v1.schema.json#/$defs/budgetProfileId", "default": "standard" }
       },
       "additionalProperties": false

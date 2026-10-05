@@ -1,6 +1,6 @@
 {
   "id": "neuro.population_rate",
-  "revision": 4,
+  "revision": 5,
   "status": "stable",
   "releaseReady": false,
   "title": "Population firing rate over time",
@@ -195,7 +195,7 @@
     { "id": "uncertainty.supported_variant" }
   ],
 
-  "renderer": { "id": "figure.population_rate", "revision": 5 },
+  "renderer": { "id": "figure.population_rate", "revision": 6 },
 
   "budgets": {
     "maxObservations": 2000000,
@@ -219,7 +219,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "neuro.population_rate.output_authority.v4"
+      "id": "neuro.population_rate.output_authority.v5"
     },
     "requestPaths": [
       {
