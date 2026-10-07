@@ -28,12 +28,20 @@ import { unitLabel } from '../core/units.js';
 import type { Disclosure } from '../core/disclosures.js';
 import type { CallerSourceStatement } from '../core/source-statements.js';
 import { finiteExtent } from '../core/numeric.js';
-import { disclosureFooterHeight } from './layout.js';
+import {
+  disclosureFooterHeight,
+  legendPlotInset,
+  headerTextLayout,
+  MIN_PLOT_PANEL_HEIGHT,
+  RenderLayoutCapacityError,
+  resolveCanvasHeight,
+} from './layout.js';
 
 export interface CompileContext {
   readonly sourceRequestDigest: string;
   readonly width: number;
   readonly height: number;
+  readonly automaticHeight?: boolean;
   readonly themeId: string;
   readonly title: string;
   readonly subtitle?: string;
@@ -45,16 +53,45 @@ export interface CompileContext {
 
 const MARGIN = { top: 60, right: 32, bottom: 56, left: 64 } as const;
 
-function panelBox(context: CompileContext): { x: number; y: number; width: number; height: number } {
+/** Resolve complete content capacity once, before any coordinate or carrier exists. */
+export function allocateCanvas(
+  context: CompileContext,
+  options: {
+    readonly legendLabels?: readonly string[];
+    readonly panelCount?: number;
+    readonly panelGap?: number;
+    readonly minimumPanelHeight?: number;
+  } = {},
+): {
+  readonly context: CompileContext;
+  readonly box: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+} {
+  const labels = options.legendLabels ?? [];
+  const count = options.panelCount ?? 1;
+  const gap = options.panelGap ?? 0;
+  const rowMinimum = options.minimumPanelHeight ?? MIN_PLOT_PANEL_HEIGHT;
+  if (!Number.isSafeInteger(count) || count < 1 || !Number.isFinite(gap) || gap < 0 ||
+    !Number.isFinite(rowMinimum) || !(rowMinimum > 0)) {
+    throw new RenderLayoutCapacityError('Complete panel count, row minima and gaps must be finite and nonnegative.');
+  }
   const disclosureSpace = disclosureFooterHeight(
     context.width,
     [...context.disclosures, ...context.sourceStatements],
   );
+  const header = headerTextLayout(context.width, context.title, context.subtitle).extraInset +
+    legendPlotInset(context.width, labels.length, context.subtitle !== undefined, labels);
+  const minimum = MARGIN.top + MARGIN.bottom + disclosureSpace + header +
+    count * rowMinimum + (count - 1) * gap;
+  const height = resolveCanvasHeight(context.height, context.automaticHeight === true, minimum);
+  const resolved = { ...context, height };
   return {
-    x: MARGIN.left,
-    y: MARGIN.top,
-    width: context.width - MARGIN.left - MARGIN.right,
-    height: context.height - MARGIN.top - MARGIN.bottom - disclosureSpace,
+    context: resolved,
+    box: {
+      x: MARGIN.left,
+      y: MARGIN.top + header,
+      width: context.width - MARGIN.left - MARGIN.right,
+      height: height - MARGIN.top - MARGIN.bottom - disclosureSpace - header,
+    },
   };
 }
 
@@ -113,7 +150,9 @@ export function compileLineFigure(
   yLabel: string,
   skillId: string,
 ): RenderPlanV1 {
-  const box = panelBox(context);
+  const allocation = allocateCanvas(context);
+  context = allocation.context;
+  const box = allocation.box;
   const finiteX = x.filter((v) => Number.isFinite(v));
   const finiteY = y.filter((v): v is number => v !== null && Number.isFinite(v));
 
@@ -218,7 +257,9 @@ export function compileStepFigure(
   skillId: string,
   outputAuthorityClassId?: string,
 ): RenderPlanV1 {
-  const box = panelBox(context);
+  const allocation = allocateCanvas(context);
+  context = allocation.context;
+  const box = allocation.box;
   const noData = values.length === 0;
 
   let panel: Panel;

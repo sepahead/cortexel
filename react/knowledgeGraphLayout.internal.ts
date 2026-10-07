@@ -27,10 +27,19 @@ export interface GraphLayoutInputEdge {
 }
 
 export interface GraphLayoutInputSnapshot {
+  dimensions: 2 | 3;
   graphKey: string;
   layoutKey: string;
   nodes: GraphLayoutInputNode[];
   edges: GraphLayoutInputEdge[];
+}
+
+export function assertGraphLayoutDimensions(
+  dimensions: unknown,
+): asserts dimensions is 2 | 3 {
+  if (dimensions !== 2 && dimensions !== 3) {
+    throw new RangeError('knowledge-graph layout dimensions must be 2 or 3');
+  }
 }
 
 /**
@@ -55,7 +64,9 @@ export function snapshotGraphLayoutInputs(
     readonly particles?: boolean;
     readonly edgeStrokePattern?: KnowledgeGraphEdgeStrokePattern;
   }[],
+  dimensions: 2 | 3 = 3,
 ): GraphLayoutInputSnapshot {
+  assertGraphLayoutDimensions(dimensions);
   const nodeSnapshot = nodes.map(({ id, radius, nodeGlyph }) => ({
     id,
     radius,
@@ -81,8 +92,9 @@ export function snapshotGraphLayoutInputs(
     edgeStrokePattern,
   }));
   return {
-    graphKey: graphSignature(nodeSnapshot, edgeSnapshot),
-    layoutKey: graphLayoutSignature(nodeSnapshot, edgeSnapshot),
+    dimensions,
+    graphKey: `D${dimensions}|${graphSignature(nodeSnapshot, edgeSnapshot)}`,
+    layoutKey: `D${dimensions}|${graphLayoutSignature(nodeSnapshot, edgeSnapshot)}`,
     nodes: nodeSnapshot,
     edges: edgeSnapshot,
   };
@@ -131,7 +143,9 @@ export function planGraphLayoutCache(
   nodes: readonly { id: string; radius: number }[],
   remembered: ReadonlyMap<string, readonly [number, number, number]>,
   maxRememberedPositions: number,
+  dimensions: 2 | 3 = 3,
 ): GraphLayoutCachePlan {
+  assertGraphLayoutDimensions(dimensions);
   if (
     !Number.isSafeInteger(maxRememberedPositions) ||
     maxRememberedPositions < nodes.length
@@ -153,7 +167,9 @@ export function planGraphLayoutCache(
     const r = normalizeGraphNodeRadius(input.radius);
     const previous = remembered.get(input.id);
     if (previous === undefined) {
-      plannedNodes[index] = { id: input.id, r };
+      plannedNodes[index] = dimensions === 2
+        ? { id: input.id, r, z: 0 }
+        : { id: input.id, r };
       continue;
     }
 
@@ -163,14 +179,14 @@ export function planGraphLayoutCache(
       r,
       x: previous[0],
       y: previous[1],
-      z: previous[2],
+      z: dimensions === 2 ? 0 : previous[2],
     };
   }
 
   const makeBuffer = (): GraphLayoutCacheBuffer => {
     const cache = new Map<string, GraphLayoutPosition>();
     for (const [id, previous] of remembered) {
-      cache.set(id, [previous[0], previous[1], previous[2]]);
+      cache.set(id, [previous[0], previous[1], dimensions === 2 ? 0 : previous[2]]);
     }
     const positionSlots = new Array<GraphLayoutPosition>(nodes.length);
     for (let index = 0; index < nodes.length; index++) {

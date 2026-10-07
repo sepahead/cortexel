@@ -2,7 +2,7 @@
  * Byte and authority locks for the package-private FigureBundle SVG foundation.
  *
  * The bundle contract does not exist yet. These tests establish the narrower serializer
- * milestone only: the historical standalone writer is byte-identical, while an internal
+ * milestone only: the current standalone writer has exact byte locks, while an internal
  * child-fragment path can namespace document-wide IDs and wrap that exact body in one
  * integer translation. No fragment builder is part of `cortexel/render-svg`.
  */
@@ -25,83 +25,83 @@ interface SvgBaseline {
   readonly digest: string;
 }
 
-/** Reviewed after the deterministic stable-figure layout revision. */
+/** Current19-skill locks after complete header, legend, panel, and footer review. */
 const STANDALONE_AUTHORING_SVG_BASELINES = Object.freeze({
   'network.adjacency_matrix': {
-    bytes: 9742,
-    digest: 'sha256:ddb9b5cae16d2ae55d0b6f395740129bf6538cd6b0c69ae66d19854c9270dd14',
+    bytes: 9905,
+    digest: 'sha256:d987d8261d3737104b2d830329be677ca32bb9d0bc672a60091880b4bf4a1fad',
   },
   'network.connection_graph': {
-    bytes: 10110,
-    digest: 'sha256:cece0f9b3d60cd2ecb0eeab661ace1291b1165e3438f7add7729bb35ab2163e2',
+    bytes: 10615,
+    digest: 'sha256:a44ddbd69da174fb86d3c4591559ea55f976dc82f85a887ff27d815f9a79a200',
   },
   'network.degree_distribution': {
-    bytes: 7917,
-    digest: 'sha256:810c7c62c3f6a8201905bae9c307a8b6a1a75d458234e997aa4c2cbf8997ca81',
+    bytes: 7967,
+    digest: 'sha256:f14b7e7018c65577af04b9a8706b4a42b83b07e835642d5dc1a33b43e90f7112',
   },
   'network.delay_distribution': {
-    bytes: 8281,
-    digest: 'sha256:64e8ef64fb32ee8f62ff4f4eef3b798895e8b8e0c988f6baf7aaea9d4420da38',
+    bytes: 8446,
+    digest: 'sha256:18c66a25a0be5733bfbe589ecbd49d66b39fe1beebbbadec77a66b7f6cf959ea',
   },
   'network.delay_matrix': {
-    bytes: 9181,
-    digest: 'sha256:b9639c5ea578ee85397f7ad3e60aa8504d7d74d1a5c94c287382de8bbb0e147e',
+    bytes: 9504,
+    digest: 'sha256:eaf911a6a17fdc23671988f259d6367ed3b5dc1f9d13a6f9e17c1a8b2dc576aa',
   },
   'network.spatial_map_2d': {
-    bytes: 11702,
-    digest: 'sha256:02372d78f0466d533e98c223d4ba39912be553b512a5db1490032923f1814f7e',
+    bytes: 11862,
+    digest: 'sha256:2587cd2dbab87a9733ef5fa4e327405ff96ebab0dcfdcff3b192e2e6e87ebf01',
   },
   'network.synaptic_weight_trace': {
-    bytes: 13493,
-    digest: 'sha256:d91d2c051d38576647700634afc3f6ed98f31d3a75955f0bf8f4e48842fe344f',
+    bytes: 13667,
+    digest: 'sha256:bf358caf879f2bcf01efa885796f0948837802b2845d4636271736d72380fa49',
   },
   'network.weight_distribution': {
-    bytes: 8110,
-    digest: 'sha256:dc4c40d2132c0b3b51e1585859920ac2a98d2befbae6685444830763994588d1',
+    bytes: 8274,
+    digest: 'sha256:dd661731c52ba85455c777e45551de61e610e8bed22418dad74e2e7c3e5227e4',
   },
   'network.weight_matrix': {
-    bytes: 11088,
-    digest: 'sha256:72b62e83e57f6b8142074f0d7fe64e3173a657f00cf07ea77f69be8dbe6af55f',
+    bytes: 11246,
+    digest: 'sha256:fd3404714a393e472a84c33bb927e99756b894bda78f880e32de0cb7905a5410',
   },
   'neuro.analog_trace': {
-    bytes: 10592,
-    digest: 'sha256:f33a33649a46827acaaef0756d413059995049c2a9301fabfc3d501362c8ea70',
+    bytes: 10741,
+    digest: 'sha256:505114599cc80d66e2301cfa8ef1a86ddc8ff1fbf2f7fabb200a131f3d12ab18',
   },
   'neuro.compartment_trace': {
-    bytes: 11879,
-    digest: 'sha256:a960510cf6d46b4da008f38fd4b5df496af847e0f5a6154f83e7cb11e36ac0b5',
+    bytes: 12043,
+    digest: 'sha256:bc2c16457ed093f4500c4424c039ac35861be9b35a0832ed63f920ea647747bf',
   },
   'neuro.correlogram': {
-    bytes: 11209,
-    digest: 'sha256:7691a12a6ab22dd322b0aa917e15c249d073c9c80b96e282c46b59a227d0a2cc',
+    bytes: 11364,
+    digest: 'sha256:0f35c2da06e281d849c61198489cd7e5556b3659a7a9dc3d86c7fc81f3a6b273',
   },
   'neuro.isi_distribution': {
-    bytes: 8150,
-    digest: 'sha256:491e3451f77ceec7cfabe7d50dc6fa5877350a32162f51e1d8e19bd5bc8b5dfa',
+    bytes: 8289,
+    digest: 'sha256:b68e832864bfcb85c3dc791300f51eacf1582fb5387be58d2b30a1caa9b252c5',
   },
   'neuro.multisignal_trace': {
-    bytes: 14344,
-    digest: 'sha256:c6bb14fda41921b67558eb5c9101926ccfba0e61cf3db2fc4b43882bc8256375',
+    bytes: 14508,
+    digest: 'sha256:acf2a960a19c30ce7fa98f338081fb92981077d9e2b570dd105b65147f363934',
   },
   'neuro.phase_plane': {
-    bytes: 12265,
-    digest: 'sha256:7dc25890900ac4a7efb39a9b9c008738f16e4a8b1fe21ad36c3dafdd734ca19d',
+    bytes: 12658,
+    digest: 'sha256:dea79bf0d8d5104ff795fb722968a35d2422a9499eb4260a0e6d5edd8242e3c0',
   },
   'neuro.population_rate': {
-    bytes: 8797,
-    digest: 'sha256:12dcd069cb84b86f390d92d981adb5c512d03319d09f74c86804b46107e45c50',
+    bytes: 8935,
+    digest: 'sha256:34461970571632ce920a18ccd90b4a147cca694d2d54a94de2cd2e2dfdf17866',
   },
   'neuro.psth': {
-    bytes: 12070,
-    digest: 'sha256:4baa8eb6dd1e516dbedea4e9df119d7ae6776473a39f882776e6ff326a615b2c',
+    bytes: 12230,
+    digest: 'sha256:ae1f29204e7cf4c7574fec2d1b7d48249ecd7197edb362ccd70e9198f1824f20',
   },
   'neuro.response_curve': {
-    bytes: 14184,
-    digest: 'sha256:d810cd6fcd6b4318a6a98e87643211a53726b12fde8f08fc7da258e153b63d10',
+    bytes: 14339,
+    digest: 'sha256:8dfd084a0f916e487a3fa17040eb5f82bbaaaab90c1ef7fc5ca1f814d5b6af5a',
   },
   'neuro.spike_raster': {
-    bytes: 6935,
-    digest: 'sha256:5ff0385d5b84365e6feea9066fb31bf7506b7b952f29f85d3faa90356b1ec616',
+    bytes: 7097,
+    digest: 'sha256:669caa652c43037e6f52a83fc55b882b67bbce8364930aa5c7c0af49a0433922',
   },
 } as const satisfies Readonly<Record<StableSkillId, SvgBaseline>>);
 

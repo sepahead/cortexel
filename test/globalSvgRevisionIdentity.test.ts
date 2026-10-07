@@ -40,11 +40,11 @@ describe('global stable SVG output identity', () => {
         skill.id === 'network.delay_matrix' ||
         skill.id === 'neuro.phase_plane' ||
         skill.id === 'neuro.spike_raster'
-      ) ? (skill.id === 'neuro.spike_raster' ? 6 : 5) : 4;
+      ) ? (skill.id === 'neuro.spike_raster' ? 7 : 6) : 5;
       const expectedRendererRevision = (
         skill.id === 'neuro.phase_plane' ||
         skill.id === 'neuro.spike_raster'
-      ) ? (skill.id === 'neuro.spike_raster' ? 7 : 6) : 5;
+      ) ? (skill.id === 'neuro.spike_raster' ? 8 : 7) : 6;
       expect(skill.revision, skill.id).toBe(expectedSkillRevision);
       expect(skill.renderer?.revision, skill.id).toBe(expectedRendererRevision);
       expect(rendererById.get(skill.renderer?.id)?.revision, skill.renderer?.id)
@@ -59,10 +59,10 @@ describe('global stable SVG output identity', () => {
       expect(renderer.revision, renderer.id)
         .toBe(
           renderer.id === 'figure.spike_raster'
-            ? 7
+            ? 8
             : renderer.id === 'figure.phase_plane'
-              ? 6
-            : 5,
+              ? 7
+            : 6,
         );
     }
   });

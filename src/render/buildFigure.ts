@@ -134,7 +134,7 @@ import {
 } from './svg.js';
 import { formatCoordinate, formatNumber } from './format.js';
 import { linearScale, symlogTransform } from './scale.js';
-import { MIN_PLOT_PANEL_HEIGHT } from './layout.js';
+import { MIN_PLOT_PANEL_HEIGHT, RenderLayoutCapacityError } from './layout.js';
 import { compileStepFigure } from './compile.js';
 import {
   compileBarFigure,
@@ -11834,8 +11834,12 @@ function compile(
     const yAxisRecord = rec(axes?.y) ?? {};
     const xAxisUnit = String(xAxisRecord.unit);
     const yAxisUnit = String(yAxisRecord.unit);
-    const xLabel = `${String(xAxisRecord.label ?? 'x')} (${unitLabel(xAxisUnit)})`;
-    const yLabel = `${String(yAxisRecord.label ?? 'y')} (${unitLabel(yAxisUnit)})`;
+    const xUnitLabel = xAxisUnit === '1' ? 'dimensionless' : unitLabel(xAxisUnit);
+    const yUnitLabel = yAxisUnit === '1' ? 'dimensionless' : unitLabel(yAxisUnit);
+    const xQuantityLabel = String(xAxisRecord.label ?? 'x');
+    const yQuantityLabel = String(yAxisRecord.label ?? 'y');
+    const xLabel = xUnitLabel ? `${xQuantityLabel} (${xUnitLabel})` : xQuantityLabel;
+    const yLabel = yUnitLabel ? `${yQuantityLabel} (${yUnitLabel})` : yQuantityLabel;
     const vectorField = rec(data.vectorField);
     const nullclines = rec(data.nullclines);
     const fixedPoints = rec(data.fixedPoints);
@@ -13716,6 +13720,9 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
   }
 
   const forced = forcedDisclosures(validated.skillId, request);
+  const defaultTitle = validated.skillId === 'network.degree_distribution'
+    ? `${rec(request.parameters)?.direction === 'out' ? 'Out' : 'In'}-degree distribution`
+    : catalog.title;
 
   const makeContext = (
     _rowsTotal: number,
@@ -13731,8 +13738,10 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
       sourceRequestDigest: validated.requestDigest,
       width: num(presentation.width) ?? 720,
       height: num(presentation.height) ?? 440,
+      automaticHeight: presentation.height === 'auto',
       themeId: (presentation.themeId as string) ?? 'light',
-      title: (presentation.title as string) ?? catalog.title,
+      title: (presentation.title as string) ?? defaultTitle,
+      ...(typeof presentation.subtitle === 'string' ? { subtitle: presentation.subtitle } : {}),
       disclosures,
       sourceStatements,
       summary: catalog.accessibility.summaryTemplate.replace(/\{[^}]+\}/g, '…'),
@@ -13749,6 +13758,10 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
       returnedTableLimit,
     );
   } catch (error) {
+    if (error instanceof RenderLayoutCapacityError) {
+      return { ok: false, errors: [makeError({ code: 'RENDER_LAYOUT_UNAVAILABLE', stage: 'render',
+        skillId: validated.skillId, instancePath: '/presentation', message: error.message })] };
+    }
     return {
       ok: false,
       errors: [

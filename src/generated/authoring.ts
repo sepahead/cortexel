@@ -1101,10 +1101,19 @@ export const STABLE_CATALOG_SCHEMA_RESOURCES:
             "default": 720
           },
           "height": {
-            "type": "integer",
-            "minimum": 120,
-            "maximum": 4096,
-            "default": 440
+            "description": "An explicit integer fixes the canvas. Auto resolves complete content capacity before geometry, within 440 to 4096 CSS pixels.",
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 120,
+                "maximum": 4096
+              },
+              {
+                "type": "string",
+                "const": "auto"
+              }
+            ],
+            "default": "auto"
           },
           "budgetProfile": {
             "$ref": "https://sepahead.github.io/cortexel/schemas/v1/generated/registry-enums.v1.schema.json#/$defs/budgetProfileId",
@@ -2210,7 +2219,7 @@ export const STABLE_CATALOG_SCHEMA_RESOURCES:
                 "const": "figure.analog_trace"
               },
               "rendererRevision": {
-                "const": 5
+                "const": 6
               }
             },
             "required": [
@@ -2225,7 +2234,7 @@ export const STABLE_CATALOG_SCHEMA_RESOURCES:
                 "const": "figure.multisignal_trace"
               },
               "rendererRevision": {
-                "const": 5
+                "const": 6
               }
             },
             "required": [
@@ -2240,7 +2249,7 @@ export const STABLE_CATALOG_SCHEMA_RESOURCES:
                 "const": "figure.compartment_trace"
               },
               "rendererRevision": {
-                "const": 5
+                "const": 6
               }
             },
             "required": [
@@ -2255,7 +2264,7 @@ export const STABLE_CATALOG_SCHEMA_RESOURCES:
                 "const": "figure.spike_raster"
               },
               "rendererRevision": {
-                "const": 7
+                "const": 8
               }
             },
             "required": [
@@ -2270,7 +2279,7 @@ export const STABLE_CATALOG_SCHEMA_RESOURCES:
                 "const": "figure.population_rate"
               },
               "rendererRevision": {
-                "const": 5
+                "const": 6
               }
             },
             "required": [
@@ -2285,7 +2294,7 @@ export const STABLE_CATALOG_SCHEMA_RESOURCES:
                 "const": "figure.psth"
               },
               "rendererRevision": {
-                "const": 5
+                "const": 6
               }
             },
             "required": [
@@ -2300,7 +2309,7 @@ export const STABLE_CATALOG_SCHEMA_RESOURCES:
                 "const": "figure.correlogram"
               },
               "rendererRevision": {
-                "const": 5
+                "const": 6
               }
             },
             "required": [
@@ -2315,7 +2324,7 @@ export const STABLE_CATALOG_SCHEMA_RESOURCES:
                 "const": "figure.distribution"
               },
               "rendererRevision": {
-                "const": 5
+                "const": 6
               }
             },
             "required": [
@@ -2330,7 +2339,7 @@ export const STABLE_CATALOG_SCHEMA_RESOURCES:
                 "const": "figure.response_curve"
               },
               "rendererRevision": {
-                "const": 5
+                "const": 6
               }
             },
             "required": [
@@ -2345,7 +2354,7 @@ export const STABLE_CATALOG_SCHEMA_RESOURCES:
                 "const": "figure.phase_plane"
               },
               "rendererRevision": {
-                "const": 6
+                "const": 7
               }
             },
             "required": [
@@ -2360,7 +2369,7 @@ export const STABLE_CATALOG_SCHEMA_RESOURCES:
                 "const": "figure.connection_graph"
               },
               "rendererRevision": {
-                "const": 5
+                "const": 6
               }
             },
             "required": [
@@ -2375,7 +2384,7 @@ export const STABLE_CATALOG_SCHEMA_RESOURCES:
                 "const": "figure.matrix"
               },
               "rendererRevision": {
-                "const": 5
+                "const": 6
               }
             },
             "required": [
@@ -2390,7 +2399,7 @@ export const STABLE_CATALOG_SCHEMA_RESOURCES:
                 "const": "figure.spatial_map_2d"
               },
               "rendererRevision": {
-                "const": 5
+                "const": 6
               }
             },
             "required": [
@@ -2405,7 +2414,7 @@ export const STABLE_CATALOG_SCHEMA_RESOURCES:
                 "const": "figure.synaptic_weight_trace"
               },
               "rendererRevision": {
-                "const": 5
+                "const": 6
               }
             },
             "required": [

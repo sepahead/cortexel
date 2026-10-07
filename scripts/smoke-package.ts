@@ -1095,7 +1095,7 @@ function run(
 const EXPECTED_FIXTURE_MANIFEST_SHA256 =
   'd91462201f6907ce0bea98638c65d2ad84b672d0eed06b96e05b0f25cd79780e';
 const EXPECTED_FIXTURE_LOCK_SHA256 =
-  'b742744208a41d3c21f42f9a73b9895d70c635e841ed01a0b007c8ff74288ca0';
+  '67542d680a65af2aadb0d8043bcb5885bb63ce2bfd439e40a94924c3ad4e9679';
 const EXPECTED_DEV_DEPENDENCIES = Object.freeze({
   '@types/node': '26.1.2',
   '@types/react': '19.2.18',
@@ -8453,12 +8453,13 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       unrenderablePopulation.presentation = {
         ...unrenderablePopulation.presentation,
         width: 160,
+        height: 440,
       };
       const validatedUnrenderable = esmFigure.validateRequestValue(
         unrenderablePopulation
       );
       if (!validatedUnrenderable.ok) {
-        throw new Error('packed width-160 population-rate negative is not valid input');
+        throw new Error('packed fixed 160-by-440 population-rate negative is not valid input');
       }
       const layoutFailure = cjsRenderer.buildFigureFromValidated(
         validatedUnrenderable.request

@@ -8,6 +8,8 @@ import {
   outputAuthoritySourceProblems,
   summaryTemplatePlaceholders,
 } from '../scripts/lib/output-authority-source.js';
+import { resolveOutputAuthorityEvaluatorV1 } from '../src/authority/evaluators/registry.js';
+import { SKILL_CATALOG } from '../src/generated/catalog.js';
 
 type JsonRecord = Record<string, any>;
 
@@ -175,7 +177,25 @@ describe('source-owned OutputAuthority V1', () => {
     const wrongEvaluator = analogSource();
     wrongEvaluator.outputAuthority.evaluator.id = 'neuro.analog_trace.compiler_receipt.v1';
     expect(outputAuthoritySourceProblems(wrongEvaluator).join('\n')).toContain(
-      'neuro.analog_trace.output_authority.v4',
+      SKILL_CATALOG['neuro.analog_trace'].outputAuthority.evaluator.id,
     );
+  });
+
+  it('refuses the prior evaluator identity and restores the exact current catalog binding', () => {
+    const source = analogSource();
+    const catalog = SKILL_CATALOG['neuro.analog_trace'];
+    const currentId = catalog.outputAuthority.evaluator.id;
+    expect(source.revision).toBe(catalog.revision);
+    expect(source.outputAuthority.evaluator.id).toBe(currentId);
+    expect(catalog.revision).toBeGreaterThan(1);
+
+    const priorId = `${source.id}.output_authority.v${catalog.revision - 1}`;
+    source.outputAuthority.evaluator.id = priorId;
+    expect(outputAuthoritySourceProblems(source).join('\n')).toContain(currentId);
+    expect(resolveOutputAuthorityEvaluatorV1(priorId)).toBeNull();
+
+    source.outputAuthority.evaluator.id = currentId;
+    expect(outputAuthoritySourceProblems(source)).toEqual([]);
+    expect(resolveOutputAuthorityEvaluatorV1(currentId)?.id).toBe(currentId);
   });
 });

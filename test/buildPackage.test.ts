@@ -692,6 +692,43 @@ describe('programmatic package build', () => {
     );
   });
 
+  it('preserves the eight reviewed graph owner roles after their hash refresh', () => {
+    const owners = [
+      ['KnowledgeGraphCorpusFrame.internal-B6Fze8F9.js', 'KnowledgeGraphCorpusFrame.internal-CXuaQ6Bj.js', 'import', 'runtime'],
+      ['KnowledgeGraphCorpusFrame.internal-D37Fsrhv.cjs', 'KnowledgeGraphCorpusFrame.internal-DoZVFmA4.cjs', 'require', 'runtime'],
+      ['KnowledgeGraphCorpusFrame.internal-BhDKFlky.d.cts', 'KnowledgeGraphCorpusFrame.internal-D_SH3P2z.d.cts', 'types', 'declaration'],
+      ['KnowledgeGraphCorpusFrame.internal-erLWkXeb.d.ts', 'KnowledgeGraphCorpusFrame.internal-C6neWtSA.d.ts', 'types', 'declaration'],
+      ['knowledgeGraphFigure--8Jnku5i.d.cts', 'knowledgeGraphFigure-CRV9X8S3.d.cts', 'types', 'declaration'],
+      ['knowledgeGraphFigure-CJUK98CP.cjs', 'knowledgeGraphFigure-BpwfPh71.cjs', 'require', 'runtime'],
+      ['knowledgeGraphFigure-DP4EPFUs.js', 'knowledgeGraphFigure-v0lohz_8.js', 'import', 'runtime'],
+      ['knowledgeGraphFigure-BKogMpaU.d.ts', 'knowledgeGraphFigure-Dcw_r5ra.d.ts', 'types', 'declaration'],
+    ] as const;
+    for (const [owner, previousOwner, condition, kind] of owners) {
+      const edge = {
+        owner,
+        specifier: '#cortexel-knowledge-graph-presentation-capability',
+        condition,
+        kind,
+      } as const;
+      expect(() => assertReviewedPackageImportEdgeForBuild(edge)).not.toThrow();
+      const unknownOwner = owner.replace(
+        /-[A-Za-z0-9_-]+(\.(?:d\.)?(?:js|cjs|ts|cts))$/u,
+        '-AAAAAAAA$1',
+      );
+      for (const invalid of [
+        { ...edge, owner: previousOwner },
+        { ...edge, owner: unknownOwner },
+        { ...edge, specifier: '#cortexel-request-capability' },
+        { ...edge, condition: kind === 'runtime' ? 'types' as const : 'import' as const },
+        { ...edge, kind: kind === 'runtime' ? 'declaration' as const : 'runtime' as const },
+      ]) {
+        expect(() => assertReviewedPackageImportEdgeForBuild(invalid), JSON.stringify(invalid))
+          .toThrow(/exact reviewed owner\/specifier\/condition\/kind tuple/u);
+        expect(() => assertReviewedPackageImportEdgeForBuild(edge)).not.toThrow();
+      }
+    }
+  });
+
   it('rejects every relative emitted edge into a private capability output', () => {
     for (const [target, kind] of [
       ['internal/request-capability.js', 'runtime'],
@@ -1299,6 +1336,73 @@ describe('final package output authority', () => {
     expect(() => verifyPackageCodeBuildOutput(runtimeOnlyPackageInDeclaration)).toThrow(
       /undeclared or unreviewed external package/u,
     );
+  });
+
+  it.each([
+    'ajv/dist/runtime/equal.js',
+    'ajv/dist/runtime/ucs2length.js',
+  ])('admits the reviewed pure Ajv runtime helper %s with a declared dependency', (specifier) => {
+    const repository = createFinalOutputFixture();
+    const manifestPath = path.join(repository, 'package.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
+    const runtimePath = path.join(repository, 'dist/figure/index.js');
+    const declarationPath = path.join(repository, 'dist/figure/index.d.ts');
+    const declaration = readFileSync(declarationPath, 'utf8');
+    manifest.dependencies = { ajv: '8.20.0' };
+    writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`, 'utf8');
+    writeFileSync(
+      runtimePath,
+      `import helper from ${JSON.stringify(specifier)};\nexport const value = helper;\n//# sourceMappingURL=index.js.map`,
+    );
+    expect(() => verifyPackageCodeBuildOutput(repository)).not.toThrow();
+
+    delete manifest.dependencies;
+    manifest.devDependencies = { ajv: '8.20.0' };
+    writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`, 'utf8');
+    expect(() => verifyPackageCodeBuildOutput(repository)).toThrow(
+      /undeclared or unreviewed external package/u,
+    );
+    delete manifest.devDependencies;
+    manifest.dependencies = { ajv: '8.20.0' };
+    writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`, 'utf8');
+    expect(() => verifyPackageCodeBuildOutput(repository)).not.toThrow();
+
+    writeFileSync(
+      declarationPath,
+      `export type Helper = typeof import(${JSON.stringify(specifier)});\n`,
+    );
+    expect(() => verifyPackageCodeBuildOutput(repository)).toThrow(
+      /undeclared or unreviewed external package/u,
+    );
+    writeFileSync(declarationPath, declaration, 'utf8');
+    expect(() => verifyPackageCodeBuildOutput(repository)).not.toThrow();
+  });
+
+  it('rejects every unreviewed Ajv runtime subpath and restores the exact helper', () => {
+    const repository = createFinalOutputFixture();
+    const manifestPath = path.join(repository, 'package.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
+    manifest.dependencies = { ajv: '8.20.0' };
+    writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`, 'utf8');
+    const runtimePath = path.join(repository, 'dist/figure/index.js');
+    const accepted = 'import "ajv/dist/runtime/equal.js";\nexport const value = 1;\n//# sourceMappingURL=index.js.map';
+    for (const specifier of [
+      'ajv/dist/runtime/equal',
+      'ajv/dist/runtime/validation_error.js',
+      'ajv/dist/runtime/equal.js/private',
+      'ajv/dist/standalone/index.js',
+      'ajv/dist/2020.js',
+    ]) {
+      writeFileSync(
+        runtimePath,
+        `import ${JSON.stringify(specifier)};\nexport const value = 1;\n//# sourceMappingURL=index.js.map`,
+      );
+      expect(() => verifyPackageCodeBuildOutput(repository), specifier).toThrow(
+        /undeclared or unreviewed external package/u,
+      );
+      writeFileSync(runtimePath, accepted, 'utf8');
+      expect(() => verifyPackageCodeBuildOutput(repository)).not.toThrow();
+    }
   });
 
   it('rejects noncanonical, duplicate, or unexpected source-map metadata', () => {

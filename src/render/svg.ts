@@ -37,10 +37,16 @@ import {
   DISCLOSURE_HORIZONTAL_INSET,
   DISCLOSURE_LINE_HEIGHT,
   LEGEND_ROW_HEIGHT,
+  HEADER_HORIZONTAL_INSET,
+  TITLE_FONT_SIZE,
+  TITLE_LINE_HEIGHT,
+  SUBTITLE_FONT_SIZE,
+  SUBTITLE_LINE_HEIGHT,
   disclosureLineCount,
   disclosureRenderedTextLength,
   legendTextLayout,
-  legendStartY,
+  headerRenderedTextLength,
+  headerTextLayout,
   wrapDisclosureText,
 } from './layout.js';
 import { isClosedPlainRenderPlanForAuthorityV1 } from './plan-closure.js';
@@ -57,7 +63,7 @@ export class RenderPlanGeometryError extends Error {
   }
 }
 
-function assertArrowGeometry(
+function assertMarkGeometry(
   marks: readonly Mark[],
   panelId: string,
   prefix = 'marks',
@@ -66,8 +72,16 @@ function assertArrowGeometry(
     const mark = marks[markIndex];
     const markPath = `${prefix}/${markIndex}`;
     if (mark.type === 'group') {
-      assertArrowGeometry(mark.marks, panelId, `${markPath}/marks`);
+      assertMarkGeometry(mark.marks, panelId, `${markPath}/marks`);
       continue;
+    }
+    if (mark.type === 'text' && mark.textLength !== undefined &&
+      (!Number.isFinite(mark.textLength) || !(mark.textLength > 0))) {
+      throw new RenderPlanGeometryError(
+        panelId,
+        `${markPath}/textLength`,
+        'owned textLength must be finite and strictly positive',
+      );
     }
     if (mark.type !== 'arrow') continue;
     if (!Number.isFinite(mark.size) || !(mark.size > 0)) {
@@ -97,9 +111,9 @@ function assertArrowGeometry(
   }
 }
 
-/** Validate direction-bearing geometry before resource accounting or byte emission. */
+/** Validate directed geometry and owned text widths before resource or byte emission. */
 export function assertRenderPlanGeometry(plan: RenderPlanV1): void {
-  for (const panel of plan.panels) assertArrowGeometry(panel.marks, panel.id);
+  for (const panel of plan.panels) assertMarkGeometry(panel.marks, panel.id);
 }
 
 /** Escape text content: the five XML text-significant characters. */
@@ -384,6 +398,11 @@ function emitText(writer: SvgWriter, mark: TextMark, rotation?: RotatedTextLayou
       ['textLength', formatCoordinate(rotation.textLength)],
       ['lengthAdjust', 'spacingAndGlyphs'],
     );
+  } else if (mark.textLength !== undefined) {
+    attrs.push(
+      ['textLength', formatCoordinate(mark.textLength)],
+      ['lengthAdjust', 'spacingAndGlyphs'],
+    );
   }
   writer.text('text', mark.text, attrs);
 }
@@ -609,10 +628,11 @@ export function countPlanResources(plan: RenderPlanV1): {
 } {
   assertRenderPlanGeometry(plan);
   let markCount = 0;
+  const header = headerTextLayout(plan.width, plan.title, plan.subtitle);
   // The visible figure title is a `<text>` node; SVG `<title>` and `<desc>` are not.
   let textCount =
-    1 +
-    (plan.subtitle ? 1 : 0) +
+    header.titleLines.length +
+    header.subtitleLines.length +
     disclosureLineCount(plan.width, [...plan.disclosures, ...plan.sourceStatements]);
 
   for (const panel of plan.panels) {
@@ -802,32 +822,45 @@ function emitFigureTree(
     ['fill', colors.background],
   ]);
 
-  emitText(writer, {
-    type: 'text',
-    x: 24,
-    y: 28,
-    text: plan.title,
-    anchor: 'start',
-    fontSize: 16,
-    fill: colors.text,
-    decorative: true, // the <title> element already names the figure for AT
-  });
-
-  if (plan.subtitle) {
+  const header = headerTextLayout(plan.width, plan.title, plan.subtitle);
+  writer.open('g', [['data-header', 'title'], ['data-header-text', plan.title]]);
+  for (let index = 0; index < header.titleLines.length; index += 1) {
+    const line = header.titleLines[index];
     emitText(writer, {
       type: 'text',
-      x: 24,
-      y: 46,
-      text: plan.subtitle,
+      x: HEADER_HORIZONTAL_INSET,
+      y: 28 + index * TITLE_LINE_HEIGHT,
+      text: line,
       anchor: 'start',
-      fontSize: 12,
-      fill: colors.mutedText,
-      decorative: true,
+      fontSize: TITLE_FONT_SIZE,
+      textLength: headerRenderedTextLength(line, plan.width, TITLE_FONT_SIZE),
+      fill: colors.text,
+      decorative: true, // the complete <title> element names the figure for AT
     });
+  }
+  writer.close('g');
+
+  if (plan.subtitle !== undefined) {
+    writer.open('g', [['data-header', 'subtitle'], ['data-header-text', plan.subtitle]]);
+    for (let index = 0; index < header.subtitleLines.length; index += 1) {
+      const line = header.subtitleLines[index];
+      emitText(writer, {
+        type: 'text',
+        x: HEADER_HORIZONTAL_INSET,
+        y: header.subtitleStartY + index * SUBTITLE_LINE_HEIGHT,
+        text: line,
+        anchor: 'start',
+        fontSize: SUBTITLE_FONT_SIZE,
+        textLength: headerRenderedTextLength(line, plan.width, SUBTITLE_FONT_SIZE),
+        fill: colors.mutedText,
+        decorative: true,
+      });
+    }
+    writer.close('g');
   }
 
   if (plan.legend && plan.legend.length > 0) {
-    const startY = legendStartY(plan.subtitle !== undefined);
+    const startY = header.legendStartY;
     const legendLayout = legendTextLayout(
       plan.width,
       plan.legend.map((item) => item.label),

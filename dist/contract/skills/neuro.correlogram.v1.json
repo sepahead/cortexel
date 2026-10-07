@@ -1,6 +1,6 @@
 {
   "id": "neuro.correlogram",
-  "revision": 4,
+  "revision": 5,
   "status": "stable",
   "releaseReady": false,
   "title": "Oriented lag correlogram between two event trains",
@@ -316,7 +316,7 @@
   ],
   "renderer": {
     "id": "figure.correlogram",
-    "revision": 5
+    "revision": 6
   },
   "budgets": {
     "maxObservations": 500000,
@@ -353,7 +353,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "neuro.correlogram.output_authority.v4"
+      "id": "neuro.correlogram.output_authority.v5"
     },
     "requestPaths": [
       {

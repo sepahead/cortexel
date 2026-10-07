@@ -97,6 +97,7 @@ import {
   ensureGeneratedOutputDirectory,
 } from './lib/generated-output-authority.js';
 import { proveAuthoredObjectClosure } from './lib/schema-object-closure.js';
+import { precompileStructuralValidators } from './lib/precompile-structural-validators.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CONTRACT = path.join(ROOT, 'contract');
@@ -1956,6 +1957,70 @@ if (
   throw new Error('contract manifest projection returned an incoherent build identity');
 }
 
+// Runtime validators use the same complete schema closure in browsers and Node.
+// Project from generated normative files after they enter the contract digest;
+// never maintain a second handwritten schema or resolve a schema over the network.
+const structuralSchemaPaths = [
+  'schemas/common.v1.schema.json',
+  'schemas/generated/registry-enums.v1.schema.json',
+  'schemas/validation-error.v1.schema.json',
+  'schemas/figure-request.v1.schema.json',
+  'schemas/figure-artifact.v1.schema.json',
+  'schemas/stable-figure-request-union.v1.schema.json',
+  ...skills.map((skill) => `schemas/skills/${skill.id}.request.v1.schema.json`),
+].sort();
+const structuralSchemasTs = `${BANNER('contract/schemas/ and contract/ (digest)')}
+import { freezeGenerated } from '../core/deep-freeze.js';
+
+/** The same owning contract identity as every full validation and render gate. */
+export const STRUCTURAL_SCHEMA_CONTRACT_DIGEST = ${JSON.stringify(contractDigest)};
+
+/** Exact offline resources; generated from normative schemas, never fetched at runtime. */
+export const STRUCTURAL_SCHEMAS: Readonly<Record<string, Readonly<Record<string, unknown>>>> =
+  freezeGenerated(${JSON.stringify(
+    Object.fromEntries(structuralSchemaPaths.map((relative) => [
+      relative,
+      readJson(path.join(CONTRACT, relative)),
+    ])),
+    null,
+    2,
+  )});
+
+/** Ordered per-skill registration closure, including nonstable schemas as before. */
+export const STRUCTURAL_SKILL_SCHEMA_PATHS: readonly string[] = freezeGenerated(${JSON.stringify(
+  structuralSchemaPaths.filter((relative) => relative.startsWith('schemas/skills/')),
+  null,
+  2,
+)});
+`;
+
+const structuralValidatorResources = structuralSchemaPaths.map((relative, index) => ({
+  path: relative,
+  schema: readJson<Record<string, unknown>>(path.join(CONTRACT, relative)),
+  exportName: `validateSchema${index}`,
+}));
+const structuralValidatorsJs = BANNER('contract/schemas/ through the installed Ajv standalone compiler') +
+  precompileStructuralValidators(structuralValidatorResources);
+const structuralValidatorsDts = `${BANNER('contract/schemas/ through the installed Ajv standalone compiler')}
+import type { ValidateFunction } from 'ajv';
+
+${structuralValidatorResources.map(({ exportName }) =>
+  `export declare const ${exportName}: ValidateFunction;`,
+).join('\n')}
+`;
+const structuralValidatorCatalogTs = `${BANNER('contract/schemas/ and contract/ (digest)')}
+import type { ValidateFunction } from 'ajv';
+import * as validators from './structuralValidators.js';
+
+/** Precompiled functions for the complete exact offline structural resource closure. */
+export const STRUCTURAL_VALIDATOR_CONTRACT_DIGEST = ${JSON.stringify(contractDigest)};
+export const STRUCTURAL_VALIDATORS: Readonly<Record<string, ValidateFunction>> = Object.freeze({
+${structuralValidatorResources.map(({ path: relative, exportName }) =>
+  `  ${JSON.stringify(relative)}: validators.${exportName},`,
+).join('\n')}
+});
+`;
+
 const identityTs = `${BANNER('contract/ (digest) and package.json (version)')}
 export const PACKAGE_VERSION = ${JSON.stringify(packageJson.version)};
 export const REQUEST_CONTRACT = ${JSON.stringify(contractIdentity.request.value)};
@@ -2143,6 +2208,10 @@ record(path.join(GENERATED_TS, 'registry.ts'), registryTs);
 record(path.join(GENERATED_TS, 'budgets.ts'), budgetsTs);
 record(path.join(GENERATED_TS, 'catalog.ts'), catalogTs);
 record(path.join(GENERATED_TS, 'authoring.ts'), authoringTs);
+record(path.join(GENERATED_TS, 'structuralSchemas.ts'), structuralSchemasTs);
+record(path.join(GENERATED_TS, 'structuralValidators.js'), structuralValidatorsJs);
+record(path.join(GENERATED_TS, 'structuralValidators.d.ts'), structuralValidatorsDts);
+record(path.join(GENERATED_TS, 'structuralValidatorCatalog.ts'), structuralValidatorCatalogTs);
 record(path.join(GENERATED_TS, 'identity.ts'), identityTs);
 record(path.join(GENERATED_TS, 'index.ts'), `${BANNER('contract/')}
 export * from './registry.js';

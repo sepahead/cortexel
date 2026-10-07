@@ -1093,7 +1093,7 @@
               "const": "figure.analog_trace"
             },
             "rendererRevision": {
-              "const": 5
+              "const": 6
             }
           },
           "required": [
@@ -1108,7 +1108,7 @@
               "const": "figure.multisignal_trace"
             },
             "rendererRevision": {
-              "const": 5
+              "const": 6
             }
           },
           "required": [
@@ -1123,7 +1123,7 @@
               "const": "figure.compartment_trace"
             },
             "rendererRevision": {
-              "const": 5
+              "const": 6
             }
           },
           "required": [
@@ -1138,7 +1138,7 @@
               "const": "figure.spike_raster"
             },
             "rendererRevision": {
-              "const": 7
+              "const": 8
             }
           },
           "required": [
@@ -1153,7 +1153,7 @@
               "const": "figure.population_rate"
             },
             "rendererRevision": {
-              "const": 5
+              "const": 6
             }
           },
           "required": [
@@ -1168,7 +1168,7 @@
               "const": "figure.psth"
             },
             "rendererRevision": {
-              "const": 5
+              "const": 6
             }
           },
           "required": [
@@ -1183,7 +1183,7 @@
               "const": "figure.correlogram"
             },
             "rendererRevision": {
-              "const": 5
+              "const": 6
             }
           },
           "required": [
@@ -1198,7 +1198,7 @@
               "const": "figure.distribution"
             },
             "rendererRevision": {
-              "const": 5
+              "const": 6
             }
           },
           "required": [
@@ -1213,7 +1213,7 @@
               "const": "figure.response_curve"
             },
             "rendererRevision": {
-              "const": 5
+              "const": 6
             }
           },
           "required": [
@@ -1228,7 +1228,7 @@
               "const": "figure.phase_plane"
             },
             "rendererRevision": {
-              "const": 6
+              "const": 7
             }
           },
           "required": [
@@ -1243,7 +1243,7 @@
               "const": "figure.connection_graph"
             },
             "rendererRevision": {
-              "const": 5
+              "const": 6
             }
           },
           "required": [
@@ -1258,7 +1258,7 @@
               "const": "figure.matrix"
             },
             "rendererRevision": {
-              "const": 5
+              "const": 6
             }
           },
           "required": [
@@ -1273,7 +1273,7 @@
               "const": "figure.spatial_map_2d"
             },
             "rendererRevision": {
-              "const": 5
+              "const": 6
             }
           },
           "required": [
@@ -1288,7 +1288,7 @@
               "const": "figure.synaptic_weight_trace"
             },
             "rendererRevision": {
-              "const": 5
+              "const": 6
             }
           },
           "required": [

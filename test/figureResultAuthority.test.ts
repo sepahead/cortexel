@@ -81,21 +81,37 @@ describe('live built-figure result authority', () => {
     expect(isLiveBuiltFigureResult(failure)).toBe(false);
   });
 
-  it('does not mint a validated request whose layout cannot be rendered', () => {
+  it('mints only the complete auto layout and refuses its insufficient fixed canvas', () => {
     const request = structuredClone(example);
-    request.presentation = { ...request.presentation, width: 160 };
+    request.presentation = { ...request.presentation, width: 160, height: 440 };
     const validated = validateRequestValue(request);
     expect(validated.ok).toBe(true);
     if (!validated.ok) throw new Error(JSON.stringify(validated.errors));
 
     const result = buildFigureFromValidated(validated.request);
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('the width-160 population-rate fixture must fail');
+    if (result.ok) throw new Error('the fixed160-by440 population-rate fixture must fail');
     expect(result.errors.map((error) => error.code)).toEqual([
       'RENDER_LAYOUT_UNAVAILABLE',
     ]);
     expect(isLiveBuiltFigureResult(result)).toBe(false);
     expect(() => assertLiveBuiltFigureResult(result)).toThrow(/exact live result/u);
+
+    const automatic = structuredClone(request);
+    automatic.presentation.height = 'auto';
+    const adequate = buildFigure(automatic);
+    expect(adequate.ok).toBe(true);
+    if (!adequate.ok) throw new Error(JSON.stringify(adequate.errors));
+    expect(adequate.plan.height).toBeGreaterThan(request.presentation.height);
+    expect(adequate.plan.height).toBeLessThanOrEqual(4096);
+    expect(adequate.plan.width).toBe(request.presentation.width);
+    const reopened = validateRequestValue(adequate.artifact.canonicalRequest);
+    expect(reopened.ok).toBe(true);
+    if (!reopened.ok) throw new Error(JSON.stringify(reopened.errors));
+    expect(reopened.request.canonicalRequest.data).toEqual(request.data);
+    expect(reopened.request.canonicalRequest.source).toEqual(request.source);
+    expect(isLiveBuiltFigureResult(adequate)).toBe(true);
+    expect(() => assertLiveBuiltFigureResult(adequate)).not.toThrow();
   });
 
   it('rejects every reconstructed or transferred lookalike by identity', () => {

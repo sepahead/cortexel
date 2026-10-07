@@ -2,8 +2,8 @@ Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
 const require_rolldown_runtime = require('../rolldown-runtime-C24Yb2bl.cjs');
 const require_knowledgeGraphLimits = require('../knowledgeGraphLimits-BnjbjxkI.cjs');
 const require_knowledgeGraphVisualEncoding_internal = require('../knowledgeGraphVisualEncoding.internal-COtu0qU6.cjs');
-const require_knowledgeGraphFigure = require('../knowledgeGraphFigure-BpwfPh71.cjs');
-const require_KnowledgeGraphCorpusFrame_internal = require('../KnowledgeGraphCorpusFrame.internal-DoZVFmA4.cjs');
+const require_knowledgeGraphFigure = require('../knowledgeGraphFigure-CJUK98CP.cjs');
+const require_KnowledgeGraphCorpusFrame_internal = require('../KnowledgeGraphCorpusFrame.internal-D37Fsrhv.cjs');
 let _cortexel_knowledge_graph_presentation_capability = require("#cortexel-knowledge-graph-presentation-capability");
 let react = require("react");
 let _react_three_fiber = require("@react-three/fiber");
@@ -13,13 +13,17 @@ let react_jsx_runtime = require("react/jsx-runtime");
 let d3_force_3d = require("d3-force-3d");
 
 //#region react/knowledgeGraphLayout.internal.ts
+function assertGraphLayoutDimensions(dimensions) {
+	if (dimensions !== 2 && dimensions !== 3) throw new RangeError("knowledge-graph layout dimensions must be 2 or 3");
+}
 /**
 * Read every renderer-relevant prop into detached plain records on each React
 * render, then key memoized mutable state from those records. Public props are
 * readonly, but this runtime snapshot also protects JavaScript callers that
 * mutate the same object/array identities between renders.
 */
-function snapshotGraphLayoutInputs(nodes, edges) {
+function snapshotGraphLayoutInputs(nodes, edges, dimensions = 3) {
+	assertGraphLayoutDimensions(dimensions);
 	const nodeSnapshot = nodes.map(({ id, radius, nodeGlyph }) => ({
 		id,
 		radius,
@@ -36,8 +40,9 @@ function snapshotGraphLayoutInputs(nodes, edges) {
 		edgeStrokePattern
 	}));
 	return {
-		graphKey: require_knowledgeGraphFigure.graphSignature(nodeSnapshot, edgeSnapshot),
-		layoutKey: require_knowledgeGraphFigure.graphLayoutSignature(nodeSnapshot, edgeSnapshot),
+		dimensions,
+		graphKey: `D${dimensions}|${require_knowledgeGraphFigure.graphSignature(nodeSnapshot, edgeSnapshot)}`,
+		layoutKey: `D${dimensions}|${require_knowledgeGraphFigure.graphLayoutSignature(nodeSnapshot, edgeSnapshot)}`,
 		nodes: nodeSnapshot,
 		edges: edgeSnapshot
 	};
@@ -52,7 +57,8 @@ function snapshotGraphLayoutInputs(nodes, edges) {
 * order. A discarded effect can mutate any returned node, slot, or cache entry
 * without reaching the currently published authority.
 */
-function planGraphLayoutCache(nodes, remembered, maxRememberedPositions) {
+function planGraphLayoutCache(nodes, remembered, maxRememberedPositions, dimensions = 3) {
+	assertGraphLayoutDimensions(dimensions);
 	if (!Number.isSafeInteger(maxRememberedPositions) || maxRememberedPositions < nodes.length) throw new RangeError("max remembered graph positions must be an integer at least as large as the active graph");
 	const activeIds = /* @__PURE__ */ new Set();
 	const plannedNodes = new Array(nodes.length);
@@ -64,7 +70,11 @@ function planGraphLayoutCache(nodes, remembered, maxRememberedPositions) {
 		const r = require_knowledgeGraphFigure.normalizeGraphNodeRadius(input.radius);
 		const previous = remembered.get(input.id);
 		if (previous === void 0) {
-			plannedNodes[index] = {
+			plannedNodes[index] = dimensions === 2 ? {
+				id: input.id,
+				r,
+				z: 0
+			} : {
 				id: input.id,
 				r
 			};
@@ -76,7 +86,7 @@ function planGraphLayoutCache(nodes, remembered, maxRememberedPositions) {
 			r,
 			x: previous[0],
 			y: previous[1],
-			z: previous[2]
+			z: dimensions === 2 ? 0 : previous[2]
 		};
 	}
 	const makeBuffer = () => {
@@ -84,7 +94,7 @@ function planGraphLayoutCache(nodes, remembered, maxRememberedPositions) {
 		for (const [id, previous] of remembered) cache.set(id, [
 			previous[0],
 			previous[1],
-			previous[2]
+			dimensions === 2 ? 0 : previous[2]
 		]);
 		const positionSlots = new Array(nodes.length);
 		for (let index = 0; index < nodes.length; index++) {
@@ -576,10 +586,10 @@ function knowledgeGraphNodeUsesFocusScale(nodeId, focus, focusSet) {
 }
 /** Populate the one shared quadratic path definition consumed by lines,
 * arrowheads, and flow particles. Module-scope vectors avoid direct frame allocations. */
-function setEdgeCurve(source, target, lane) {
+function setEdgeCurve(source, target, lane, dimensions) {
 	_a.set(source.x ?? 0, source.y ?? 0, source.z ?? 0);
 	_b.set(target.x ?? 0, target.y ?? 0, target.z ?? 0);
-	require_knowledgeGraphFigure.graphEdgeControlPointInto(_a, _b, lane, _curveControl);
+	require_knowledgeGraphFigure.graphEdgeControlPointInto(_a, _b, lane, _curveControl, dimensions);
 }
 /** Allocation-free glyph upload shared by the three closed node-kind groups. */
 function updateKnowledgeGraphGlyphMatrices(glyphMesh, nodeIndexes, simNodes, focus, focusSet) {
@@ -614,6 +624,14 @@ function KnowledgeGraph3DScene(props) {
 	require_knowledgeGraphFigure.assertKnowledgeGraphLiveForceBudget(nodes.length, edges.length);
 	return renderKnowledgeGraph3DScene(props);
 }
+function KnowledgeGraph2DScene(props) {
+	(0, _cortexel_knowledge_graph_presentation_capability.assertPreparedGenericKnowledgeGraphPresentation)(props.presentation);
+	if (props.view !== void 0) (0, _cortexel_knowledge_graph_presentation_capability.assertPreparedKnowledgeGraphView)(props.view, props.presentation);
+	const nodes = props.view?.nodes ?? props.presentation.nodes;
+	const edges = props.view?.edges ?? props.presentation.edges;
+	require_knowledgeGraphFigure.assertKnowledgeGraphLiveForceBudget(nodes.length, edges.length);
+	return renderKnowledgeGraph3DScene(props, 2);
+}
 /** Package-internal corpus renderer used only below the canonical caption. */
 function KnowledgeGraphCorpus3DSceneInternal(props) {
 	(0, _cortexel_knowledge_graph_presentation_capability.assertPreparedCorpusKnowledgeGraphPresentation)(props.presentation);
@@ -621,9 +639,11 @@ function KnowledgeGraphCorpus3DSceneInternal(props) {
 	const nodes = props.view?.nodes ?? props.presentation.nodes;
 	const edges = props.view?.edges ?? props.presentation.edges;
 	require_knowledgeGraphFigure.assertKnowledgeGraphLiveForceBudget(nodes.length, edges.length);
-	return renderKnowledgeGraph3DScene(props);
+	const dimensions = props.layoutDimensions ?? 3;
+	assertGraphLayoutDimensions(dimensions);
+	return renderKnowledgeGraph3DScene(props, dimensions);
 }
-function renderKnowledgeGraph3DScene(props) {
+function renderKnowledgeGraph3DScene(props, layoutDimensions = 3) {
 	const { presentation, view, ...interactionProps } = props;
 	(0, _cortexel_knowledge_graph_presentation_capability.assertPreparedKnowledgeGraphPresentation)(presentation);
 	if (view !== void 0) (0, _cortexel_knowledge_graph_presentation_capability.assertPreparedKnowledgeGraphView)(view, presentation);
@@ -643,11 +663,12 @@ function renderKnowledgeGraph3DScene(props) {
 		hoverId,
 		autoFrame: nodes.length > 0 ? props.autoFrame : false,
 		graphIdentity,
+		layoutDimensions,
 		nodes,
 		edges
-	}, graphIdentity);
+	}, JSON.stringify([graphIdentity, layoutDimensions]));
 }
-function KnowledgeGraph3DSceneInstance({ graphIdentity, nodes, edges, selectedId, query, onSelect, hoverId, onHover, controlsRef, autoFrame = false, flyToSelection = false, labelColor, particleColor, flowMotion = "static", themeMode = "dark", reducedMotion = false }) {
+function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes, edges, selectedId, query, onSelect, hoverId, onHover, controlsRef, autoFrame = false, flyToSelection = false, labelColor, particleColor, flowMotion = "static", themeMode = "dark", reducedMotion = false }) {
 	const meshRef = (0, react.useRef)(null);
 	const linesRef = (0, react.useRef)(null);
 	const particlesRef = (0, react.useRef)(null);
@@ -693,7 +714,11 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, nodes, edges, selectedId
 	(0, react.useEffect)(() => () => {
 		require_KnowledgeGraphCorpusFrame_internal.synchronizeKnowledgeGraphControlsListener(attachedControlsRef, null, onUserGrab);
 	}, [onUserGrab]);
-	const layoutInput = (0, react.useMemo)(() => snapshotGraphLayoutInputs(nodes, edges), [nodes, edges]);
+	const layoutInput = (0, react.useMemo)(() => snapshotGraphLayoutInputs(nodes, edges, layoutDimensions), [
+		nodes,
+		edges,
+		layoutDimensions
+	]);
 	const graphKey = layoutInput.graphKey;
 	const layoutKey = layoutInput.layoutKey;
 	const normalizedQuery = (0, react.useMemo)(() => require_knowledgeGraphFigure.normalizeGraphQuery(query), [query]);
@@ -790,14 +815,14 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, nodes, edges, selectedId
 	const geometryDirtyRef = (0, react.useRef)(true);
 	const flowPhaseRef = (0, react.useRef)(0);
 	(0, react.useEffect)(() => {
-		const plan = planGraphLayoutCache(layoutNodes, posMap.current, MAX_REMEMBERED_POSITIONS);
+		const plan = planGraphLayoutCache(layoutNodes, posMap.current, MAX_REMEMBERED_POSITIONS, layoutDimensions);
 		const simNodes = plan.nodes;
 		const runtimeLinks = simLinks.map(({ source, target }) => ({
 			source,
 			target
 		}));
 		const linkForce = (0, d3_force_3d.forceLink)(runtimeLinks).id((d) => d.id).distance(34).strength(.35);
-		const sim = (0, d3_force_3d.forceSimulation)(simNodes, 3).force("charge", (0, d3_force_3d.forceManyBody)().strength(-140).distanceMax(600)).force("link", linkForce).force("center", (0, d3_force_3d.forceCenter)(0, 0, 0).strength(.04)).force("collide", (0, d3_force_3d.forceCollide)((d) => {
+		const sim = (0, d3_force_3d.forceSimulation)(simNodes, layoutDimensions).force("charge", (0, d3_force_3d.forceManyBody)().strength(-140).distanceMax(600)).force("link", linkForce).force("center", (0, d3_force_3d.forceCenter)(0, 0, 0).strength(.04)).force("collide", (0, d3_force_3d.forceCollide)((d) => {
 			const node = d;
 			const layoutNode = layoutNodes[index.get(node.id)];
 			return require_knowledgeGraphVisualEncoding_internal.knowledgeGraphRenderedNodeRadialExtent(node.r, layoutNode.nodeGlyph ?? "sphere_outline", true) + 3;
@@ -825,6 +850,7 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, nodes, edges, selectedId
 		};
 	}, [
 		layoutKey,
+		layoutDimensions,
 		layoutNodes,
 		simLinks,
 		index,
@@ -974,7 +1000,7 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, nodes, edges, selectedId
 				const e = lane.edge;
 				const s = simNodes[index.get(e.source)];
 				const t = simNodes[index.get(e.target)];
-				setEdgeCurve(s, t, lane);
+				setEdgeCurve(s, t, lane, layoutDimensions);
 				_curvePoint.copy(_a);
 				for (let chord = 0; chord < 12; chord++) {
 					require_knowledgeGraphFigure.graphEdgeCurvePointInto(_a, _curveControl, _b, (chord + 1) / 12, _curveNext);
@@ -1000,7 +1026,7 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, nodes, edges, selectedId
 					const source = simNodes[index.get(edge.source)];
 					const targetIndex = index.get(edge.target);
 					const target = simNodes[targetIndex];
-					setEdgeCurve(source, target, lane);
+					setEdgeCurve(source, target, lane, layoutDimensions);
 					const targetExtent = require_knowledgeGraphVisualEncoding_internal.knowledgeGraphRenderedNodeRadialExtent(target.r, visualNodes[targetIndex].nodeGlyph, knowledgeGraphNodeUsesFocusScale(target.id, focus, focusSet));
 					if (!require_knowledgeGraphFigure.graphEdgeTargetBoundaryInto(_a, _curveControl, _b, targetExtent, _curveNext, _direction)) {
 						_dummy.position.copy(_b);
@@ -1029,7 +1055,7 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, nodes, edges, selectedId
 				const e = lane.edge;
 				const s = simNodes[index.get(e.source)];
 				const t = simNodes[index.get(e.target)];
-				setEdgeCurve(s, t, lane);
+				setEdgeCurve(s, t, lane, layoutDimensions);
 				const queryIncident = require_knowledgeGraphFigure.graphEdgeMatchesQuery(e.source, e.target, queryMatchIds, normalizedQuery);
 				let size = 1.3;
 				if (focus) {
@@ -1116,8 +1142,9 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, nodes, edges, selectedId
 				}
 				if (validEdges.length > 0) _box.expandByScalar(require_knowledgeGraphFigure.MAX_GRAPH_EDGE_LANE_OFFSET + GRAPH_DIRECTION_MARKER_PADDING);
 				const sphere = _box.getBoundingSphere(_sphere);
-				const currentDistance = controls ? camera.position.distanceTo(controls.target) : camera.position.distanceTo(sphere.center);
-				if (controls && camera.position.distanceToSquared(controls.target) > 1e-12) _direction.copy(camera.position).sub(controls.target).normalize();
+				const currentDistance = layoutDimensions === 2 && autoFrameStageRef.current === 0 ? 0 : controls ? camera.position.distanceTo(controls.target) : camera.position.distanceTo(sphere.center);
+				if (layoutDimensions === 2) _direction.set(0, 0, 1);
+				else if (controls && camera.position.distanceToSquared(controls.target) > 1e-12) _direction.copy(camera.position).sub(controls.target).normalize();
 				else camera.getWorldDirection(_direction).multiplyScalar(-1);
 				if (isKnowledgeGraphCameraVectorFinite(_direction.x, _direction.y, _direction.z)) {
 					if (_direction.lengthSq() <= 1e-12) _direction.set(0, 0, 1);
@@ -1365,19 +1392,20 @@ var KnowledgeGraphVisualBoundary = class extends react.Component {
 function KnowledgeGraphVisualMount({ renderVisual, scene, context }) {
 	return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(react_jsx_runtime.Fragment, { children: renderVisual(scene, context) });
 }
-function KnowledgeGraphInteractiveRegion({ context, renderVisual, visualAvailable, visualRetryKey, controlsRef, autoFrame, flyToSelection, labelColor, particleColor, flowMotion, reducedMotion, query }) {
+function KnowledgeGraphInteractiveRegion({ context, renderVisual, visualAvailable, visualRetryKey, controlsRef, autoFrame, flyToSelection, labelColor, particleColor, flowMotion, reducedMotion, query, layoutDimensions }) {
 	const { presentation, view, hostPolicy, activeToken, selectedId, onSelect, hoverId, onHover } = context;
 	if (onHover === void 0) throw new Error("interactive knowledge-graph hover controller invariant failed");
-	const visualUnavailableStatus = /* @__PURE__ */ (0, react_jsx_runtime.jsx)("p", {
+	const visualUnavailableStatus = /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("p", {
 		role: "status",
-		children: "The host-owned interactive 3D view is unavailable. The paginated graph-record browser remains below; its controls expose every accepted record after hydration."
+		children: [`The host-owned interactive ${layoutDimensions}D view is unavailable.`, " The paginated graph-record browser remains below; its controls expose every accepted record after hydration."]
 	});
 	const { liveForceAvailability } = hostPolicy;
 	const liveForceAvailable = liveForceAvailability.status === "available";
 	const liveForceLimitStatus = /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("p", {
 		role: "status",
 		children: [
-			"The host-owned interactive 3D force view was not mounted: this active view has",
+			`The host-owned interactive ${layoutDimensions}D force view was not mounted:`,
+			" this active view has",
 			" ",
 			liveForceAvailability.nodeCount,
 			" nodes and ",
@@ -1407,7 +1435,8 @@ function KnowledgeGraphInteractiveRegion({ context, renderVisual, visualAvailabl
 		particleColor,
 		flowMotion,
 		themeMode: hostPolicy.themeMode,
-		reducedMotion
+		reducedMotion,
+		layoutDimensions
 	}) : null;
 	return visualAvailable && liveForceAvailable && scene !== null ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)(KnowledgeGraphVisualBoundary, {
 		resetToken: activeToken,
@@ -1421,14 +1450,15 @@ function KnowledgeGraphInteractiveRegion({ context, renderVisual, visualAvailabl
 	}) : liveForceAvailable ? visualUnavailableStatus : liveForceLimitStatus;
 }
 /**
-* Canonical legacy 3D corpus-graph composition. It binds strict validation,
+* Canonical legacy corpus-graph composition for planar or spatial display. It binds strict validation,
 * mapping, caption, legend, interactive DOM controls, and a paginated record
 * view to one detached presentation. Unit tests establish those narrow
 * composition invariants only—not whole-figure WCAG, browser, WebGL, or
 * assistive-technology conformance.
 */
 function KnowledgeGraphAccessibleFigure(props) {
-	const { renderVisual, selectedId, onSelect, hoverId, onHover, visualAvailable = true, visualRetryKey, viewPolicy, query = "", controlsRef, autoFrame = true, flyToSelection, labelColor, particleColor, flowMotion, reducedMotion, nodePageSize, recordNodePageSize, recordEdgePageSize, activePalette, className, label = "Interactive knowledge graph" } = props;
+	const { renderVisual, selectedId, onSelect, hoverId, onHover, visualAvailable = true, visualRetryKey, viewPolicy, query = "", controlsRef, autoFrame = true, flyToSelection, labelColor, particleColor, flowMotion, reducedMotion, layoutDimensions = 3, nodePageSize, recordNodePageSize, recordEdgePageSize, activePalette, className, label = "Interactive knowledge graph" } = props;
+	assertGraphLayoutDimensions(layoutDimensions);
 	return /* @__PURE__ */ (0, react_jsx_runtime.jsx)(require_KnowledgeGraphCorpusFrame_internal.KnowledgeGraphCorpusFrameInternal, {
 		sourceInput: props,
 		selectionController: {
@@ -1459,6 +1489,7 @@ function KnowledgeGraphAccessibleFigure(props) {
 			particleColor,
 			flowMotion,
 			reducedMotion,
+			layoutDimensions,
 			query
 		})
 	});
@@ -1478,6 +1509,7 @@ Object.defineProperty(exports, 'KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1', {
     return _cortexel_knowledge_graph_presentation_capability.KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1;
   }
 });
+exports.KnowledgeGraph2DScene = KnowledgeGraph2DScene;
 exports.KnowledgeGraph3DScene = KnowledgeGraph3DScene;
 exports.KnowledgeGraphA11yList = require_KnowledgeGraphCorpusFrame_internal.KnowledgeGraphA11yList;
 exports.KnowledgeGraphAccessibleFigure = KnowledgeGraphAccessibleFigure;

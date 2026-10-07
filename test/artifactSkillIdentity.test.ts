@@ -22,7 +22,7 @@ const root = path.resolve(import.meta.dirname, '..');
 const presentationDefaults = {
   themeId: 'light',
   width: 720,
-  height: 440,
+  height: 'auto',
   budgetProfile: 'standard',
 } as const;
 

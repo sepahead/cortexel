@@ -27,9 +27,9 @@ import {
   type NumericScale,
 } from './scale.js';
 import { CATEGORICAL_SERIES_STYLES, THEMES } from '../generated/catalog.js';
-import type { CompileContext } from './compile.js';
+import { allocateCanvas, type CompileContext } from './compile.js';
+import { MIN_PLOT_PANEL_HEIGHT, RenderLayoutCapacityError } from './layout.js';
 import { finiteExtent, finiteExtentBy } from '../core/numeric.js';
-import { disclosureFooterHeight, legendPlotInset } from './layout.js';
 import type { PreparedTraceSeries } from '../analysis/traces.js';
 import type { ResponseCurveResult } from '../analysis/responseCurve.js';
 import type { PsthResult } from '../analysis/psth.js';
@@ -49,21 +49,6 @@ import {
   exactRationalToBinary64,
   finiteBinary64ToMinSubnormalUnits,
 } from '../core/exact-binary64.js';
-
-const MARGIN = { top: 60, right: 32, bottom: 56, left: 64 } as const;
-
-function panelBox(context: CompileContext): { x: number; y: number; width: number; height: number } {
-  const disclosureSpace = disclosureFooterHeight(
-    context.width,
-    [...context.disclosures, ...context.sourceStatements],
-  );
-  return {
-    x: MARGIN.left,
-    y: MARGIN.top,
-    width: context.width - MARGIN.left - MARGIN.right,
-    height: context.height - MARGIN.top - MARGIN.bottom - disclosureSpace,
-  };
-}
 
 function accent(themeId: string): string {
   return (THEMES as Record<string, Record<string, string>>)[themeId]?.focus ?? '#0072b2';
@@ -116,7 +101,7 @@ function frame(context: CompileContext, skillId: string): Pick<
   };
 }
 
-function emptyPanel(box: ReturnType<typeof panelBox>, reason: string): Panel {
+function emptyPanel(box: ReturnType<typeof allocateCanvas>['box'], reason: string): Panel {
   return { id: 'main', ...box, axes: [], marks: [], noData: { reason } };
 }
 
@@ -636,15 +621,11 @@ export function compileTraceFigure(
     ),
     ...panels.flatMap((panel) => (panel.referenceLines ?? []).map((reference) => reference.label)),
   ];
-  const base = panelBox(context);
-  const legendInset = legendPlotInset(
-    context.width,
-    legendLabels.length,
-    context.subtitle !== undefined,
-    legendLabels,
-  );
   const panelGap = panels.length > 1 ? (options.sharedXAxis ? 22 : 50) : 0;
-  const availableHeight = base.height - legendInset - panelGap * Math.max(0, panels.length - 1);
+  const allocation = allocateCanvas(context, { legendLabels, panelCount: Math.max(1, panels.length), panelGap });
+  context = allocation.context;
+  const base = allocation.box;
+  const availableHeight = base.height - panelGap * Math.max(0, panels.length - 1);
   const panelHeight = panels.length > 0 ? availableHeight / panels.length : availableHeight;
 
   const globalYValues = allSeries.flatMap((entry) =>
@@ -655,7 +636,7 @@ export function compileTraceFigure(
   const compiledPanels: Panel[] = panels.map((panelSpec, panelIndex) => {
     const box = {
       x: base.x,
-      y: base.y + legendInset + panelIndex * (panelHeight + panelGap),
+      y: base.y + panelIndex * (panelHeight + panelGap),
       width: base.width,
       height: panelHeight,
     };
@@ -863,7 +844,7 @@ export function compileTraceFigure(
     ...frame(context, skillId),
     panels: compiledPanels.length > 0
       ? compiledPanels
-      : [emptyPanel({ ...base, y: base.y + legendInset, height: availableHeight }, 'no trace panels declared')],
+      : [emptyPanel({ ...base, height: availableHeight }, 'no trace panels declared')],
     legend: [
       ...legendEntries.map((entry) => {
         const style = entry.style ?? categoricalStyle(entry.styleIndex);
@@ -975,7 +956,9 @@ export function compileBarFigure(
     };
   } = {},
 ): RenderPlanV1 {
-  const box = panelBox(context);
+  const allocation = allocateCanvas(context, { legendLabels: [] });
+  context = allocation.context;
+  const box = allocation.box;
   const table = barTable(
     edges,
     values,
@@ -1099,22 +1082,16 @@ export function compilePsthFigure(
   },
   skillId: string,
 ): RenderPlanV1 {
-  const baseBox = panelBox(context);
-  const legendLabels = [
+  const finiteDisplay = psth.displayValues.filter(
+    (value): value is number => value !== null && Number.isFinite(value),
+  );
+  const legendLabels = finiteDisplay.length > 0 ? [
     options.seriesLabel,
     ...(psth.missingBinCount > 0 ? ['No included trial covered this bin'] : []),
-  ];
-  const legendInset = legendPlotInset(
-    context.width,
-    legendLabels.length,
-    context.subtitle !== undefined,
-    legendLabels,
-  );
-  const box = {
-    ...baseBox,
-    y: baseBox.y + legendInset,
-    height: baseBox.height - legendInset,
-  };
+  ] : [];
+  const allocation = allocateCanvas(context, { legendLabels });
+  context = allocation.context;
+  const box = allocation.box;
   const rowsTotal = psth.counts.length;
   const rows = Array.from({ length: rowsTotal }, (_unused, index) => [
     options.seriesId,
@@ -1156,9 +1133,6 @@ export function compilePsthFigure(
     rowsTotal,
   };
 
-  const finiteDisplay = psth.displayValues.filter(
-    (value): value is number => value !== null && Number.isFinite(value),
-  );
   const plottedExtent = finiteExtent(finiteDisplay);
   const xScale = linearScale(
     psth.edges[0],
@@ -1384,7 +1358,14 @@ export function compileGroupedBarFigure(
     readonly outputAuthority?: { readonly classId: string };
   } = {},
 ): RenderPlanV1 {
-  const box = panelBox(context);
+  const legend = groups.length === 0 || edges.length < 2 ? [] : groups.map((group, index) => ({
+      label: group.label,
+      color: categoricalStyle(index).color,
+      glyph: 'series' as const,
+    }));
+  const allocation = allocateCanvas(context, { legendLabels: legend.map((entry) => entry.label) });
+  context = allocation.context;
+  const box = allocation.box;
   const accessibility = {
     // Keep group accounting discoverable without mutating the source-owned global
     // summary program after the compiler has closed its placeholder vocabulary.
@@ -1487,11 +1468,7 @@ export function compileGroupedBarFigure(
       rowsInline: rows.length,
       rowsTotal,
     },
-    legend: groups.map((group, index) => ({
-      label: group.label,
-      color: categoricalStyle(index).color,
-      glyph: 'series' as const,
-    })),
+    legend,
     accessibility,
   };
 }
@@ -1574,7 +1551,9 @@ export function compileRasterFigure(
   markStyle: 'tick' | 'point',
   skillId: string,
 ): RenderPlanV1 {
-  const box = panelBox(context);
+  const allocation = allocateCanvas(context, { legendLabels: [] });
+  context = allocation.context;
+  const box = allocation.box;
   if (rows.length === 0) {
     return { ...frame(context, skillId), panels: [emptyPanel(box, 'no declared event rows')], table: emptyTable(), legend: [] };
   }
@@ -1722,9 +1701,10 @@ export function compileMatrixFigure(
   spec: MatrixFigureSpec,
   skillId: string,
 ): RenderPlanV1 {
-  const baseBox = panelBox(context);
   if (spec.rowIds.length === 0 || spec.columnIds.length === 0) {
-    return { ...frame(context, skillId), panels: [emptyPanel(baseBox, 'empty node universe')], table: emptyTable(), legend: [] };
+    const allocation = allocateCanvas(context);
+    context = allocation.context;
+    return { ...frame(context, skillId), panels: [emptyPanel(allocation.box, 'empty node universe')], table: emptyTable(), legend: [] };
   }
 
   const valued = spec.cells.filter(
@@ -1777,17 +1757,9 @@ export function compileMatrixFigure(
       }]
       : []),
   ];
-  const legendInset = legendPlotInset(
-    context.width,
-    legend.length,
-    context.subtitle !== undefined,
-    legend.map((entry) => entry.label),
-  );
-  const box = {
-    ...baseBox,
-    y: baseBox.y + legendInset,
-    height: baseBox.height - legendInset,
-  };
+  const allocation = allocateCanvas(context, { legendLabels: legend.map((entry) => entry.label) });
+  context = allocation.context;
+  const box = allocation.box;
   const cellW = box.width / spec.columnIds.length;
   const cellH = box.height / spec.rowIds.length;
   const cellRect = (cell: {
@@ -1989,7 +1961,7 @@ function divergingColor(value: number, minimum: number, maximum: number, center:
 }
 
 function equalScaleMapper(
-  box: ReturnType<typeof panelBox>,
+  box: ReturnType<typeof allocateCanvas>['box'],
   xs: readonly number[],
   ys: readonly number[],
   declaredDomain?: {
@@ -2111,9 +2083,10 @@ export function compileSpatialMapFigure(
   spec: SpatialMapFigureSpec,
   skillId: string,
 ): RenderPlanV1 {
-  const baseBox = panelBox(context);
   if (spec.nodes.length === 0) {
-    return { ...frame(context, skillId), panels: [emptyPanel(baseBox, 'no positioned nodes')], table: emptyTable(), legend: [] };
+    const allocation = allocateCanvas(context);
+    context = allocation.context;
+    return { ...frame(context, skillId), panels: [emptyPanel(allocation.box, 'no positioned nodes')], table: emptyTable(), legend: [] };
   }
   const nodeOrdinal = new Map(spec.nodes.map((node, index) => [node.id, index]));
   const canonicalPair = (source: string, target: string): readonly [string, string] =>
@@ -2167,17 +2140,9 @@ export function compileSpatialMapFigure(
       }]
       : []),
   ];
-  const legendInset = legendPlotInset(
-    context.width,
-    legend.length,
-    context.subtitle !== undefined,
-    legend.map((entry) => entry.label),
-  );
-  const box = {
-    ...baseBox,
-    y: baseBox.y + legendInset,
-    height: baseBox.height - legendInset,
-  };
+  const allocation = allocateCanvas(context, { legendLabels: legend.map((entry) => entry.label) });
+  context = allocation.context;
+  const box = allocation.box;
   const mapper = equalScaleMapper(
     box,
     spec.nodes.map((node) => node.x),
@@ -2436,9 +2401,16 @@ export function compileCompartmentHeatmapFigure(
   colorSpec: { readonly family: 'sequential' | 'diverging'; readonly center?: number },
   skillId: string,
 ): RenderPlanV1 {
-  const box = panelBox(context);
   const finite = rows.flatMap((row) => row.values.filter((value): value is number => value !== null));
   const extent = finiteExtent(finite);
+  const legend: NonNullable<RenderPlanV1['legend']> = [{
+      label: `${colorLabel}; global ${colorSpec.family} colour domain${extent ? ` ${formatNumber(extent.min)} to ${formatNumber(extent.max)}` : ' unavailable'}`,
+      color: accent(context.themeId),
+      glyph: 'series',
+    }];
+  const allocation = allocateCanvas(context, { legendLabels: legend.map((entry) => entry.label) });
+  context = allocation.context;
+  const box = allocation.box;
   const xScale = linearScale(window[0], window[1], box.x, box.x + box.width);
   const rowHeight = box.height / Math.max(1, rows.length);
   const marks: Mark[] = [];
@@ -2493,11 +2465,7 @@ export function compileCompartmentHeatmapFigure(
       marks,
     }],
     table: emptyTable(),
-    legend: [{
-      label: `${colorLabel}; global ${colorSpec.family} colour domain${extent ? ` ${formatNumber(extent.min)} to ${formatNumber(extent.max)}` : ' unavailable'}`,
-      color: accent(context.themeId),
-      glyph: 'series',
-    }],
+    legend,
   };
 }
 
@@ -2511,7 +2479,9 @@ export function compileScatterFigure(
   yLabel: string,
   skillId: string,
 ): RenderPlanV1 {
-  const box = panelBox(context);
+  const allocation = allocateCanvas(context, { legendLabels: [] });
+  context = allocation.context;
+  const box = allocation.box;
   if (xs.length === 0) {
     return { ...frame(context, skillId), panels: [emptyPanel(box, 'no positioned nodes')], table: emptyTable(), legend: [] };
   }
@@ -2565,7 +2535,9 @@ export function compileStemFigure(
   yLabel: string,
   skillId: string,
 ): RenderPlanV1 {
-  const box = panelBox(context);
+  const allocation = allocateCanvas(context, { legendLabels: [] });
+  context = allocation.context;
+  const box = allocation.box;
   if (counts.length === 0) {
     return { ...frame(context, skillId), panels: [emptyPanel(box, 'no pairs to plot')], table: emptyTable(), legend: [] };
   }
@@ -2694,7 +2666,6 @@ export function compileResponseCurveFigure(
   options: ResponseCurveFigureOptions,
   skillId: string,
 ): RenderPlanV1 {
-  const box = panelBox(context);
   const rowsTotal = options.tableRows.length;
   const table = {
     policy: 'complete_returned' as const,
@@ -2706,6 +2677,49 @@ export function compileResponseCurveFigure(
   const estimates = curve.conditions
     .map((condition) => condition.estimate)
     .filter((value): value is number => value !== null && Number.isFinite(value));
+  // The same exact contiguous runs decide both guide existence and guide geometry.
+  // A null condition ends a run; nominal conditions never receive an ordered guide.
+  const guideConditionRuns: number[][] = [];
+  let currentRun: number[] = [];
+  for (let index = 0; index < curve.conditions.length; index++) {
+    if (curve.conditions[index].estimate === null) {
+      if (currentRun.length >= 2) guideConditionRuns.push(currentRun);
+      currentRun = [];
+    } else {
+      currentRun.push(index);
+    }
+  }
+  if (currentRun.length >= 2) guideConditionRuns.push(currentRun);
+  const hasOrderedGuide = curve.axis !== 'nominal' && guideConditionRuns.length > 0;
+  const missingLegend: NonNullable<RenderPlanV1['legend']> = curve.conditions.some(
+    (condition) => condition.estimate === null,
+  ) ? [{
+    label: 'Declared condition with undefined response (x position only)',
+    color: missingColor(context.themeId),
+    glyph: 'series',
+    dash: '2 3',
+  }] : [];
+  const legend: NonNullable<RenderPlanV1['legend']> = estimates.length === 0
+    ? missingLegend
+    : [
+      {
+        label: options.curveLabel,
+        color: accent(context.themeId),
+        glyph: 'series',
+        marker: 'circle',
+      },
+      ...(hasOrderedGuide ? [{
+        label: 'Ordered-condition guide (not a fit or interpolation)',
+        color: missingColor(context.themeId),
+        glyph: 'series' as const,
+        dash: '4 3',
+      }] : []),
+      ...missingLegend,
+    ];
+  // Reserve the complete emitted labels before constructing scales or carriers.
+  const allocation = allocateCanvas(context, { legendLabels: legend.map((entry) => entry.label) });
+  context = allocation.context;
+  const box = allocation.box;
   const panelSummaries = [...(options.summaryStatements ?? [])];
   const xValues = curve.conditions.map((condition) =>
     curve.axis === 'numeric' ? condition.input! : condition.displayOrdinal,
@@ -2751,15 +2765,6 @@ export function compileResponseCurveFigure(
       dash: '2 3',
     }
     : undefined;
-  const missingLegend = missingConditionLines.length > 0
-    ? [{
-      label: 'Declared condition with undefined response (x position only)',
-      color: missingColor(context.themeId),
-      glyph: 'series' as const,
-      dash: '2 3',
-    }]
-    : [];
-
   if (estimates.length === 0) {
     return {
       ...frame(context, skillId),
@@ -2771,7 +2776,7 @@ export function compileResponseCurveFigure(
         noData: { reason: 'no declared condition has a usable response estimate' },
       }],
       table,
-      legend: missingLegend,
+      legend,
       accessibility: {
         summary: context.summary,
         panelSummaries,
@@ -2806,29 +2811,9 @@ export function compileResponseCurveFigure(
     }
     : linearNumericScale(yMinimum, yExtent.max, box.y + box.height, box.y);
 
-  const points: {
-    x: number;
-    y: number;
-    authority: OutputAuthorityAtomicRoleV1;
-  }[] = [];
-  const guideSubpaths: {
-    x: number;
-    y: number;
-    authority: OutputAuthorityAtomicRoleV1;
-  }[][] = [];
-  let currentGuide: {
-    x: number;
-    y: number;
-    authority: OutputAuthorityAtomicRoleV1;
-  }[] = [];
-  for (let index = 0; index < curve.conditions.length; index++) {
-    const condition = curve.conditions[index];
-    if (condition.estimate === null) {
-      if (currentGuide.length >= 2) guideSubpaths.push(currentGuide);
-      currentGuide = [];
-      continue;
-    }
-    const point = {
+  const conditionPoints = curve.conditions.map((condition, index) => {
+    if (condition.estimate === null) return null;
+    return {
       x: xScale.map(xValues[index]),
       y: yScale.map(condition.estimate),
       authority: {
@@ -2841,25 +2826,27 @@ export function compileResponseCurveFigure(
         },
       },
     };
-    points.push(point);
-    currentGuide.push({
+  });
+  const points = conditionPoints.filter((point): point is NonNullable<typeof point> => point !== null);
+  const guideSubpaths = guideConditionRuns.map((run) => run.map((index) => {
+    const point = conditionPoints[index]!;
+    return {
       x: point.x,
       y: point.y,
       authority: {
-        tag: 'data_carrier',
+        tag: 'data_carrier' as const,
         classId: 'series_paths',
         provenance: {
-          conditionId: condition.conditionId,
-          displayOrdinal: condition.displayOrdinal,
+          conditionId: curve.conditions[index].conditionId,
+          displayOrdinal: curve.conditions[index].displayOrdinal,
           role: 'ordered_guide_vertex',
         },
       },
-    });
-  }
-  if (currentGuide.length >= 2) guideSubpaths.push(currentGuide);
+    };
+  }));
 
   const marks: Mark[] = missingConditionMark ? [missingConditionMark] : [];
-  if (curve.axis !== 'nominal' && guideSubpaths.length > 0) {
+  if (hasOrderedGuide) {
     marks.push({
       type: 'line',
       subpaths: guideSubpaths,
@@ -2879,23 +2866,7 @@ export function compileResponseCurveFigure(
       marks,
     }],
     table,
-    legend: [
-      {
-        label: options.curveLabel,
-        color: accent(context.themeId),
-        glyph: 'series',
-        marker: 'circle',
-      },
-      ...(curve.axis !== 'nominal' && guideSubpaths.length > 0
-        ? [{
-          label: 'Ordered-condition guide (not a fit or interpolation)',
-          color: missingColor(context.themeId),
-          glyph: 'series' as const,
-          dash: '4 3',
-        }]
-        : []),
-      ...missingLegend,
-    ],
+    legend,
     accessibility: {
       summary: context.summary,
       panelSummaries,
@@ -2913,7 +2884,9 @@ export function compileTrajectoryFigure(
   yLabel: string,
   skillId: string,
 ): RenderPlanV1 {
-  const box = panelBox(context);
+  const allocation = allocateCanvas(context, { legendLabels: [] });
+  context = allocation.context;
+  const box = allocation.box;
   if (xs.length === 0) {
     return { ...frame(context, skillId), panels: [emptyPanel(box, 'no trajectory to plot')], table: emptyTable(), legend: [] };
   }
@@ -2966,7 +2939,15 @@ export function compileVectorFieldFigure(
   fixedPoints: readonly { readonly x: number; readonly y: number }[],
   skillId: string,
 ): RenderPlanV1 {
-  const box = panelBox(context);
+  const legend: NonNullable<RenderPlanV1['legend']> = xs.length === 0 ? [] : [
+      { label: `Caller-supplied field direction; ${scaling}`, color: accent(context.themeId), glyph: 'series' },
+      ...(fixedPoints.length > 0
+        ? [{ label: 'Declared fixed-point candidate', color: uncertaintyStroke(context.themeId), glyph: 'series' as const, marker: 'diamond' }]
+        : []),
+    ];
+  const allocation = allocateCanvas(context, { legendLabels: legend.map((entry) => entry.label) });
+  context = allocation.context;
+  const box = allocation.box;
   if (xs.length === 0) {
     return {
       ...frame(context, skillId),
@@ -3036,12 +3017,7 @@ export function compileVectorFieldFigure(
       marks,
     }],
     table: emptyTable(),
-    legend: [
-      { label: `Caller-supplied field direction; ${scaling}`, color: accent(context.themeId), glyph: 'series' },
-      ...(fixedPoints.length > 0
-        ? [{ label: 'Declared fixed-point candidate', color: uncertaintyStroke(context.themeId), glyph: 'series' as const, marker: 'diamond' }]
-        : []),
-    ],
+    legend,
   };
 }
 
@@ -3125,32 +3101,6 @@ export function compilePhasePlaneFigure(
   spec: PhasePlaneFigureSpec,
   skillId: string,
 ): RenderPlanV1 {
-  const baseBox = panelBox(context);
-  const provisionalLegendLabels = [
-    ...(spec.vectorField
-      ? ['Caller-supplied vector field with declared magnitude scaling and direction']
-      : []),
-    ...(spec.nullclines?.ids ?? []).map(
-      (id, index) => spec.nullclines?.labels[index] ?? id,
-    ),
-    ...(spec.trajectories?.ids ?? []).map(
-      (id, index) => spec.trajectories?.labels[index] ?? id,
-    ),
-    ...(spec.fixedPoints?.ids ?? []).map(
-      (id, index) => `${spec.fixedPoints?.labels[index] ?? id} (convergence status)`,
-    ),
-  ];
-  const legendInset = legendPlotInset(
-    context.width,
-    provisionalLegendLabels.length,
-    context.subtitle !== undefined,
-    provisionalLegendLabels,
-  );
-  const box = {
-    ...baseBox,
-    y: baseBox.y + legendInset,
-    height: baseBox.height - legendInset,
-  };
   const xs = [
     ...(spec.trajectories?.xs ?? []),
     ...(spec.vectorField?.xs ?? []),
@@ -3166,14 +3116,69 @@ export function compilePhasePlaneFigure(
     ...(spec.vectorField?.domain ? [spec.vectorField.domain.yMin, spec.vectorField.domain.yMax] : []),
   ].filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
   if (xs.length === 0 || ys.length === 0) {
-    return { ...frame(context, skillId), panels: [emptyPanel(box, 'no finite phase-plane carrier')], table: emptyTable(), legend: [] };
+    const allocation = allocateCanvas(context);
+    context = allocation.context;
+    return { ...frame(context, skillId), panels: [emptyPanel(allocation.box, 'no finite phase-plane carrier')], table: emptyTable(), legend: [] };
   }
+  const legend: NonNullable<RenderPlanV1['legend']> = [];
+  const legendField = spec.vectorField;
+  if (legendField) {
+    const maximumFieldMagnitude = legendField.magnitudes.reduce(
+      (maximum, magnitude) => magnitude > maximum ? magnitude : maximum,
+      0,
+    );
+    legend.push({
+      label: legendField.scaling === 'unit_length'
+        ? 'Caller-supplied vector field; unit_length (direction only; magnitude does ' +
+          `not affect arrow length); each nonzero vector has ${formatNumber(
+            legendField.maxArrowLengthFraction * 100,
+          )}% of the shorter plot-axis length; ${legendField.magnitudeBasis} magnitudes remain in the table`
+        : `Caller-supplied vector field; ${legendField.scaling}${
+          legendField.scaling === 'sqrt_magnitude' ? ' (compressed magnitude)' : ''
+        }; textual ${legendField.magnitudeBasis} magnitude key: ${formatNumber(
+          maximumFieldMagnitude,
+        )} ${legendField.magnitudeUnit} maps to at most ${formatNumber(
+          legendField.maxArrowLengthFraction * 100,
+        )}% of the shorter plot axis`,
+      color: neutralDataStroke(context.themeId),
+      glyph: 'series',
+    });
+  }
+  const hasFiniteState = (id: string, carrier: {
+    readonly pointIds: readonly string[];
+    readonly xs: readonly (number | null)[];
+    readonly ys: readonly (number | null)[];
+  }): boolean => carrier.pointIds.some((pointId, index) => pointId === id &&
+    carrier.xs[index] !== null && carrier.ys[index] !== null &&
+    Number.isFinite(carrier.xs[index]) && Number.isFinite(carrier.ys[index]));
+  for (const [index, id] of (spec.nullclines?.ids ?? []).entries()) {
+    const style = categoricalStyle(index + 3);
+    legend.push({ label: `${spec.nullclines!.labels[index] ?? id}${
+      hasFiniteState(id, spec.nullclines!) ? '' : ' (declared; no drawable finite points)'
+    }`, color: style.color, glyph: 'series', dash: style.dash, marker: style.marker });
+  }
+  for (const [index, id] of (spec.trajectories?.ids ?? []).entries()) {
+    const style = categoricalStyle(index);
+    legend.push({ label: `${spec.trajectories!.labels[index] ?? id}${
+      hasFiniteState(id, spec.trajectories!) ? '' : ' (declared; no recorded points)'
+    }`, color: style.color, glyph: 'series', dash: style.dash, marker: style.marker });
+  }
+  for (const [index, id] of (spec.fixedPoints?.ids ?? []).entries()) {
+    const converged = spec.fixedPoints!.converged[index];
+    const style = converged
+      ? { color: uncertaintyStroke(context.themeId), marker: 'diamond' as const }
+      : { color: missingColor(context.themeId), marker: 'cross' as const };
+    legend.push({ label: `${spec.fixedPoints!.labels[index] ?? id} (${converged ? 'converged' : 'unconverged candidate'})`,
+      color: style.color, glyph: 'series', marker: style.marker });
+  }
+  const allocation = allocateCanvas(context, { legendLabels: legend.map((entry) => entry.label) });
+  context = allocation.context;
+  const box = allocation.box;
   const xExtent = finiteExtent(xs)!;
   const yExtent = finiteExtent(ys)!;
   const xScale = linearScale(xExtent.min, xExtent.max, box.x, box.x + box.width);
   const yScale = linearScale(yExtent.min, yExtent.max, box.y + box.height, box.y);
   const marks: Mark[] = [];
-  const legend: NonNullable<RenderPlanV1['legend']> = [];
 
   const field = spec.vectorField;
   if (field) {
@@ -3254,26 +3259,7 @@ export function compilePhasePlaneFigure(
         ],
       });
     }
-    const maximumFieldMagnitude = field.magnitudes.reduce(
-      (maximum, magnitude) => magnitude > maximum ? magnitude : maximum,
-      0,
-    );
-    legend.push({
-      label: field.scaling === 'unit_length'
-        ? 'Caller-supplied vector field; unit_length (direction only; magnitude does ' +
-          `not affect arrow length); each nonzero vector has ${formatNumber(
-            field.maxArrowLengthFraction * 100,
-          )}% of the shorter plot-axis length; ${field.magnitudeBasis} magnitudes remain in the table`
-        : `Caller-supplied vector field; ${field.scaling}${
-          field.scaling === 'sqrt_magnitude' ? ' (compressed magnitude)' : ''
-        }; textual ${field.magnitudeBasis} magnitude key: ${formatNumber(
-          maximumFieldMagnitude,
-        )} ${field.magnitudeUnit} maps to at most ${formatNumber(
-          field.maxArrowLengthFraction * 100,
-        )}% of the shorter plot axis`,
-      color: neutralDataStroke(context.themeId),
-      glyph: 'series',
-    });
+
   }
 
   const nullclines = spec.nullclines;
@@ -3345,15 +3331,7 @@ export function compilePhasePlaneFigure(
         curveMarks.push({ type: 'point', points: isolated, fill: style.color, radius: 2.8, shape: style.marker });
       }
       if (curveMarks.length > 0) marks.push({ type: 'group', id: `nullcline-${id}`, marks: curveMarks });
-      legend.push({
-        label: `${nullclines.labels[curveIndex] ?? id}${
-          curveMarks.length === 0 ? ' (declared; no drawable finite points)' : ''
-        }`,
-        color: style.color,
-        glyph: 'series',
-        dash: style.dash,
-        marker: style.marker,
-      });
+
     }
   }
 
@@ -3461,13 +3439,7 @@ export function compilePhasePlaneFigure(
       }
       if (arrows.length > 0) trajectoryMarks.push({ type: 'arrow', arrows, fill: style.color, size: 6 });
       if (trajectoryMarks.length > 0) marks.push({ type: 'group', id: `trajectory-${id}`, marks: trajectoryMarks });
-      legend.push({
-        label: `${trajectories.labels[trajectoryIndex] ?? id}${trajectoryMarks.length === 0 ? ' (declared; no recorded points)' : ''}`,
-        color: style.color,
-        glyph: 'series',
-        dash: style.dash,
-        marker: style.marker,
-      });
+
     }
   }
 
@@ -3496,12 +3468,7 @@ export function compilePhasePlaneFigure(
           shape: style.marker,
         }],
       });
-      legend.push({
-        label: `${fixed.labels[index] ?? fixed.ids[index]} (${fixed.converged[index] ? 'converged' : 'unconverged candidate'})`,
-        color: style.color,
-        glyph: 'series',
-        marker: style.marker,
-      });
+
     }
   }
 
@@ -3554,94 +3521,10 @@ export function compileGraphFigure(
   spec: ConnectionGraphFigureSpec,
   skillId: string,
 ): RenderPlanV1 {
-  const baseBox = panelBox(context);
   if (spec.nodes.length === 0) {
-    return { ...frame(context, skillId), panels: [emptyPanel(baseBox, 'empty node universe')], table: emptyTable(), legend: [] };
-  }
-  const provisionalLegendLabels = [
-    ...(spec.nodeColorByGroup
-      ? [...new Map(spec.nodes.map((node) => [node.groupIndex ?? -1, node])).values()]
-        .map((node) => node.group ?? 'ungrouped')
-      : []),
-    ...(spec.edgeEncoding
-      ? [`Edge ${spec.edgeEncoding.channel} encodes the declared value and its complete scale authority`]
-      : []),
-    ...(spec.encodeDegreeAsArea
-      ? ['Node marker area above the visibility baseline is proportional to declared degree']
-      : []),
-  ];
-  const legendInset = legendPlotInset(
-    context.width,
-    provisionalLegendLabels.length,
-    context.subtitle !== undefined,
-    provisionalLegendLabels,
-  );
-  const box = {
-    ...baseBox,
-    y: baseBox.y + legendInset,
-    height: baseBox.height - legendInset,
-  };
-  const position = new Map<string, { x: number; y: number }>();
-  let measuredMapper: ReturnType<typeof equalScaleMapper> | undefined;
-  if (spec.layout === 'measured_positions') {
-    measuredMapper = equalScaleMapper(
-      box,
-      spec.nodes.map((node) => node.x!),
-      spec.nodes.map((node) => node.y!),
-    );
-    for (const node of spec.nodes) position.set(node.id, measuredMapper.map(node.x!, node.y!));
-  } else if (spec.layout === 'schematic_layered') {
-    const grouped = new Map<number, typeof spec.nodes[number][]>();
-    for (const node of spec.nodes) {
-      const index = node.groupIndex ?? Number.MAX_SAFE_INTEGER;
-      const entries = grouped.get(index);
-      if (entries) entries.push(node);
-      else grouped.set(index, [node]);
-    }
-    const columns = [...grouped.entries()].sort((left, right) => left[0] - right[0]);
-    for (let column = 0; column < columns.length; column++) {
-      const members = columns[column][1];
-      for (let row = 0; row < members.length; row++) {
-        position.set(members[row].id, {
-          x: box.x + (column + 0.5) * box.width / columns.length,
-          y: box.y + (row + 0.5) * box.height / members.length,
-        });
-      }
-    }
-  } else if (spec.layout === 'schematic_grouped_circular') {
-    const grouped = new Map<number, typeof spec.nodes[number][]>();
-    for (const node of spec.nodes) {
-      const index = node.groupIndex ?? Number.MAX_SAFE_INTEGER;
-      const entries = grouped.get(index);
-      if (entries) entries.push(node);
-      else grouped.set(index, [node]);
-    }
-    const sectors = [...grouped.entries()].sort((left, right) => left[0] - right[0]);
-    const gap = 4 * Math.PI / 180;
-    const available = Math.max(0, 2 * Math.PI - gap * sectors.length);
-    let cursor = -Math.PI / 2;
-    const radius = Math.max(12, Math.min(box.width, box.height) / 2 - 24);
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
-    for (const [, members] of sectors) {
-      const sector = available * members.length / spec.nodes.length;
-      for (let index = 0; index < members.length; index++) {
-        const angle = cursor + sector * (index + 0.5) / members.length;
-        position.set(members[index].id, {
-          x: cx + radius * Math.cos(angle),
-          y: cy + radius * Math.sin(angle),
-        });
-      }
-      cursor += sector + gap;
-    }
-  } else {
-    const radius = Math.max(12, Math.min(box.width, box.height) / 2 - 24);
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
-    spec.nodes.forEach((node, index) => {
-      const angle = 2 * Math.PI * index / spec.nodes.length - Math.PI / 2;
-      position.set(node.id, { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
-    });
+    const allocation = allocateCanvas(context);
+    context = allocation.context;
+    return { ...frame(context, skillId), panels: [emptyPanel(allocation.box, 'empty node universe')], table: emptyTable(), legend: [] };
   }
 
   let maximumDegree = 1;
@@ -3732,6 +3615,142 @@ export function compileGraphFigure(
     return [Math.abs(transformed)];
   });
   const magnitudeExtent = finiteExtent(magnitudeValues);
+  const groupLegend = spec.nodeColorByGroup
+    ? [...new Map(spec.nodes.map((node) => [node.groupIndex ?? -1, node])).values()].map((node) => {
+      const style = categoricalStyle(node.groupIndex ?? 0);
+      return {
+        label: node.group ?? 'ungrouped',
+        color: style.color,
+        glyph: 'series' as const,
+        marker: style.marker,
+      };
+    })
+    : [];
+  const legend: NonNullable<RenderPlanV1['legend']> = [
+      ...groupLegend,
+      ...(spec.degreeLabel
+        ? [{ label: `Node labels show ${spec.degreeLabel}`, color: accent(context.themeId), glyph: 'series' as const }]
+        : []),
+      ...(spec.edgeEncoding
+        ? [{
+          label: `Edge ${spec.edgeEncoding.channel} encodes the declared value${spec.edgeEncoding.channel === 'width' || spec.edgeEncoding.channel === 'width_and_color' ? `; the observed magnitude from ${spec.edgeEncoding.colorKind === 'diverging' ? `center ${formatNumber(spec.edgeEncoding.center ?? 0)}` : 'zero'} maps to 1 to 5 px` : ''}${spec.edgeEncoding.scale === 'symlog' ? ` after the contract-owned sign(value - reference) log1p(|value - reference| / 1 declared unit) transform` : ''}${paintValues.some((value) => value !== null && value < (spec.edgeEncoding!.colorKind === 'diverging' ? spec.edgeEncoding!.center ?? 0 : 0)) ? '; values below the reference are dashed' : ''}`,
+          color: accent(context.themeId),
+          glyph: 'series' as const,
+        }]
+        : []),
+      ...(spec.encodeDegreeAsArea
+        ? [{ label: 'Node marker area above the 3 px-radius visibility baseline is proportional to the declared degree; zero-degree nodes retain that baseline marker', color: accent(context.themeId), glyph: 'series' as const }]
+        : []),
+    ];
+  const circularAngles = new Map<string, number>();
+  if (spec.layout === 'schematic_grouped_circular') {
+    const grouped = new Map<number, typeof spec.nodes[number][]>();
+    for (const node of spec.nodes) {
+      const index = node.groupIndex ?? Number.MAX_SAFE_INTEGER;
+      const entries = grouped.get(index);
+      if (entries) entries.push(node);
+      else grouped.set(index, [node]);
+    }
+    const sectors = [...grouped.entries()].sort((left, right) => left[0] - right[0]);
+    const gap = 4 * Math.PI / 180;
+    const available = 2 * Math.PI - gap * sectors.length;
+    if (!(available > 0)) {
+      throw new RenderLayoutCapacityError('Complete graph sectors leave no positive angle after the declared group gaps.');
+    }
+    let cursor = -Math.PI / 2;
+    for (const [, members] of sectors) {
+      const sector = available * members.length / spec.nodes.length;
+      for (let index = 0; index < members.length; index++) {
+        circularAngles.set(members[index].id, cursor + sector * (index + 0.5) / members.length);
+      }
+      cursor += sector + gap;
+    }
+  } else if (spec.layout === 'schematic_circular') {
+    spec.nodes.forEach((node, index) => {
+      circularAngles.set(node.id, 2 * Math.PI * index / spec.nodes.length - Math.PI / 2);
+    });
+  }
+  const degreeFontSize = 9;
+  const degreeOffset = 4;
+  const degreeGlyphAdvance = 6;
+  let circularInset = 24;
+  let minimumPanelHeight = MIN_PLOT_PANEL_HEIGHT;
+  if (circularAngles.size > 0) {
+    // A common disk conservatively contains every marker and complete numeric label.
+    // Width is normative textLength; vertical font coverage still needs visual review.
+    let footprint = 0;
+    for (const node of spec.nodes) {
+      const markerRadius = radiusById.get(node.id)!;
+      const markerEnvelope = Math.SQRT2 * markerRadius;
+      const labelEnvelope = spec.degreeLabel && node.degree !== undefined
+        ? Math.hypot(markerRadius + degreeOffset + String(node.degree).length * degreeGlyphAdvance + 2,
+          2 * degreeFontSize + degreeFontSize / 3)
+        : 0;
+      footprint = Math.max(footprint, markerEnvelope, labelEnvelope);
+    }
+    const angles = [...circularAngles.values()].sort((left, right) => left - right);
+    let minimumAngle = 2 * Math.PI;
+    if (angles.length > 1) {
+      minimumAngle = angles[0] + 2 * Math.PI - angles[angles.length - 1];
+      for (let index = 1; index < angles.length; index++) {
+        minimumAngle = Math.min(minimumAngle, angles[index] - angles[index - 1]);
+      }
+    }
+    if (!(minimumAngle > 0)) {
+      throw new RenderLayoutCapacityError('Complete circular graph nodes need distinct declared angles.');
+    }
+    const requiredRadius = angles.length === 1 ? 12
+      : (2 * footprint + 4) / (2 * Math.sin(minimumAngle / 2));
+    circularInset = Math.max(24, Math.ceil(footprint) + 2);
+    minimumPanelHeight = 2 * (Math.max(12, requiredRadius) + circularInset);
+  }
+  const allocation = allocateCanvas(context, {
+    legendLabels: legend.map((entry) => entry.label),
+    minimumPanelHeight,
+  });
+  context = allocation.context;
+  const box = allocation.box;
+  if (circularAngles.size > 0 &&
+    (box.width < minimumPanelHeight || box.height < minimumPanelHeight)) {
+    throw new RenderLayoutCapacityError('The requested width and height cannot contain every circular graph node and complete degree label. Increase the dimensions.');
+  }
+  const position = new Map<string, { x: number; y: number }>();
+  let measuredMapper: ReturnType<typeof equalScaleMapper> | undefined;
+  if (spec.layout === 'measured_positions') {
+    measuredMapper = equalScaleMapper(
+      box,
+      spec.nodes.map((node) => node.x!),
+      spec.nodes.map((node) => node.y!),
+    );
+    for (const node of spec.nodes) position.set(node.id, measuredMapper.map(node.x!, node.y!));
+  } else if (spec.layout === 'schematic_layered') {
+    const grouped = new Map<number, typeof spec.nodes[number][]>();
+    for (const node of spec.nodes) {
+      const index = node.groupIndex ?? Number.MAX_SAFE_INTEGER;
+      const entries = grouped.get(index);
+      if (entries) entries.push(node);
+      else grouped.set(index, [node]);
+    }
+    const columns = [...grouped.entries()].sort((left, right) => left[0] - right[0]);
+    for (let column = 0; column < columns.length; column++) {
+      const members = columns[column][1];
+      for (let row = 0; row < members.length; row++) {
+        position.set(members[row].id, {
+          x: box.x + (column + 0.5) * box.width / columns.length,
+          y: box.y + (row + 0.5) * box.height / members.length,
+        });
+      }
+    }
+  } else {
+    const radius = Math.max(12, Math.min(box.width, box.height) / 2 - circularInset);
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    spec.nodes.forEach((node) => {
+      const angle = circularAngles.get(node.id)!;
+      position.set(node.id, { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+    });
+  }
+
   const marks: Mark[] = [];
   for (let groupIndex = 0; groupIndex < paintGroups.length; groupIndex++) {
     const group = paintGroups[groupIndex];
@@ -3889,13 +3908,15 @@ export function compileGraphFigure(
     }];
     if (spec.degreeLabel && node.degree !== undefined) {
       const point = position.get(node.id)!;
+      const circular = circularAngles.size > 0;
       nodeMarks.push({
         type: 'text',
-        x: point.x,
-        y: point.y - radiusById.get(node.id)! - 4,
-        text: `${spec.degreeLabel} ${node.degree}`,
-        anchor: 'middle',
-        fontSize: 9,
+        x: circular ? point.x - radiusById.get(node.id)! - degreeOffset : point.x,
+        y: circular ? point.y + degreeFontSize / 3 : point.y - radiusById.get(node.id)! - degreeOffset,
+        text: String(node.degree),
+        anchor: circular ? 'end' : 'middle',
+        fontSize: degreeFontSize,
+        ...(circular ? { textLength: String(node.degree).length * degreeGlyphAdvance } : {}),
         fill: color,
         decorative: true,
       });
@@ -3908,34 +3929,12 @@ export function compileGraphFigure(
       yAxis(spec.yLabel ?? `y (${spec.positionUnit ?? ''})`, measuredMapper.yScale),
     ]
     : [];
-  const groupLegend = spec.nodeColorByGroup
-    ? [...new Map(spec.nodes.map((node) => [node.groupIndex ?? -1, node])).values()].map((node) => {
-      const style = categoricalStyle(node.groupIndex ?? 0);
-      return {
-        label: node.group ?? 'ungrouped',
-        color: style.color,
-        glyph: 'series' as const,
-        marker: style.marker,
-      };
-    })
-    : [];
+
   return {
     ...frame(context, skillId),
     panels: [{ id: 'main', ...box, axes, marks }],
     table: emptyTable(),
-    legend: [
-      ...groupLegend,
-      ...(spec.edgeEncoding
-        ? [{
-          label: `Edge ${spec.edgeEncoding.channel} encodes the declared value${spec.edgeEncoding.channel === 'width' || spec.edgeEncoding.channel === 'width_and_color' ? `; the observed magnitude from ${spec.edgeEncoding.colorKind === 'diverging' ? `center ${formatNumber(spec.edgeEncoding.center ?? 0)}` : 'zero'} maps to 1 to 5 px` : ''}${spec.edgeEncoding.scale === 'symlog' ? ` after the contract-owned sign(value - reference) log1p(|value - reference| / 1 declared unit) transform` : ''}${paintValues.some((value) => value !== null && value < (spec.edgeEncoding!.colorKind === 'diverging' ? spec.edgeEncoding!.center ?? 0 : 0)) ? '; values below the reference are dashed' : ''}`,
-          color: accent(context.themeId),
-          glyph: 'series' as const,
-        }]
-        : []),
-      ...(spec.encodeDegreeAsArea
-        ? [{ label: 'Node marker area above the 3 px-radius visibility baseline is proportional to the declared degree; zero-degree nodes retain that baseline marker', color: accent(context.themeId), glyph: 'series' as const }]
-        : []),
-    ],
+    legend,
   };
 }
 

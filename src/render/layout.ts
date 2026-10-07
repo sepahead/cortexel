@@ -4,11 +4,40 @@ export const LEGEND_ROW_HEIGHT = 18;
 /** Minimum plot-box height that can contain ticks, a panel label, and visible data. */
 export const MIN_PLOT_PANEL_HEIGHT = 48;
 
+/** Automatic layout is bounded; explicit dimensions never receive a hidden repair. */
+export const DEFAULT_CANVAS_HEIGHT = 440;
+export const MAX_CANVAS_HEIGHT = 4096;
+
+export class RenderLayoutCapacityError extends Error {}
+
+export function resolveCanvasHeight(
+  requestedHeight: number,
+  automatic: boolean,
+  minimumHeight: number,
+): number {
+  if (!Number.isFinite(requestedHeight) || !(requestedHeight > 0) ||
+    !Number.isFinite(minimumHeight) || !(minimumHeight > 0)) {
+    throw new RenderLayoutCapacityError('Canvas dimensions and complete content capacity must be finite and positive.');
+  }
+  if (!automatic) return requestedHeight;
+  const resolved = Math.max(DEFAULT_CANVAS_HEIGHT, Math.ceil(minimumHeight));
+  if (resolved > MAX_CANVAS_HEIGHT) {
+    throw new RenderLayoutCapacityError('The complete header, panels, gaps and mandatory footer exceed the 4096 CSS pixel automatic canvas bound.');
+  }
+  return resolved;
+}
+
 export const DISCLOSURE_FONT_SIZE = 10;
 export const DISCLOSURE_LINE_HEIGHT = 14;
 export const DISCLOSURE_HORIZONTAL_INSET = 24;
 export const DISCLOSURE_BOTTOM_PADDING = 6;
 export const DISCLOSURE_PLOT_GAP = 10;
+
+export const HEADER_HORIZONTAL_INSET = 24;
+export const TITLE_FONT_SIZE = 16;
+export const TITLE_LINE_HEIGHT = 20;
+export const SUBTITLE_FONT_SIZE = 12;
+export const SUBTITLE_LINE_HEIGHT = 16;
 
 // SVG font metrics are host-dependent. Footer lines therefore receive a normative
 // `textLength`; this advance is a deterministic wrapping unit, not a font measurement.
@@ -33,6 +62,55 @@ function wrapTextToCapacity(text: string, capacity: number): readonly string[] {
     start = end;
   }
   return lines;
+}
+
+export interface HeaderTextLayout {
+  readonly titleLines: readonly string[];
+  readonly subtitleLines: readonly string[];
+  readonly subtitleStartY: number;
+  /** Extra rows beyond the established one-line title and subtitle placement. */
+  readonly extraInset: number;
+  readonly legendStartY: number;
+}
+
+/** Owned SVG advance preserves readable font sizes without host font measurements. */
+export function headerRenderedTextLength(
+  text: string,
+  width: number,
+  fontSize: number,
+): number {
+  return Math.min(
+    Math.max(1, width - 2 * HEADER_HORIZONTAL_INSET),
+    Math.max(1, Array.from(text).length * fontSize * 0.6),
+  );
+}
+
+/** Allocate exact, concatenable header rows before any plot coordinates exist. */
+export function headerTextLayout(
+  width: number,
+  title: string,
+  subtitle?: string,
+): HeaderTextLayout {
+  if (!Number.isFinite(width) || width <= 2 * HEADER_HORIZONTAL_INSET) {
+    throw new RenderLayoutCapacityError('The canvas must leave positive width for complete title and subtitle text.');
+  }
+  const availableWidth = width - 2 * HEADER_HORIZONTAL_INSET;
+  const lines = (text: string, fontSize: number): readonly string[] => wrapTextToCapacity(
+    text,
+    Math.max(1, Math.floor(availableWidth / (fontSize * 0.6))),
+  );
+  const titleLines = lines(title, TITLE_FONT_SIZE);
+  const subtitleLines = subtitle === undefined ? [] : lines(subtitle, SUBTITLE_FONT_SIZE);
+  const titleInset = (titleLines.length - 1) * TITLE_LINE_HEIGHT;
+  const subtitleInset = Math.max(0, subtitleLines.length - 1) * SUBTITLE_LINE_HEIGHT;
+  const extraInset = titleInset + subtitleInset;
+  return {
+    titleLines,
+    subtitleLines,
+    subtitleStartY: 46 + titleInset,
+    extraInset,
+    legendStartY: legendStartY(subtitle !== undefined) + extraInset,
+  };
 }
 
 interface DisclosureText {
@@ -150,7 +228,7 @@ export function legendPlotInset(
   hasSubtitle: boolean,
   labels: readonly string[] = [],
 ): number {
-  if (itemCount <= 0) return 0;
+  if (itemCount <= 0) return hasSubtitle ? 16 : 0;
   const effectiveLabels = labels.length === itemCount
     ? labels
     : Array.from({ length: itemCount }, () => '');
