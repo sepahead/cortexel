@@ -16,6 +16,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Documentation
 
+- `CLAUDE.md` now records the owner's authorization to commit, push, and merge to `main`
+  through a pull request that passes the `Required CI gate`. The consumer guide in
+  `AGENTS.md` is unchanged.
 - Described scientific guardrails in the README.
 
 ### Security — URI parser dependency

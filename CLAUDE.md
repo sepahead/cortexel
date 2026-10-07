@@ -432,7 +432,13 @@ code PRs here, then update downstream pins and generated snapshots deliberately.
 
 ## Commits & PRs
 
-- Commit or push **only when explicitly asked.** If asked and on `main`, branch first.
+- The owner authorizes agents to commit, push, and merge to `main`.
+- `main` requires the `Required CI gate` check and linear history. Work on a branch,
+  open a pull request, wait for the gate to pass, and squash-merge it. Do not push to
+  `main` directly: administrators can bypass the required gate.
+- Releases, tags, npm publication, and repository settings remain owner actions.
+- The shared checkout can hold another agent's uncommitted work. Use a separate
+  worktree from `origin/main`.
 - **Never** add Claude / an AI / an agent as a commit or PR **co-author**. Do **not**
   add a `Co-Authored-By:` trailer, a "Generated with …" line, or a 🤖 marker to any
   commit message or PR description.
