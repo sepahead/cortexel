@@ -8453,12 +8453,13 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       unrenderablePopulation.presentation = {
         ...unrenderablePopulation.presentation,
         width: 160,
+        height: 440,
       };
       const validatedUnrenderable = esmFigure.validateRequestValue(
         unrenderablePopulation
       );
       if (!validatedUnrenderable.ok) {
-        throw new Error('packed width-160 population-rate negative is not valid input');
+        throw new Error('packed fixed 160-by-440 population-rate negative is not valid input');
       }
       const layoutFailure = cjsRenderer.buildFigureFromValidated(
         validatedUnrenderable.request
