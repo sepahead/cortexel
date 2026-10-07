@@ -26,6 +26,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Updated the `fast-uri` override and both dependency locks to 3.1.8 for GHSA-hrr3-gc8f-f4qj,
   and the `vitest` development dependency to 4.1.11 for GHSA-82fw-gwwq-j7x9. Renewed the
   package-smoke fixture digest for the changed lock.
+- Added a `source-map-js` 1.2.2 override for GHSA-68fv-2mgg-jv7q. The package reaches only the
+  development graph through vitest, vite, and postcss.
 
 ### Changed — animated vector identity
 
