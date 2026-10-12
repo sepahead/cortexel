@@ -1,0 +1,130 @@
+{
+  "schema": "sepahead.agent-index.v1",
+  "repository": "sepahead/cortexel",
+  "summary": "Cortexel: an agent-consumable scientific-visualization contract for neural simulations. An agent emits a declarative VizSpec or FigureRequestV1; Cortexel validates it, routes it to a scene, and enforces fail-closed honesty provenance. CLAUDE.md is the contributor contract and AGENTS.md guides agents that use Cortexel; this index restates the contributor facts for tools.",
+  "entry_documents": [
+    {
+      "path": "CLAUDE.md",
+      "role": "contributor contract for agents that modify Cortexel"
+    },
+    {
+      "path": "AGENTS.md",
+      "role": "guide for agents that use Cortexel to make figures"
+    },
+    {
+      "path": "README.md",
+      "role": "overview and package entry points"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "role": "contributor workflow and the five design laws"
+    },
+    {
+      "path": "SECURITY.md",
+      "role": "security policy and the honesty contract"
+    },
+    {
+      "path": "docs/SCOPE.md",
+      "role": "scope and non-goals"
+    },
+    {
+      "path": "docs/KNOWN_LIMITATIONS.md",
+      "role": "current limitations"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "role": "change record under the working version"
+    }
+  ],
+  "delivery": {
+    "default_branch": "main",
+    "merge": "Work on a branch from origin/main in a separate worktree, open a pull request, wait for the Required CI gate check, and squash-merge it. main requires linear history; do not push to main directly.",
+    "signing": "not required",
+    "attribution": "no AI attribution, co-author trailers or generated-by lines",
+    "owner_only": [
+      "release",
+      "tag",
+      "npm publication",
+      "repository setting change"
+    ]
+  },
+  "gates": [
+    {
+      "id": "check",
+      "when": "any change; generated parity, typecheck and tests",
+      "command": "bun run check",
+      "cost": "medium"
+    },
+    {
+      "id": "formal",
+      "when": "before finishing any change; compiles every pinned Lean proof",
+      "command": "bun run check:formal",
+      "cost": "medium"
+    },
+    {
+      "id": "build",
+      "when": "a change under core/, react/, src/, index.ts, scripts/ or build.config.ts; stage the rebuilt dist/",
+      "command": "bun run build",
+      "cost": "medium"
+    },
+    {
+      "id": "ledger",
+      "when": "a release claim or evidence-ledger change",
+      "command": "bun run check:ledger",
+      "cost": "fast"
+    },
+    {
+      "id": "audit",
+      "when": "a dependency change",
+      "command": "bun run audit",
+      "cost": "fast"
+    },
+    {
+      "id": "package-lint",
+      "when": "a package export or metadata change",
+      "command": "bun run lint:package",
+      "cost": "fast"
+    },
+    {
+      "id": "package-test",
+      "when": "a package, export or packaging change",
+      "command": "bun run test:package",
+      "cost": "full"
+    },
+    {
+      "id": "agent-index",
+      "when": "agent-index.json or a path it names changes",
+      "command": "bunx vitest run test/agentIndex.test.ts",
+      "cost": "fast"
+    }
+  ],
+  "generated": [
+    {
+      "path": "dist/",
+      "regenerate": "bun run build; committed, and CI fails when it drifts from source"
+    },
+    {
+      "path": "dist/skills.manifest.json",
+      "regenerate": "bun run build (scripts/emit-manifest.ts); never edit by hand"
+    },
+    {
+      "path": "src/generated/",
+      "regenerate": "scripts/generate-contract.ts; bun run check:generated checks parity"
+    },
+    {
+      "path": "docs/audit/nest-example-coverage.v3.json",
+      "regenerate": "scripts/generate-nest-example-visualization-coverage-v3.ts; bun run check:nest-audit checks it"
+    }
+  ],
+  "frozen": [],
+  "ecosystem": [
+    {
+      "repository": "sepahead/Paper2Brain",
+      "relation": "Engram consumes published Cortexel commits as a pinned git dependency; never edit a copy there"
+    },
+    {
+      "repository": "sepahead/NCP",
+      "relation": "related applications are described there; no Cortexel adapter or live simulation connection exists"
+    }
+  ]
+}

@@ -26,6 +26,10 @@ bun run test:package # clean-install ESM/CJS runtime + consumer type smoke
 
 Run both `bun run check` and `bun run check:formal` before finishing.
 
+`agent-index.json` restates these commands, the generated artifacts, and the delivery
+rules for tools. `test/agentIndex.test.ts` checks it within `bun run check`. Update the
+index when a command or a named path changes.
+
 Use `bun`. Published-package Node support is `^22.12.0 || ^24.0.0 || ^26.0.0`;
 22.12 is the first Node 22 release that can load the ESM-only graph peer from the
 CommonJS graph entry without a flag. Source package construction (`bun run build`)

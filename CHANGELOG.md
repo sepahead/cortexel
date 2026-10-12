@@ -6,6 +6,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — checked agent index
+
+- Added `agent-index.json`, which restates the contributor commands, generated artifacts, delivery rules, and ecosystem relations for tools.
+- Added `test/agentIndex.test.ts`, which fails when a named path or script is missing, a gate identifier repeats, a `bun run` gate names no package script, or a machine-specific path appears.
+
 ### Fixed — OS interpreter for ACL inspection
 
 - Use one fixed Command Line Tools Python profile for Darwin ACL inspection.
