@@ -1,7 +1,15 @@
+import {
+  isKnowledgeGraphGeometryBoundsFinite,
+  type KnowledgeGraphGeometryBounds,
+} from './knowledgeGraphGeometryBounds.internal';
+
 export const KNOWLEDGE_GRAPH_CAMERA_FIT_MARGIN = 1.12;
 export const KNOWLEDGE_GRAPH_CAMERA_MIN_DISTANCE = 120;
 export const KNOWLEDGE_GRAPH_CAMERA_DEPTH_MARGIN = 1.25;
 export const KNOWLEDGE_GRAPH_PERSPECTIVE_MIN_NEAR = 0.001;
+/** Small schematic graphs need not inherit the older sphere-fit 120-unit floor. */
+export const KNOWLEDGE_GRAPH_GEOMETRY_MIN_DISTANCE = 24;
+export const KNOWLEDGE_GRAPH_GEOMETRY_PIXEL_MARGIN = 32;
 
 export type KnowledgeGraphCameraProjectionV1 =
   | Readonly<{
@@ -104,12 +112,7 @@ export type KnowledgeGraphCenteredAutoFrameProjectionV1 =
       readonly projectionMatrixElements: ArrayLike<number>;
     }>;
 
-const IDENTITY_MATRIX_ELEMENTS = Object.freeze([
-  1, 0, 0, 0,
-  0, 1, 0, 0,
-  0, 0, 1, 0,
-  0, 0, 0, 1,
-]);
+const IDENTITY_MATRIX_ELEMENTS = Object.freeze([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
 function finiteEqual(observed: number, expected: number): boolean {
   if (!Number.isFinite(observed) || !Number.isFinite(expected)) return false;
@@ -117,9 +120,7 @@ function finiteEqual(observed: number, expected: number): boolean {
   return Math.abs(observed - expected) <= Number.EPSILON * 64 * scale;
 }
 
-export function isKnowledgeGraphIdentityMatrixElements(
-  elements: ArrayLike<number>,
-): boolean {
+export function isKnowledgeGraphIdentityMatrixElements(elements: ArrayLike<number>): boolean {
   if (elements.length !== 16) return false;
   for (let index = 0; index < 16; index++) {
     if (!finiteEqual(elements[index], IDENTITY_MATRIX_ELEMENTS[index])) return false;
@@ -152,13 +153,22 @@ export function isKnowledgeGraphCameraSelfTransformCanonical(
     !input.matrixAutoUpdate ||
     !isKnowledgeGraphCameraVectorFinite(position.x, position.y, position.z) ||
     !isKnowledgeGraphCameraVectorFinite(scale.x, scale.y, scale.z) ||
-    scale.x !== 1 || scale.y !== 1 || scale.z !== 1 ||
-    !Number.isFinite(quaternion.x) || !Number.isFinite(quaternion.y) ||
-    !Number.isFinite(quaternion.z) || !Number.isFinite(quaternion.w) ||
-    input.matrix.elements.length !== 16 || input.matrixWorld.elements.length !== 16
-  ) return false;
-  const norm = quaternion.x * quaternion.x + quaternion.y * quaternion.y +
-    quaternion.z * quaternion.z + quaternion.w * quaternion.w;
+    scale.x !== 1 ||
+    scale.y !== 1 ||
+    scale.z !== 1 ||
+    !Number.isFinite(quaternion.x) ||
+    !Number.isFinite(quaternion.y) ||
+    !Number.isFinite(quaternion.z) ||
+    !Number.isFinite(quaternion.w) ||
+    input.matrix.elements.length !== 16 ||
+    input.matrixWorld.elements.length !== 16
+  )
+    return false;
+  const norm =
+    quaternion.x * quaternion.x +
+    quaternion.y * quaternion.y +
+    quaternion.z * quaternion.z +
+    quaternion.w * quaternion.w;
   if (!finiteEqual(norm, 1)) return false;
 
   const x2 = quaternion.x + quaternion.x;
@@ -177,17 +187,22 @@ export function isKnowledgeGraphCameraSelfTransformCanonical(
   if (!(
     finiteEqual(matrix[0], 1 - (yy + zz)) &&
     finiteEqual(matrix[1], xy + wz) &&
-    finiteEqual(matrix[2], xz - wy) && finiteEqual(matrix[3], 0) &&
+    finiteEqual(matrix[2], xz - wy) &&
+    finiteEqual(matrix[3], 0) &&
     finiteEqual(matrix[4], xy - wz) &&
     finiteEqual(matrix[5], 1 - (xx + zz)) &&
-    finiteEqual(matrix[6], yz + wx) && finiteEqual(matrix[7], 0) &&
+    finiteEqual(matrix[6], yz + wx) &&
+    finiteEqual(matrix[7], 0) &&
     finiteEqual(matrix[8], xz + wy) &&
     finiteEqual(matrix[9], yz - wx) &&
-    finiteEqual(matrix[10], 1 - (xx + yy)) && finiteEqual(matrix[11], 0) &&
+    finiteEqual(matrix[10], 1 - (xx + yy)) &&
+    finiteEqual(matrix[11], 0) &&
     finiteEqual(matrix[12], position.x) &&
     finiteEqual(matrix[13], position.y) &&
-    finiteEqual(matrix[14], position.z) && finiteEqual(matrix[15], 1)
-  )) return false;
+    finiteEqual(matrix[14], position.z) &&
+    finiteEqual(matrix[15], 1)
+  ))
+    return false;
   return areKnowledgeGraphMatrixElementsEqual(matrix, input.matrixWorld.elements);
 }
 
@@ -201,79 +216,115 @@ export function isKnowledgeGraphCameraParentChainIdentity(
     depth++;
     if (depth > 64) return false;
     if (
-      cursor.position.x !== 0 || cursor.position.y !== 0 || cursor.position.z !== 0 ||
-      cursor.quaternion.x !== 0 || cursor.quaternion.y !== 0 ||
-      cursor.quaternion.z !== 0 || cursor.quaternion.w !== 1 ||
-      cursor.scale.x !== 1 || cursor.scale.y !== 1 || cursor.scale.z !== 1 ||
+      cursor.position.x !== 0 ||
+      cursor.position.y !== 0 ||
+      cursor.position.z !== 0 ||
+      cursor.quaternion.x !== 0 ||
+      cursor.quaternion.y !== 0 ||
+      cursor.quaternion.z !== 0 ||
+      cursor.quaternion.w !== 1 ||
+      cursor.scale.x !== 1 ||
+      cursor.scale.y !== 1 ||
+      cursor.scale.z !== 1 ||
       !isKnowledgeGraphIdentityMatrixElements(cursor.matrix.elements) ||
       !isKnowledgeGraphIdentityMatrixElements(cursor.matrixWorld.elements)
-    ) return false;
+    )
+      return false;
     cursor = cursor.parent;
   }
   return true;
 }
 
 function canonicalPerspectiveProjection(
-  input: Extract<
-    KnowledgeGraphCenteredAutoFrameProjectionV1,
-    { readonly kind: 'perspective' }
-  >,
+  input: Extract<KnowledgeGraphCenteredAutoFrameProjectionV1, { readonly kind: 'perspective' }>,
 ): boolean {
   if (
-    !Number.isFinite(input.fovDegrees) || input.fovDegrees <= 0 ||
-    input.fovDegrees >= 180 || !Number.isFinite(input.aspect) || input.aspect <= 0 ||
-    !Number.isFinite(input.zoom) || input.zoom <= 0 ||
-    !Number.isFinite(input.near) || input.near <= 0 ||
-    !Number.isFinite(input.far) || input.far <= input.near ||
-    !Number.isFinite(input.filmOffset) || input.filmOffset !== 0 ||
+    !Number.isFinite(input.fovDegrees) ||
+    input.fovDegrees <= 0 ||
+    input.fovDegrees >= 180 ||
+    !Number.isFinite(input.aspect) ||
+    input.aspect <= 0 ||
+    !Number.isFinite(input.zoom) ||
+    input.zoom <= 0 ||
+    !Number.isFinite(input.near) ||
+    input.near <= 0 ||
+    !Number.isFinite(input.far) ||
+    input.far <= input.near ||
+    !Number.isFinite(input.filmOffset) ||
+    input.filmOffset !== 0 ||
     input.projectionMatrixElements.length !== 16
-  ) return false;
-  const halfFov = input.fovDegrees * Math.PI / 360;
+  )
+    return false;
+  const halfFov = (input.fovDegrees * Math.PI) / 360;
   const y = input.zoom / Math.tan(halfFov);
   const x = y / input.aspect;
   const c = -(input.far + input.near) / (input.far - input.near);
-  const d = -2 * input.far * input.near / (input.far - input.near);
+  const d = (-2 * input.far * input.near) / (input.far - input.near);
   const matrix = input.projectionMatrixElements;
-  return finiteEqual(matrix[0], x) && finiteEqual(matrix[1], 0) &&
-    finiteEqual(matrix[2], 0) && finiteEqual(matrix[3], 0) &&
-    finiteEqual(matrix[4], 0) && finiteEqual(matrix[5], y) &&
-    finiteEqual(matrix[6], 0) && finiteEqual(matrix[7], 0) &&
-    finiteEqual(matrix[8], 0) && finiteEqual(matrix[9], 0) &&
-    finiteEqual(matrix[10], c) && finiteEqual(matrix[11], -1) &&
-    finiteEqual(matrix[12], 0) && finiteEqual(matrix[13], 0) &&
-    finiteEqual(matrix[14], d) && finiteEqual(matrix[15], 0);
+  return (
+    finiteEqual(matrix[0], x) &&
+    finiteEqual(matrix[1], 0) &&
+    finiteEqual(matrix[2], 0) &&
+    finiteEqual(matrix[3], 0) &&
+    finiteEqual(matrix[4], 0) &&
+    finiteEqual(matrix[5], y) &&
+    finiteEqual(matrix[6], 0) &&
+    finiteEqual(matrix[7], 0) &&
+    finiteEqual(matrix[8], 0) &&
+    finiteEqual(matrix[9], 0) &&
+    finiteEqual(matrix[10], c) &&
+    finiteEqual(matrix[11], -1) &&
+    finiteEqual(matrix[12], 0) &&
+    finiteEqual(matrix[13], 0) &&
+    finiteEqual(matrix[14], d) &&
+    finiteEqual(matrix[15], 0)
+  );
 }
 
 function canonicalOrthographicProjection(
-  input: Extract<
-    KnowledgeGraphCenteredAutoFrameProjectionV1,
-    { readonly kind: 'orthographic' }
-  >,
+  input: Extract<KnowledgeGraphCenteredAutoFrameProjectionV1, { readonly kind: 'orthographic' }>,
 ): boolean {
   if (
-    !Number.isFinite(input.left) || !Number.isFinite(input.right) ||
-    !Number.isFinite(input.top) || !Number.isFinite(input.bottom) ||
-    input.right <= input.left || input.top <= input.bottom ||
+    !Number.isFinite(input.left) ||
+    !Number.isFinite(input.right) ||
+    !Number.isFinite(input.top) ||
+    !Number.isFinite(input.bottom) ||
+    input.right <= input.left ||
+    input.top <= input.bottom ||
     !finiteEqual(input.left, -input.right) ||
     !finiteEqual(input.bottom, -input.top) ||
-    !Number.isFinite(input.zoom) || input.zoom <= 0 ||
-    !Number.isFinite(input.near) || input.near < 0 ||
-    !Number.isFinite(input.far) || input.far <= input.near ||
+    !Number.isFinite(input.zoom) ||
+    input.zoom <= 0 ||
+    !Number.isFinite(input.near) ||
+    input.near < 0 ||
+    !Number.isFinite(input.far) ||
+    input.far <= input.near ||
     input.projectionMatrixElements.length !== 16
-  ) return false;
-  const x = 2 * input.zoom / (input.right - input.left);
-  const y = 2 * input.zoom / (input.top - input.bottom);
+  )
+    return false;
+  const x = (2 * input.zoom) / (input.right - input.left);
+  const y = (2 * input.zoom) / (input.top - input.bottom);
   const c = -2 / (input.far - input.near);
   const d = -(input.far + input.near) / (input.far - input.near);
   const matrix = input.projectionMatrixElements;
-  return finiteEqual(matrix[0], x) && finiteEqual(matrix[1], 0) &&
-    finiteEqual(matrix[2], 0) && finiteEqual(matrix[3], 0) &&
-    finiteEqual(matrix[4], 0) && finiteEqual(matrix[5], y) &&
-    finiteEqual(matrix[6], 0) && finiteEqual(matrix[7], 0) &&
-    finiteEqual(matrix[8], 0) && finiteEqual(matrix[9], 0) &&
-    finiteEqual(matrix[10], c) && finiteEqual(matrix[11], 0) &&
-    finiteEqual(matrix[12], 0) && finiteEqual(matrix[13], 0) &&
-    finiteEqual(matrix[14], d) && finiteEqual(matrix[15], 1);
+  return (
+    finiteEqual(matrix[0], x) &&
+    finiteEqual(matrix[1], 0) &&
+    finiteEqual(matrix[2], 0) &&
+    finiteEqual(matrix[3], 0) &&
+    finiteEqual(matrix[4], 0) &&
+    finiteEqual(matrix[5], y) &&
+    finiteEqual(matrix[6], 0) &&
+    finiteEqual(matrix[7], 0) &&
+    finiteEqual(matrix[8], 0) &&
+    finiteEqual(matrix[9], 0) &&
+    finiteEqual(matrix[10], c) &&
+    finiteEqual(matrix[11], 0) &&
+    finiteEqual(matrix[12], 0) &&
+    finiteEqual(matrix[13], 0) &&
+    finiteEqual(matrix[14], d) &&
+    finiteEqual(matrix[15], 1)
+  );
 }
 
 /** Accept only ordinary centered Three projections whose matrix matches fields. */
@@ -281,10 +332,15 @@ export function isKnowledgeGraphCenteredAutoFrameProjectionSupported(
   input: KnowledgeGraphCenteredAutoFrameProjectionV1,
 ): boolean {
   if (
-    input.isArrayCamera || input.viewEnabled || !input.parentTransformIdentity ||
-    !input.selfTransformCanonical || !input.cameraMethodsCanonical ||
-    !input.projectionMethodCanonical || !input.webGlCoordinateSystem
-  ) return false;
+    input.isArrayCamera ||
+    input.viewEnabled ||
+    !input.parentTransformIdentity ||
+    !input.selfTransformCanonical ||
+    !input.cameraMethodsCanonical ||
+    !input.projectionMethodCanonical ||
+    !input.webGlCoordinateSystem
+  )
+    return false;
   if (input.kind === 'perspective') {
     return input.effectiveFovMethodCanonical && canonicalPerspectiveProjection(input);
   }
@@ -295,11 +351,13 @@ export function isKnowledgeGraphPerspectiveProjectionReady(
   effectiveFovDegrees: number,
   aspect: number,
 ): boolean {
-  return Number.isFinite(effectiveFovDegrees) &&
+  return (
+    Number.isFinite(effectiveFovDegrees) &&
     effectiveFovDegrees > 0 &&
     effectiveFovDegrees < 180 &&
     Number.isFinite(aspect) &&
-    aspect > 0;
+    aspect > 0
+  );
 }
 
 export function isKnowledgeGraphOrthographicProjectionReady(
@@ -307,16 +365,17 @@ export function isKnowledgeGraphOrthographicProjectionReady(
   verticalSpan: number,
   zoom: number,
 ): boolean {
-  return Number.isFinite(horizontalSpan) && horizontalSpan > 0 &&
-    Number.isFinite(verticalSpan) && verticalSpan > 0 &&
-    Number.isFinite(zoom) && zoom > 0;
+  return (
+    Number.isFinite(horizontalSpan) &&
+    horizontalSpan > 0 &&
+    Number.isFinite(verticalSpan) &&
+    verticalSpan > 0 &&
+    Number.isFinite(zoom) &&
+    zoom > 0
+  );
 }
 
-export function isKnowledgeGraphCameraVectorFinite(
-  x: number,
-  y: number,
-  z: number,
-): boolean {
+export function isKnowledgeGraphCameraVectorFinite(x: number, y: number, z: number): boolean {
   return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z);
 }
 
@@ -342,32 +401,24 @@ export function planKnowledgeGraphCameraClippingInto(
   target: MutableKnowledgeGraphCameraClippingPlanV1,
 ): MutableKnowledgeGraphCameraClippingPlanV1 {
   const radius = positiveFinite(contentRadiusValue, 1);
-  const distance = positiveFinite(
-    distanceValue,
-    KNOWLEDGE_GRAPH_CAMERA_MIN_DISTANCE,
-  );
-  const minimumNear = kind === 'perspective'
-    ? KNOWLEDGE_GRAPH_PERSPECTIVE_MIN_NEAR
-    : 0;
+  const distance = positiveFinite(distanceValue, KNOWLEDGE_GRAPH_CAMERA_MIN_DISTANCE);
+  const minimumNear = kind === 'perspective' ? KNOWLEDGE_GRAPH_PERSPECTIVE_MIN_NEAR : 0;
   const maximumNear = Math.max(
     minimumNear,
     distance - radius * KNOWLEDGE_GRAPH_CAMERA_DEPTH_MARGIN,
   );
-  const fallbackNear = kind === 'perspective'
-    ? Math.min(0.1, maximumNear)
-    : 0;
-  const currentNear = Number.isFinite(currentNearValue) &&
-      currentNearValue >= minimumNear
-    ? currentNearValue
-    : fallbackNear;
+  const fallbackNear = kind === 'perspective' ? Math.min(0.1, maximumNear) : 0;
+  const currentNear =
+    Number.isFinite(currentNearValue) && currentNearValue >= minimumNear
+      ? currentNearValue
+      : fallbackNear;
   const near = Math.min(currentNear, maximumNear);
   const requiredFar = Math.max(
     near + KNOWLEDGE_GRAPH_PERSPECTIVE_MIN_NEAR,
     distance + radius * KNOWLEDGE_GRAPH_CAMERA_DEPTH_MARGIN,
   );
-  const currentFar = Number.isFinite(currentFarValue) && currentFarValue > near
-    ? currentFarValue
-    : requiredFar;
+  const currentFar =
+    Number.isFinite(currentFarValue) && currentFarValue > near ? currentFarValue : requiredFar;
   target.near = near;
   target.far = Math.max(currentFar, requiredFar);
   return target;
@@ -429,9 +480,11 @@ export function planKnowledgeGraphCameraFit(
       target,
     );
   }
-  return Object.freeze(target.orthographicZoom === undefined
-    ? { distance: target.distance }
-    : { distance: target.distance, orthographicZoom: target.orthographicZoom });
+  return Object.freeze(
+    target.orthographicZoom === undefined
+      ? { distance: target.distance }
+      : { distance: target.distance, orthographicZoom: target.orthographicZoom },
+  );
 }
 
 export function planKnowledgeGraphPerspectiveCameraFitInto(
@@ -448,18 +501,11 @@ export function planKnowledgeGraphPerspectiveCameraFitInto(
   const paddedRadius = radius * KNOWLEDGE_GRAPH_CAMERA_FIT_MARGIN;
   const verticalFov = positiveFinite(verticalFovDegrees, 50);
   const aspect = positiveFinite(aspectRatio, 1);
-  const verticalHalf = Math.min(89.5, Math.max(0.5, verticalFov / 2)) *
-    Math.PI / 180;
+  const verticalHalf = (Math.min(89.5, Math.max(0.5, verticalFov / 2)) * Math.PI) / 180;
   const horizontalHalf = Math.atan(Math.tan(verticalHalf) * aspect);
-  const limitingHalf = Math.max(1e-6, Math.min(
-    verticalHalf,
-    horizontalHalf,
-  ));
+  const limitingHalf = Math.max(1e-6, Math.min(verticalHalf, horizontalHalf));
   const fitDistance = paddedRadius / Math.sin(limitingHalf);
-  target.distance = Math.max(
-    KNOWLEDGE_GRAPH_CAMERA_MIN_DISTANCE,
-    fitDistance,
-  );
+  target.distance = Math.max(KNOWLEDGE_GRAPH_CAMERA_MIN_DISTANCE, fitDistance);
   target.orthographicZoom = undefined;
   return target;
 }
@@ -479,10 +525,91 @@ export function planKnowledgeGraphOrthographicCameraFitInto(
   const verticalHalf = positiveFinite(verticalSpan, 2) / 2;
   const fitZoom = Math.min(horizontalHalf, verticalHalf) / paddedRadius;
   const currentZoom = positiveFinite(currentCameraZoom, 1);
-  target.distance = Math.max(
-    KNOWLEDGE_GRAPH_CAMERA_MIN_DISTANCE,
-    paddedRadius * 2,
-  );
+  target.distance = Math.max(KNOWLEDGE_GRAPH_CAMERA_MIN_DISTANCE, paddedRadius * 2);
   target.orthographicZoom = positiveFinite(fitZoom, currentZoom);
   return target;
+}
+
+function geometryViewportFraction(span: number, other: number): number {
+  const margin = Math.min(KNOWLEDGE_GRAPH_GEOMETRY_PIXEL_MARGIN, Math.min(span, other) * 0.1);
+  return 1 - (2 * margin) / span;
+}
+
+/**
+ * Fit the checked geometry in camera axes. Positive Z points toward the camera.
+ * The frontmost corner supplies a conservative depth term for both axes; this
+ * contains every point without the sphere's irrelevant depth-to-width penalty.
+ * Invalid observations leave the caller's pending fit and scratch result intact.
+ */
+export function planKnowledgeGraphPerspectiveGeometryFitInto(
+  bounds: KnowledgeGraphGeometryBounds,
+  verticalFovDegrees: number,
+  aspect: number,
+  viewportWidth: number,
+  viewportHeight: number,
+  target: MutableKnowledgeGraphCameraFitPlanV1,
+): boolean {
+  if (
+    !isKnowledgeGraphGeometryBoundsFinite(bounds) ||
+    !isKnowledgeGraphPerspectiveProjectionReady(verticalFovDegrees, aspect) ||
+    !Number.isFinite(viewportWidth) ||
+    viewportWidth <= 0 ||
+    !Number.isFinite(viewportHeight) ||
+    viewportHeight <= 0
+  )
+    return false;
+  const verticalTan = Math.tan((verticalFovDegrees * Math.PI) / 360);
+  const horizontalTan = verticalTan * aspect;
+  const x = Math.max(Math.abs(bounds.minX), Math.abs(bounds.maxX));
+  const y = Math.max(Math.abs(bounds.minY), Math.abs(bounds.maxY));
+  const depth = Math.max(0, bounds.maxZ);
+  const distance = Math.max(
+    KNOWLEDGE_GRAPH_GEOMETRY_MIN_DISTANCE,
+    depth + x / (horizontalTan * geometryViewportFraction(viewportWidth, viewportHeight)),
+    depth + y / (verticalTan * geometryViewportFraction(viewportHeight, viewportWidth)),
+  );
+  if (!Number.isFinite(distance) || distance <= depth) return false;
+  target.distance = distance;
+  target.orthographicZoom = undefined;
+  return true;
+}
+
+export function planKnowledgeGraphOrthographicGeometryFitInto(
+  bounds: KnowledgeGraphGeometryBounds,
+  currentCameraDistance: number,
+  horizontalSpan: number,
+  verticalSpan: number,
+  currentZoom: number,
+  viewportWidth: number,
+  viewportHeight: number,
+  target: MutableKnowledgeGraphCameraFitPlanV1,
+): boolean {
+  if (
+    !isKnowledgeGraphGeometryBoundsFinite(bounds) ||
+    !isKnowledgeGraphOrthographicProjectionReady(horizontalSpan, verticalSpan, currentZoom) ||
+    !Number.isFinite(currentCameraDistance) ||
+    currentCameraDistance < 0 ||
+    !Number.isFinite(viewportWidth) ||
+    viewportWidth <= 0 ||
+    !Number.isFinite(viewportHeight) ||
+    viewportHeight <= 0
+  )
+    return false;
+  const x = Math.max(Math.abs(bounds.minX), Math.abs(bounds.maxX));
+  const y = Math.max(Math.abs(bounds.minY), Math.abs(bounds.maxY));
+  const depth = Math.max(0, bounds.maxZ);
+  if (x <= 0 || y <= 0) return false;
+  const zoom = Math.min(
+    (horizontalSpan * geometryViewportFraction(viewportWidth, viewportHeight)) / (2 * x),
+    (verticalSpan * geometryViewportFraction(viewportHeight, viewportWidth)) / (2 * y),
+  );
+  const distance = Math.max(
+    KNOWLEDGE_GRAPH_GEOMETRY_MIN_DISTANCE,
+    depth + 1,
+    currentCameraDistance,
+  );
+  if (!Number.isFinite(zoom) || zoom <= 0 || !Number.isFinite(distance)) return false;
+  target.distance = distance;
+  target.orthographicZoom = zoom;
+  return true;
 }

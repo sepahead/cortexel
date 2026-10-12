@@ -554,9 +554,9 @@ describe('graph helpers', () => {
       'KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE.sphere_outline',
     );
     expect(sceneSource).toContain(
-      'KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE.diamond_shell',
+      "createKnowledgeGraphNodeShellVertices('diamond_shell')",
     );
-    expect(sceneSource).toContain('knowledgeGraphFocusLabelSpriteCenterY(');
+    expect(sceneSource).toMatch(/layoutKnowledgeGraphLabelsInto\(\s*labelCandidates,\s*projectedLabelNodes,\s*labelResource\.widths,/u);
     expect(sceneSource).not.toContain('camera.matrixWorld.elements');
     expect(sceneSource).toContain('depthTest={false}');
     expect(sceneSource).toContain('frustumCulled={false}');
@@ -622,9 +622,8 @@ describe('graph helpers', () => {
       verticalFovDegrees: 50,
       aspect: 1098 / 618,
     };
-    // The scene accumulates an axis-aligned box and then fits its bounding
-    // sphere. A one-node graph therefore makes the old hypothetical-label bug
-    // directly measurable without depending on a browser, font, or GPU.
+    // Retain the historical sphere-fit comparison as a regression control.
+    // The current scene separately fits the current geometry in camera axes.
     const renderedFit = planKnowledgeGraphCameraFit({
       contentRadius: renderedExtent * Math.sqrt(3),
       currentDistance: 260,
@@ -639,13 +638,20 @@ describe('graph helpers', () => {
       new URL('../react/KnowledgeGraph3DScene.tsx', import.meta.url),
       'utf8',
     );
-    expect(sceneSource.match(/knowledgeGraphNodeUsesFocusScale\(/g)).toHaveLength(5);
+    expect(sceneSource.match(/knowledgeGraphNodeUsesFocusScale\(/g)).toHaveLength(7);
+    const framingStart = sceneSource.indexOf('      autoFrame &&');
+    const framingEnd = sceneSource.indexOf('    // Ease the camera target', framingStart);
+    expect(framingStart).toBeGreaterThanOrEqual(0);
+    expect(framingEnd).toBeGreaterThan(framingStart);
     const framingSource = sceneSource.slice(
-      sceneSource.indexOf('const radius = knowledgeGraphAutoFrameNodeRadialExtent('),
-      sceneSource.indexOf('_box.expandByPoint(_a.set('),
+      framingStart,
+      framingEnd,
     );
     expect(framingSource).toContain('focusSet');
     expect(framingSource).toContain('knowledgeGraphNodeUsesFocusScale(');
+    expect(framingSource).toContain('knowledgeGraphAutoFrameNodeRadialExtent(');
+    expect(framingSource).toContain('includeKnowledgeGraphGeometryPointInto(');
+    expect(framingSource).not.toContain('FOCUS_LABEL_MAX_WORLD_WIDTH');
     expect(hypotheticalLabelExtent).toBeGreaterThan(renderedExtent * 10);
     expect(hypotheticalLabelFit.distance).toBeGreaterThan(renderedFit.distance * 3);
   });
@@ -2280,11 +2286,13 @@ describe('graph helpers', () => {
     expect(source.match(/visibleLineSegmentCount \* 6/g)).toHaveLength(2);
     expect(source).toContain('if (chordVisible)');
     expect(source).not.toContain('const chordEnd =');
-    expect(source.match(/setUsage\(THREE\.DynamicDrawUsage\)/g)).toHaveLength(7);
+    expect(source.match(/setUsage\(THREE\.DynamicDrawUsage\)/g)).toHaveLength(8);
+    expect(source).toContain('linePositionData.setUsage(THREE.DynamicDrawUsage)');
+    expect(source).toContain('labelsRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage)');
     expect(source).toContain('focus === null && !queryActive ? 0');
-    // One definition plus the line, arrowhead, and particle call sites: all
-    // three visual encodings must consume the same routed quadratic.
-    expect(source.match(/setEdgeCurve\(/g)).toHaveLength(4);
+    // One definition plus lines, arrowheads, particles, curve bounds, and
+    // marker bounds: every visual and framing path shares the exact routing.
+    expect(source.match(/setEdgeCurve\(/g)).toHaveLength(6);
     expect(source.match(/graphEdgeCurvePointInto\(/g)).toHaveLength(2);
     expect(source).toContain('uniqueGraphTopologyLinks(topologyEdges)');
     expect(GRAPH_EDGE_CURVE_SEGMENTS).toBe(12);

@@ -3,7 +3,7 @@ const require_knowledgeGraphLimits = require('../knowledgeGraphLimits-BnjbjxkI.c
 const require_canonicalize = require('../canonicalize-CM-RPRQS.cjs');
 const require_deep_freeze = require('../deep-freeze-CX4sIEIO.cjs');
 const require_parse_json = require('../parse-json-fREYzpvz.cjs');
-const require_knowledgeGraphVisualEncoding_internal = require('../knowledgeGraphVisualEncoding.internal-COtu0qU6.cjs');
+const require_knowledgeGraphVisualEncoding_internal = require('../knowledgeGraphVisualEncoding.internal-CD-U4BOM.cjs');
 
 //#region react/knowledgeGraphPresentationBudget.internal.ts
 /**

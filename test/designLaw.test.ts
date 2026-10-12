@@ -102,7 +102,7 @@ function knowledgeGraphLifecycleOperations(src: string, file: string): string[] 
     if (
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
-      node.expression.text === 'installFocusLabelResource'
+      node.expression.text === 'installKnowledgeGraphLabelResources'
     ) {
       operations.push(`label-resource-install:${enclosingLifecycleHook(node) ?? 'render'}`);
     }
@@ -230,12 +230,27 @@ describe('design law (executable)', () => {
     expect(knowledgeGraphPostPublishFallibleOperations(source, file)).toEqual([]);
 
     const helper = readFileSync(
-      join(reactDir, 'focusLabelResource.internal.ts'),
+      join(reactDir, 'knowledgeGraphLabelResource.internal.ts'),
       'utf8',
     );
     expect(helper).toContain("document.createElement('canvas')");
     expect(helper).toContain('new THREE.CanvasTexture(canvas)');
     expect(helper).toContain('texture.dispose()');
+  });
+
+  it('recognizes the exact atlas installer in render and post-commit controls', () => {
+    const valid = `function Scene() {
+      useLayoutEffect(() => installKnowledgeGraphLabelResources(options), []);
+    }`;
+    const invalid = `function Scene() {
+      installKnowledgeGraphLabelResources(options);
+    }`;
+    expect(knowledgeGraphLifecycleOperations(valid, 'Scene.tsx'))
+      .toEqual(['label-resource-install:useLayoutEffect']);
+    expect(knowledgeGraphLifecycleOperations(invalid, 'Scene.tsx'))
+      .toEqual(['label-resource-install:render']);
+    expect(knowledgeGraphLifecycleOperations('function Scene() { arbitraryInstaller(); }', 'Scene.tsx'))
+      .toEqual([]);
   });
 
   it('orders graph readiness, event interception, and auto-frame commitment safely', () => {

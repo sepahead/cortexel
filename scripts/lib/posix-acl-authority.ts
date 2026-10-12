@@ -21,6 +21,12 @@ const ACL_INSPECTOR = fileURLToPath(
 // This is an explicit OS trust prerequisite, not a PATH-selected interpreter.
 // Its version and bytes are not a reproducibility receipt of the inspected tree.
 const ACL_INSPECTOR_PYTHON = '/usr/bin/python3';
+const DARWIN_CLT_ACL_PYTHON = Object.freeze({
+  profileId: 'cortexel.posix_acl.os_python.darwin_clt_3_9.v1',
+  executable:
+    '/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9',
+});
+const MAX_OS_ACL_PYTHON_BYTES = 64 * 1024 * 1024;
 const MAX_ACL_INSPECTOR_BYTES = 64 * 1024;
 export const REVIEWED_POSIX_ACL_INSPECTOR_SHA256 =
   'sha256:2f9f6bf672a4342d5c97cd71d067aa5c419844cd844cb95004a2b1e511223b32';
@@ -74,6 +80,145 @@ function sameFileAuthority(left: BigIntStats, right: BigIntStats): boolean {
     left.mtimeNs === right.mtimeNs &&
     left.ctimeNs === right.ctimeNs &&
     left.birthtimeNs === right.birthtimeNs;
+}
+
+interface AclInspectorPythonPrerequisite {
+  readonly executable: string;
+  recheck(): void;
+  close(): void;
+}
+
+/**
+ * Screen one fixed OS-administered prerequisite without recursive ACL calls.
+ * These checks bind modes and observed identities only. Interpreter ACLs,
+ * framework/stdlib/loader authority and administrator trust remain prerequisites.
+ * No launcher digest, bundle version, or successful native call supplies them.
+ */
+function acquireAclInspectorPythonPrerequisite(): AclInspectorPythonPrerequisite {
+  if (process.platform === 'linux') {
+    return {
+      executable: ACL_INSPECTOR_PYTHON,
+      recheck() {},
+      close() {},
+    };
+  }
+  if (process.platform !== 'darwin') {
+    throw new Error('ACL inspector has no reviewed OS interpreter profile');
+  }
+  const executable = DARWIN_CLT_ACL_PYTHON.executable;
+  const descriptors: number[] = [];
+  const records: Array<{
+    readonly path: string;
+    readonly descriptor: number;
+    readonly identity: BigIntStats;
+    readonly directory: boolean;
+  }> = [];
+  const requireStat = (
+    stat: BigIntStats,
+    directory: boolean,
+    label: string,
+  ): void => {
+    if (
+      stat.isSymbolicLink() ||
+      (directory ? !stat.isDirectory() : !stat.isFile()) ||
+      stat.uid !== 0n ||
+      stat.gid !== 0n ||
+      (stat.mode & 0o7022n) !== 0n ||
+      (stat.mode & 0o111n) !== 0o111n ||
+      (!directory && (
+        stat.nlink !== 1n ||
+        stat.size < 1n ||
+        stat.size > BigInt(MAX_OS_ACL_PYTHON_BYTES)
+      ))
+    ) {
+      throw new Error(label + ' is outside the fixed OS prerequisite profile');
+    }
+  };
+  const recheck = (): void => {
+    for (const record of records) {
+      const byPath = lstatSync(record.path, { bigint: true });
+      const byDescriptor = fstatSync(record.descriptor, { bigint: true });
+      requireStat(byPath, record.directory, 'ACL Python path');
+      requireStat(byDescriptor, record.directory, 'ACL Python descriptor');
+      if (
+        realpathSync(record.path) !== record.path ||
+        !sameFileAuthority(record.identity, byPath) ||
+        !sameFileAuthority(record.identity, byDescriptor)
+      ) {
+        throw new Error('ACL Python prerequisite identity changed');
+      }
+    }
+  };
+  const close = (): void => {
+    const errors: Error[] = [];
+    for (let index = descriptors.length - 1; index >= 0; index--) {
+      try {
+        closeSync(descriptors[index]!);
+      } catch (error) {
+        errors.push(new Error('ACL Python descriptor close is uncertain', {
+          cause: error,
+        }));
+      }
+    }
+    descriptors.length = 0;
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) {
+      throw new AggregateError(errors, 'ACL Python descriptor cleanup is uncertain');
+    }
+  };
+  try {
+    const paths: string[] = [];
+    let cursor = path.dirname(executable);
+    while (true) {
+      paths.push(cursor);
+      if (paths.length > 64) {
+        throw new Error('ACL Python ancestry exceeds the reviewed bound');
+      }
+      const parent = path.dirname(cursor);
+      if (parent === cursor) break;
+      cursor = parent;
+    }
+    paths.reverse();
+    for (const currentPath of [...paths, executable]) {
+      const directory = currentPath !== executable;
+      const identity = lstatSync(currentPath, { bigint: true });
+      requireStat(identity, directory, 'ACL Python prerequisite');
+      if (realpathSync(currentPath) !== currentPath) {
+        throw new Error('ACL Python prerequisite traverses a symbolic path');
+      }
+      const fileFlags = reviewedNoFollowNonblockingFileFlags();
+      if (
+        directory &&
+        (!Number.isSafeInteger(fsConstants.O_DIRECTORY) || fsConstants.O_DIRECTORY <= 0)
+      ) {
+        throw new Error('ACL Python directory-open authority is unavailable');
+      }
+      const descriptor = openSync(
+        currentPath,
+        directory ? fileFlags | fsConstants.O_DIRECTORY : fileFlags,
+      );
+      descriptors.push(descriptor);
+      const opened = fstatSync(descriptor, { bigint: true });
+      requireStat(opened, directory, 'ACL Python opened prerequisite');
+      if (!sameFileAuthority(identity, opened)) {
+        throw new Error('ACL Python prerequisite changed while opening');
+      }
+      records.push({ path: currentPath, descriptor, identity, directory });
+    }
+    recheck();
+    return { executable, recheck, close };
+  } catch (error) {
+    try {
+      close();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'ACL Python prerequisite or cleanup is uncertain',
+        { cause: error },
+      );
+    }
+    throw error;
+  }
 }
 
 function reviewedNoFollowNonblockingFileFlags(): number {
@@ -350,6 +495,7 @@ export function requireReviewedPosixAclAuthority(
     throw new Error('ACL inspector path must not traverse a symbolic link');
   }
   let inspectorDescriptor: number | null = null;
+  let pythonPrerequisite: AclInspectorPythonPrerequisite | null = null;
   let result: ReturnType<typeof spawnSync> | undefined;
   const inspectorErrors: unknown[] = [];
   try {
@@ -373,8 +519,9 @@ export function requireReviewedPosixAclAuthority(
       inspectorDescriptorBefore,
       'ACL inspector source',
     );
+    pythonPrerequisite = acquireAclInspectorPythonPrerequisite();
     try {
-      result = spawnSync(ACL_INSPECTOR_PYTHON, arguments_, {
+      result = spawnSync(pythonPrerequisite.executable, arguments_, {
         encoding: 'utf8',
         env: {
           LANG: 'C',
@@ -386,6 +533,11 @@ export function requireReviewedPosixAclAuthority(
         stdio,
         timeout: 10_000,
       });
+    } catch (error) {
+      inspectorErrors.push(error);
+    }
+    try {
+      pythonPrerequisite.recheck();
     } catch (error) {
       inspectorErrors.push(error);
     }
@@ -416,6 +568,13 @@ export function requireReviewedPosixAclAuthority(
   } catch (error) {
     inspectorErrors.push(error);
   } finally {
+    if (pythonPrerequisite !== null) {
+      try {
+        pythonPrerequisite.close();
+      } catch (error) {
+        inspectorErrors.push(error);
+      }
+    }
     if (inspectorDescriptor !== null) {
       try {
         closeSync(inspectorDescriptor);

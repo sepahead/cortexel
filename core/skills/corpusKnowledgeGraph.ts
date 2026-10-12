@@ -278,6 +278,7 @@ const CorpusDerivationSourceSchema = z
     provider_execution_receipt_sha256: sha256Hex,
     evidence_plane_sha256: sha256Hex,
     qualified_payload_sha256: sha256Hex,
+    qualified_projection_rejoin_sha256: sha256Hex,
   })
   .strict();
 

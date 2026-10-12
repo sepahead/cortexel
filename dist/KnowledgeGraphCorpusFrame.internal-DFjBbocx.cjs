@@ -1,6 +1,6 @@
 const require_knowledgeGraphLimits = require('./knowledgeGraphLimits-BnjbjxkI.cjs');
-const require_knowledgeGraphVisualEncoding_internal = require('./knowledgeGraphVisualEncoding.internal-COtu0qU6.cjs');
-const require_knowledgeGraphFigure = require('./knowledgeGraphFigure-CJUK98CP.cjs');
+const require_knowledgeGraphVisualEncoding_internal = require('./knowledgeGraphVisualEncoding.internal-CD-U4BOM.cjs');
+const require_knowledgeGraphFigure = require('./knowledgeGraphFigure-BJ7Y_maa.cjs');
 let _cortexel_knowledge_graph_presentation_capability = require("#cortexel-knowledge-graph-presentation-capability");
 let react = require("react");
 let react_jsx_runtime = require("react/jsx-runtime");
@@ -1522,4 +1522,4 @@ Object.defineProperty(exports, 'toggledKnowledgeGraphSelection', {
     return toggledKnowledgeGraphSelection;
   }
 });
-//# sourceMappingURL=KnowledgeGraphCorpusFrame.internal-D37Fsrhv.cjs.map
+//# sourceMappingURL=KnowledgeGraphCorpusFrame.internal-DFjBbocx.cjs.map

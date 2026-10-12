@@ -113,6 +113,7 @@ function receiptBoundResponse(): EngramReceiptBoundCorpusEntityGraphResponse {
     provider_execution_receipt_sha256: 'e'.repeat(64),
     evidence_plane_sha256: 'f'.repeat(64),
     qualified_payload_sha256: '0'.repeat(64),
+    qualified_projection_rejoin_sha256: '1'.repeat(64),
   });
   return {
     ...legacy,
@@ -621,5 +622,299 @@ describe('adaptEngramCorpusEntityGraph', () => {
     if (!result.ok) return;
     expect(result.params.edges[0].id).not.toBe(result.params.edges[1].id);
     expect(result.params.edges.every((edge) => edge.id.length <= 320)).toBe(true);
+  });
+});
+
+function canonicalReceiptResponse(): EngramReceiptBoundCorpusEntityGraphResponse {
+  const graph = receiptBoundResponse();
+  graph.nodes = [...graph.nodes].sort((left, right) =>
+    left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+  graph.edges = [...graph.edges].sort((left, right) => {
+    for (const field of ['kind', 'source', 'target'] as const) {
+      if (left[field] < right[field]) return -1;
+      if (left[field] > right[field]) return 1;
+    }
+    return 0;
+  });
+  return graph;
+}
+
+function sourceRecords(graph: EngramReceiptBoundCorpusEntityGraphResponse) {
+  return (graph.derivation_receipt as {
+    sources: Array<Record<string, unknown>>;
+  }).sources;
+}
+
+function receiptRecord(graph: EngramReceiptBoundCorpusEntityGraphResponse) {
+  return graph.derivation_receipt as Record<string, unknown>;
+}
+
+function paperOnlyReceiptResponse(count: number): EngramReceiptBoundCorpusEntityGraphResponse {
+  const graph = canonicalReceiptResponse();
+  const source = sourceRecords(graph)[0]!;
+  const sources = Array.from({ length: count }, (_, index) => {
+    const paperId = `p${String(index).padStart(3, '0')}`;
+    return { ...source, paper_id: paperId, component_path: `graphs/${paperId}.json` };
+  });
+  graph.nodes = sources.map((item) => ({
+    id: `paper:${item.paper_id}`,
+    kind: 'paper' as const,
+    label: `Paper ${item.paper_id}`,
+    family: '',
+    paper_count: 0,
+    n_neurons: 0,
+    n_synapses: 0,
+  }));
+  graph.edges = [];
+  graph.paper_count = count;
+  graph.model_count = 0;
+  graph.family_count = 0;
+  graph.edge_counts = {};
+  graph.kinds = count > 0 ? ['paper'] : [];
+  graph.identity_derivation = {
+    ...(graph.identity_derivation as Record<string, unknown>),
+    signatures_considered: count,
+    identity_block_count: count,
+    largest_identity_block_signatures: count > 0 ? 1 : 0,
+    planned_pair_comparisons: 0,
+  };
+  graph.derivation_receipt = {
+    ...receiptRecord(graph),
+    sources,
+    eligible_paper_count: count,
+    identity_derivation: graph.identity_derivation,
+  };
+  return graph;
+}
+
+function capturedReceiptOptions(graph: unknown) {
+  return { ...options, graphSnapshotId: canonicalDigest(graph) };
+}
+
+function expectCurrentReceiptAccepted(graph: EngramReceiptBoundCorpusEntityGraphResponse) {
+  const result = adaptEngramCorpusEntityGraph(graph, capturedReceiptOptions(graph));
+  if (!result.ok) throw new Error(result.errors.join('\n'));
+  expect(result.params.nodes.every((node) =>
+    node.epistemic.status === 'derived_advisory'
+      && node.epistemic.advisory_only
+      && !node.epistemic.is_paper_local_evidence
+      && !node.epistemic.calibrated_posterior)).toBe(true);
+  return result;
+}
+
+describe('current Engram qualified-projection source contract', () => {
+  it('requires the rejoin checksum on every source and refuses older fifteen-field v2 receipts', () => {
+    const current = paperOnlyReceiptResponse(2);
+    expectCurrentReceiptAccepted(current);
+    const older = structuredClone(current);
+    const source = sourceRecords(older)[1]!;
+    const {
+      qualified_projection_rejoin_sha256: _rejoinChecksum,
+      ...olderFifteenFieldSource
+    } = source;
+    expect(Object.keys(olderFifteenFieldSource)).toHaveLength(15);
+    sourceRecords(older)[1] = olderFifteenFieldSource;
+    const raw = JSON.stringify(older);
+    expect(adaptEngramCorpusEntityGraph(older, capturedReceiptOptions(older)).ok).toBe(false);
+    expect(JSON.stringify(older)).toBe(raw);
+
+    // The historical evidence-array branch is a distinct supported input.
+    expect(adaptEngramCorpusEntityGraph(response(), options).ok).toBe(true);
+  });
+
+  it.each([
+    ['null', null],
+    ['numeric', 1],
+    ['empty', ''],
+    ['short', 'a'.repeat(63)],
+    ['long', 'a'.repeat(65)],
+    ['uppercase', 'A'.repeat(64)],
+    ['nonhex', 'g'.repeat(64)],
+    ['whitespace', ` ${'a'.repeat(63)}`],
+  ] as const)('rejects a %s rejoin checksum after a complete current positive', (_label, value) => {
+    const graph = canonicalReceiptResponse();
+    expectCurrentReceiptAccepted(graph);
+    sourceRecords(graph)[0]!.qualified_projection_rejoin_sha256 = value;
+    const raw = JSON.stringify(graph);
+    expect(adaptEngramCorpusEntityGraph(graph, capturedReceiptOptions(graph)).ok).toBe(false);
+    expect(JSON.stringify(graph)).toBe(raw);
+  });
+
+  it('binds the complete captured checksum without authenticating backend digest claims', () => {
+    const original = canonicalReceiptResponse();
+    expectCurrentReceiptAccepted(original);
+    const captured = capturedReceiptOptions(original);
+    const changed = structuredClone(original);
+    sourceRecords(changed)[0]!.qualified_projection_rejoin_sha256 = '2'.repeat(64);
+    const changedSnapshot = canonicalDigest(changed);
+    expect(changedSnapshot).not.toBe(captured.graphSnapshotId);
+    const refused = adaptEngramCorpusEntityGraph(changed, captured);
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) expect(refused.errors.join(' ')).toMatch(/graphSnapshotId/);
+    const rebound = expectCurrentReceiptAccepted(changed);
+    expect(rebound.params.graph_snapshot_id).toBe(changedSnapshot);
+    expect(sourceRecords(changed)[0]!.qualified_projection_rejoin_sha256).toBe('2'.repeat(64));
+  });
+
+  it.each(['source', 'receipt', 'response'] as const)(
+    'keeps the current %s scope closed without stripping unknown fields',
+    (scope) => {
+      const graph = canonicalReceiptResponse();
+      expectCurrentReceiptAccepted(graph);
+      const target = scope === 'source' ? sourceRecords(graph)[0]!
+        : scope === 'receipt' ? receiptRecord(graph)
+          : graph as unknown as Record<string, unknown>;
+      target.unrecognized_field = 'retained caller value';
+      const raw = JSON.stringify(graph);
+      expect(adaptEngramCorpusEntityGraph(graph, capturedReceiptOptions(graph)).ok).toBe(false);
+      expect(JSON.stringify(graph)).toBe(raw);
+    },
+  );
+
+  it('preserves path, binding, and paper-node joins with complete current sources', () => {
+    const positive = canonicalReceiptResponse();
+    expectCurrentReceiptAccepted(positive);
+
+    const badPath = structuredClone(positive);
+    sourceRecords(badPath)[0]!.component_path = 'graphs/other.json';
+    const pathResult = adaptEngramCorpusEntityGraph(badPath, capturedReceiptOptions(badPath));
+    expect(pathResult.ok).toBe(false);
+    if (!pathResult.ok) expect(pathResult.errors.join(' ')).toMatch(/source roster is inconsistent/);
+
+    const badBinding = structuredClone(positive);
+    sourceRecords(badBinding)[0]!.graph_store_binding_id = `wiki-v1:${'2'.repeat(32)}`;
+    const bindingResult = adaptEngramCorpusEntityGraph(badBinding, capturedReceiptOptions(badBinding));
+    expect(bindingResult.ok).toBe(false);
+    if (!bindingResult.ok) expect(bindingResult.errors.join(' ')).toMatch(/source roster is inconsistent/);
+
+    const differentPaper = structuredClone(positive);
+    sourceRecords(differentPaper)[0]!.paper_id = 'p2';
+    sourceRecords(differentPaper)[0]!.component_path = 'graphs/p2.json';
+    const paperResult = adaptEngramCorpusEntityGraph(differentPaper, capturedReceiptOptions(differentPaper));
+    expect(paperResult.ok).toBe(false);
+    if (!paperResult.ok) expect(paperResult.errors.join(' ')).toMatch(/paper-node roster/);
+  });
+
+  it('preserves sorted unique source rosters and exact declared counts', () => {
+    const positive = paperOnlyReceiptResponse(2);
+    expectCurrentReceiptAccepted(positive);
+
+    const unsorted = structuredClone(positive);
+    sourceRecords(unsorted).reverse();
+    const orderResult = adaptEngramCorpusEntityGraph(unsorted, capturedReceiptOptions(unsorted));
+    expect(orderResult.ok).toBe(false);
+    if (!orderResult.ok) expect(orderResult.errors.join(' ')).toMatch(/source roster is inconsistent/);
+
+    const duplicate = structuredClone(positive);
+    sourceRecords(duplicate)[1] = { ...sourceRecords(duplicate)[0]! };
+    const duplicateResult = adaptEngramCorpusEntityGraph(duplicate, capturedReceiptOptions(duplicate));
+    expect(duplicateResult.ok).toBe(false);
+    if (!duplicateResult.ok) expect(duplicateResult.errors.join(' ')).toMatch(/source roster is inconsistent/);
+
+    const wrongCount = structuredClone(positive);
+    receiptRecord(wrongCount).eligible_paper_count = 3;
+    const countResult = adaptEngramCorpusEntityGraph(wrongCount, capturedReceiptOptions(wrongCount));
+    expect(countResult.ok).toBe(false);
+    if (!countResult.ok) expect(countResult.errors.join(' ')).toMatch(/graph summary/);
+  });
+
+  it('preserves identity equality after both profiles pass their own closed schemas', () => {
+    const graph = canonicalReceiptResponse();
+    expectCurrentReceiptAccepted(graph);
+    receiptRecord(graph).identity_derivation = {
+      ...(graph.identity_derivation as Record<string, unknown>),
+      signatures_considered: 2,
+      identity_block_count: 2,
+    };
+    const result = adaptEngramCorpusEntityGraph(graph, capturedReceiptOptions(graph));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.join(' ')).toMatch(/identity derivation/);
+  });
+
+  it('keeps parent, entity-kind, and advisory receipt requirements after source completion', () => {
+    const positive = canonicalReceiptResponse();
+    expectCurrentReceiptAccepted(positive);
+    const missingParent = structuredClone(positive);
+    delete receiptRecord(missingParent).parent_output_sha256;
+    expect(adaptEngramCorpusEntityGraph(missingParent, capturedReceiptOptions(missingParent)).ok).toBe(false);
+
+    const relationship = structuredClone(positive);
+    receiptRecord(relationship).derivation_kind = 'relationship_graph';
+    expect(adaptEngramCorpusEntityGraph(relationship, capturedReceiptOptions(relationship)).ok).toBe(false);
+
+    for (const [field, value] of [
+      ['advisory_only', false],
+      ['cross_store_evidence_authority', true],
+      ['is_paper_local_evidence', true],
+      ['calibrated_posterior', true],
+    ] as const) {
+      const promoted = structuredClone(positive);
+      receiptRecord(promoted)[field] = value;
+      expect(adaptEngramCorpusEntityGraph(promoted, capturedReceiptOptions(promoted)).ok, field).toBe(false);
+    }
+  });
+
+  it('accepts a coherent advisory abstention and rejects identity entities under that same profile', () => {
+    const abstained = paperOnlyReceiptResponse(1);
+    abstained.identity_derivation = {
+      ...(abstained.identity_derivation as Record<string, unknown>),
+      signatures_considered: 25_001,
+      identity_block_count: 1,
+      status: 'abstained',
+      abstention_reason: 'identity_signature_input_budget_exceeded',
+      comparison_mode: 'abstained',
+      resolver_invoked: false,
+    };
+    receiptRecord(abstained).identity_derivation = abstained.identity_derivation;
+    expectCurrentReceiptAccepted(abstained);
+
+    const identityEntities = canonicalReceiptResponse();
+    identityEntities.identity_derivation = abstained.identity_derivation;
+    receiptRecord(identityEntities).identity_derivation = abstained.identity_derivation;
+    const result = adaptEngramCorpusEntityGraph(identityEntities, capturedReceiptOptions(identityEntities));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.join(' ')).toMatch(/abstained identity derivation/);
+  });
+
+  it('rejects inherited and nonplain source checksums after an ordinary own-data positive', () => {
+    const positive = canonicalReceiptResponse();
+    expectCurrentReceiptAccepted(positive);
+    const inherited = structuredClone(positive);
+    const source = sourceRecords(inherited)[0]!;
+    const { qualified_projection_rejoin_sha256: checksum, ...ownFields } = source;
+    sourceRecords(inherited)[0] = Object.assign(
+      Object.create({ qualified_projection_rejoin_sha256: checksum }),
+      ownFields,
+    );
+    expect(adaptEngramCorpusEntityGraph(inherited, capturedReceiptOptions(positive)).ok).toBe(false);
+
+    const nonplain = structuredClone(positive);
+    Object.setPrototypeOf(sourceRecords(nonplain)[0]!, { source_kind: 'custom prototype' });
+    expect(adaptEngramCorpusEntityGraph(nonplain, capturedReceiptOptions(positive)).ok).toBe(false);
+  });
+
+  it('rejects an own checksum accessor without invoking it', () => {
+    const graph = canonicalReceiptResponse();
+    expectCurrentReceiptAccepted(graph);
+    const captured = capturedReceiptOptions(graph);
+    let reads = 0;
+    Object.defineProperty(sourceRecords(graph)[0]!, 'qualified_projection_rejoin_sha256', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        reads += 1;
+        return '1'.repeat(64);
+      },
+    });
+    expect(adaptEngramCorpusEntityGraph(graph, captured).ok).toBe(false);
+    expect(reads).toBe(0);
+  });
+
+  it('admits a coherent finite source roster at its limit and refuses the next complete source', () => {
+    const atLimit = paperOnlyReceiptResponse(250);
+    const accepted = expectCurrentReceiptAccepted(atLimit);
+    expect(accepted.params.nodes).toHaveLength(250);
+    const overLimit = paperOnlyReceiptResponse(251);
+    expect(adaptEngramCorpusEntityGraph(overLimit, capturedReceiptOptions(overLimit)).ok).toBe(false);
   });
 });

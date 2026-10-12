@@ -51,6 +51,7 @@ function receiptSource(paperId: string) {
     provider_execution_receipt_sha256: 'e'.repeat(64),
     evidence_plane_sha256: 'f'.repeat(64),
     qualified_payload_sha256: '0'.repeat(64),
+    qualified_projection_rejoin_sha256: '1'.repeat(64),
   };
 }
 
@@ -396,5 +397,103 @@ describe('Cortexel-local Engram (Paper2Brain) contract flow', () => {
     if (!result.ok) {
       expect(result.errors.join(' ')).toMatch(/graphSnapshotId/);
     }
+  });
+});
+
+function prepareReceiptFigure(graph: unknown, captured?: ReturnType<typeof optionsFor>) {
+  const adapted = adapt(graph, captured);
+  if (!adapted.ok) return adapted;
+  const checked = buildVizSpec({
+    skill: 'corpus.knowledge_graph',
+    params: adapted.params,
+    source: 'engram-agent:qualified-projection-source-control',
+    declaredInputs: {
+      graph_source: adapted.params.graph_source,
+      graph_snapshot_id: adapted.params.graph_snapshot_id,
+      graph_scope: adapted.params.graph_scope,
+      identity_advisory: true,
+    },
+  });
+  if (!checked.ok) return checked;
+  return prepareCorpusKnowledgeGraphFigureJson(JSON.stringify(checked.spec));
+}
+
+describe('current rejoin checksum through the Cortexel-local public flow', () => {
+  it('keeps a complete current receipt advisory through the strict gate and presentation boundary', () => {
+    const graph = receiptBoundResponse();
+    const raw = JSON.stringify(graph);
+    const prepared = prepareReceiptFigure(graph);
+    if (!prepared.ok) throw new Error(JSON.stringify(prepared.errors));
+    expect(prepared.caption).toContain('Advisory');
+    expect(prepared.presentation.profile).toBe('corpus_entity');
+    expect(prepared.sourceInputAssurance).toEqual({
+      boundary: 'raw_json_text',
+      duplicateMembers: 'rejected_before_materialization',
+    });
+    expect(JSON.stringify(graph)).toBe(raw);
+    expect((graph.derivation_receipt as ReturnType<typeof baseReceipt>).sources[0]!
+      .qualified_projection_rejoin_sha256).toBe('1'.repeat(64));
+  });
+
+  it('refuses an explicitly older fifteen-field v2 source without mutating its retained input', () => {
+    const current = receiptBoundResponse();
+    expect(prepareReceiptFigure(current).ok).toBe(true);
+    const {
+      qualified_projection_rejoin_sha256: _rejoinChecksum,
+      ...olderFifteenFieldSource
+    } = receiptSource('p1');
+    expect(Object.keys(olderFifteenFieldSource)).toHaveLength(15);
+    const older = {
+      ...current,
+      derivation_receipt: { ...baseReceipt(), sources: [olderFifteenFieldSource] },
+    };
+    const raw = JSON.stringify(older);
+    const refused = prepareReceiptFigure(older);
+    expect(refused.ok).toBe(false);
+    expect('presentation' in refused).toBe(false);
+    expect(JSON.stringify(older)).toBe(raw);
+  });
+
+  it.each(['malformed', 'unknown'] as const)(
+    'refuses a %s current source before the public figure flow and preserves the complete input',
+    (cause) => {
+      const current = receiptBoundResponse();
+      expect(prepareReceiptFigure(current).ok).toBe(true);
+      const source: Record<string, unknown> = { ...receiptSource('p1') };
+      if (cause === 'malformed') source.qualified_projection_rejoin_sha256 = 1;
+      else source.unrecognized_source_field = 'retain this caller value';
+      const refusedGraph = {
+        ...current,
+        derivation_receipt: { ...baseReceipt(), sources: [source] },
+      };
+      const raw = JSON.stringify(refusedGraph);
+      const refused = prepareReceiptFigure(refusedGraph);
+      expect(refused.ok).toBe(false);
+      expect('presentation' in refused).toBe(false);
+      expect(JSON.stringify(refusedGraph)).toBe(raw);
+    },
+  );
+
+  it('requires a new complete capture after changing the checksum while retaining advisory authority', () => {
+    const original = receiptBoundResponse();
+    const captured = optionsFor(original);
+    expect(prepareReceiptFigure(original, captured).ok).toBe(true);
+    const changed = {
+      ...original,
+      derivation_receipt: {
+        ...baseReceipt(),
+        sources: [{ ...receiptSource('p1'), qualified_projection_rejoin_sha256: '2'.repeat(64) }],
+      },
+    };
+    const raw = JSON.stringify(changed);
+    const refused = prepareReceiptFigure(changed, captured);
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) expect(JSON.stringify(refused.errors)).toMatch(/graphSnapshotId/);
+    const recaptured = prepareReceiptFigure(changed);
+    if (!recaptured.ok) throw new Error(JSON.stringify(recaptured.errors));
+    expect(recaptured.caption).toContain('Advisory');
+    expect(JSON.stringify(changed)).toBe(raw);
+    expect(canonicalDigest(changed)).not.toBe(captured.graphSnapshotId);
+    // This is local capture binding, not authentication of the backend hash.
   });
 });

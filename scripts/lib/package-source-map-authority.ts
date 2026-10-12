@@ -49,14 +49,16 @@ export const REVIEWED_PACKAGE_SOURCE_MAP_INPUTS = Object.freeze([
   'react/charts/ReferenceVizSpecFigure.tsx',
   'react/charts/chartGeometry.ts',
   'react/charts/topologyGeometry.ts',
-  'react/focusLabelResource.internal.ts',
   'react/knowledgeGraph.ts',
   'react/knowledgeGraphA11yNavigation.internal.ts',
   'react/knowledgeGraphCamera.internal.ts',
   'react/knowledgeGraphContextIdentity.internal.ts',
   'react/knowledgeGraphFigure.ts',
+  'react/knowledgeGraphGeometryBounds.internal.ts',
   'react/knowledgeGraphIdentity.internal.ts',
   'react/knowledgeGraphInteraction.internal.ts',
+  'react/knowledgeGraphLabelLayout.internal.ts',
+  'react/knowledgeGraphLabelResource.internal.ts',
   'react/knowledgeGraphLayout.internal.ts',
   'react/knowledgeGraphParticles.internal.ts',
   'react/knowledgeGraphPresentation.internal.ts',
@@ -147,7 +149,7 @@ const REVIEWED_SOURCE_SET: ReadonlySet<string> = new Set(
 
 /** SHA-256(JSON(sorted [identity, decoded UTF-8 source text] pairs)). */
 export const REVIEWED_PACKAGE_SOURCE_MAP_INPUT_CLOSURE_DIGEST =
-  '164ffac34fc4b7725e700c19be2904e196be9fa64894756aaf2ee539d27bc221' as const;
+  '5dc1503aa60a1828b7f241a551ecfa35132dfc0290bdc8cc7e65d9041433b791' as const;
 
 export type SourceMapOwnerKind = 'runtime' | 'declaration';
 

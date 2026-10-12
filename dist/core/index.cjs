@@ -2,7 +2,7 @@ Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
 const require_authoring = require('../authoring-CTVoMdHb.cjs');
 const require_knowledgeGraphLimits = require('../knowledgeGraphLimits-BnjbjxkI.cjs');
 const require_canonicalize = require('../canonicalize-CM-RPRQS.cjs');
-const require_core = require('../core-Dy75HHvb.cjs');
+const require_core = require('../core-DUxVyYSy.cjs');
 const require_limits = require('../limits-zgcdlCes.cjs');
 const require_safe_snapshot = require('../safe-snapshot-Bb70fzip.cjs');
 

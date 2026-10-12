@@ -1,7 +1,7 @@
-import { u as safeDiagnosticText } from "../knowledgeGraphLimits-Du09-etI.js";
-import { a as KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE, c as knowledgeGraphAutoFrameNodeRadialExtent, d as knowledgeGraphEdgeStrokeSegmentVisible, f as knowledgeGraphNodeEmphasisDimAmount, h as knowledgeGraphRenderedNodeScale, i as KNOWLEDGE_GRAPH_BOX_SHELL_SIDE, l as knowledgeGraphContrastSafeColor, m as knowledgeGraphRenderedNodeRadialExtent } from "../knowledgeGraphVisualEncoding.internal-Bk0I-Mgt.js";
-import { A as defaultNodeColors, B as graphSignature, C as assertRenderableGraphEdges, D as corpusGraphInstanceIdentity, E as buildAdjacency, F as graphEdgeCurvePointInto, G as normalizeGraphQuery, H as knowledgeGraphLiveForceAvailability, I as graphEdgeMatchesQuery, K as reducedMotionLayoutTickBudget, L as graphEdgeTargetBoundaryInto, M as flowParticleCount, N as graphCameraTargetDamping, O as corpusGraphRadiusMeaning, P as graphEdgeControlPointInto, R as graphLayoutSignature, S as assertKnowledgeGraphPresentationBudget, T as assignGraphEdgeLanes, U as matchesGraphQuery, V as isKnowledgeGraphLiveForceWithinBudget, W as normalizeGraphNodeRadius, _ as MAX_KNOWLEDGE_GRAPH_PRESENTATION_NODES, a as GRAPH_EDGE_CURVE_SEGMENTS, b as assertKnowledgeGraphIdentity, c as GRAPH_LAYOUT_TICK_SECONDS, d as MAX_GRAPH_NODE_RADIUS, f as MAX_GRAPH_PARALLEL_EDGES, g as MAX_KNOWLEDGE_GRAPH_PRESENTATION_EDGES, h as MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES, i as DEFAULT_GRAPH_NODE_RADIUS, j as filterGraphEdges, k as defaultEdgeStyles, l as MAX_GRAPH_EDGE_LANE_OFFSET, m as MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES, n as prepareCorpusKnowledgeGraphFigureJson, o as GRAPH_EDGE_LANE_SPACING, p as MAX_GRAPH_QUERY_LENGTH, q as uniqueGraphTopologyLinks, r as CORPUS_GRAPH_RADIUS_MEANING, s as GRAPH_EDGE_TARGET_BOUNDARY_SOLVE_ITERATIONS, t as prepareCorpusKnowledgeGraphFigure, u as MAX_GRAPH_LAYOUT_TICKS_PER_FRAME, v as advanceGraphLayoutClock, w as assertUniqueGraphNodeIds, x as assertKnowledgeGraphLiveForceBudget, y as advanceGraphLayoutClockInto, z as graphQueryMatchIds } from "../knowledgeGraphFigure-DP4EPFUs.js";
-import { a as KnowledgeGraphLegend, c as handleKnowledgeGraphNodeClick, d as synchronizeKnowledgeGraphControlsListener, f as toggledKnowledgeGraphSelection, i as KnowledgeGraphA11yList, l as handleKnowledgeGraphPointerOut, m as assertKnowledgeGraphNodeReference, n as KnowledgeGraphStaticRecordView, o as MAX_A11Y_NODE_PAGE_SIZE, p as assertKnowledgeGraphColor, r as DEFAULT_A11Y_NODE_PAGE_SIZE, s as beginKnowledgeGraphRuntimeTransition, t as KnowledgeGraphCorpusFrameInternal, u as isKnowledgeGraphInstanceId } from "../KnowledgeGraphCorpusFrame.internal-B6Fze8F9.js";
+import { n as KNOWLEDGE_GRAPH_LIMITS, u as safeDiagnosticText } from "../knowledgeGraphLimits-Du09-etI.js";
+import { _ as knowledgeGraphEdgeStrokeSegmentVisible, a as KNOWLEDGE_GRAPH_DIRECTION_MARKER_RADIUS, b as knowledgeGraphRenderedNodeRadialExtent, c as KNOWLEDGE_GRAPH_EDGE_STROKE_WIDTH_PX, h as knowledgeGraphContrastSafeColor, i as KNOWLEDGE_GRAPH_DIRECTION_MARKER_LENGTH, l as KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE, m as knowledgeGraphAutoFrameNodeRadialExtent, o as KNOWLEDGE_GRAPH_EDGE_STROKE_FRAGMENT_SHADER, p as isKnowledgeGraphStrokeViewportUsable, s as KNOWLEDGE_GRAPH_EDGE_STROKE_VERTEX_SHADER, u as createKnowledgeGraphNodeShellVertices, v as knowledgeGraphNodeEmphasisDimAmount, x as knowledgeGraphRenderedNodeScale } from "../knowledgeGraphVisualEncoding.internal-CuP5jO83.js";
+import { A as defaultNodeColors, B as graphSignature, C as assertRenderableGraphEdges, D as corpusGraphInstanceIdentity, E as buildAdjacency, F as graphEdgeCurvePointInto, G as normalizeGraphQuery, H as knowledgeGraphLiveForceAvailability, I as graphEdgeMatchesQuery, K as reducedMotionLayoutTickBudget, L as graphEdgeTargetBoundaryInto, M as flowParticleCount, N as graphCameraTargetDamping, O as corpusGraphRadiusMeaning, P as graphEdgeControlPointInto, R as graphLayoutSignature, S as assertKnowledgeGraphPresentationBudget, T as assignGraphEdgeLanes, U as matchesGraphQuery, V as isKnowledgeGraphLiveForceWithinBudget, W as normalizeGraphNodeRadius, _ as MAX_KNOWLEDGE_GRAPH_PRESENTATION_NODES, a as GRAPH_EDGE_CURVE_SEGMENTS, b as assertKnowledgeGraphIdentity, c as GRAPH_LAYOUT_TICK_SECONDS, d as MAX_GRAPH_NODE_RADIUS, f as MAX_GRAPH_PARALLEL_EDGES, g as MAX_KNOWLEDGE_GRAPH_PRESENTATION_EDGES, h as MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES, i as DEFAULT_GRAPH_NODE_RADIUS, j as filterGraphEdges, k as defaultEdgeStyles, l as MAX_GRAPH_EDGE_LANE_OFFSET, m as MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES, n as prepareCorpusKnowledgeGraphFigureJson, o as GRAPH_EDGE_LANE_SPACING, p as MAX_GRAPH_QUERY_LENGTH, q as uniqueGraphTopologyLinks, r as CORPUS_GRAPH_RADIUS_MEANING, s as GRAPH_EDGE_TARGET_BOUNDARY_SOLVE_ITERATIONS, t as prepareCorpusKnowledgeGraphFigure, u as MAX_GRAPH_LAYOUT_TICKS_PER_FRAME, v as advanceGraphLayoutClock, w as assertUniqueGraphNodeIds, x as assertKnowledgeGraphLiveForceBudget, y as advanceGraphLayoutClockInto, z as graphQueryMatchIds } from "../knowledgeGraphFigure-C_NGucds.js";
+import { a as KnowledgeGraphLegend, c as handleKnowledgeGraphNodeClick, d as synchronizeKnowledgeGraphControlsListener, f as toggledKnowledgeGraphSelection, i as KnowledgeGraphA11yList, l as handleKnowledgeGraphPointerOut, m as assertKnowledgeGraphNodeReference, n as KnowledgeGraphStaticRecordView, o as MAX_A11Y_NODE_PAGE_SIZE, p as assertKnowledgeGraphColor, r as DEFAULT_A11Y_NODE_PAGE_SIZE, s as beginKnowledgeGraphRuntimeTransition, t as KnowledgeGraphCorpusFrameInternal, u as isKnowledgeGraphInstanceId } from "../KnowledgeGraphCorpusFrame.internal-CUpYwgIa.js";
 import { KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1, KnowledgeGraphPresentationJsonError, PREPARED_KNOWLEDGE_GRAPH_PRESENTATION_V1, PREPARED_KNOWLEDGE_GRAPH_VIEW_V1, assertPreparedCorpusKnowledgeGraphPresentation, assertPreparedGenericKnowledgeGraphPresentation, assertPreparedGenericKnowledgeGraphPresentation as assertPreparedGenericKnowledgeGraphPresentation$1, assertPreparedKnowledgeGraphPresentation, assertPreparedKnowledgeGraphPresentation as assertPreparedKnowledgeGraphPresentation$1, assertPreparedKnowledgeGraphView, assertPreparedKnowledgeGraphView as assertPreparedKnowledgeGraphView$1, isPreparedKnowledgeGraphPresentation, isPreparedKnowledgeGraphView, knowledgeGraphPresentationContainsNode, knowledgeGraphViewContainsNode, knowledgeGraphViewContainsNode as knowledgeGraphViewContainsNode$1, parseKnowledgeGraphPresentationJson, prepareKnowledgeGraphPresentation, prepareKnowledgeGraphView, serializePreparedKnowledgeGraphPresentation } from "#cortexel-knowledge-graph-presentation-capability";
 import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
@@ -134,41 +134,241 @@ function publishGraphLayoutCache(authority, buffered, completedBufferIndex) {
 }
 
 //#endregion
-//#region react/focusLabelResource.internal.ts
-const FOCUS_LABEL_MAX_WORLD_WIDTH = 160;
-const FOCUS_LABEL_WORLD_HEIGHT = 7;
-const FOCUS_LABEL_NODE_GAP = 4;
-/**
-* Anchor the Sprite at the node and apply a camera-facing world-unit offset from
-* the focused glyph's conservative radial extent. The algebra is exact in the
-* sprite plane (and orthographic projection); perspective silhouette separation
-* remains camera-dependent. Placement does not read a stale camera matrix.
-*/
-function knowledgeGraphFocusLabelSpriteCenterY(nodeRadius, nodeGlyph) {
-	return -(knowledgeGraphRenderedNodeRadialExtent(nodeRadius, nodeGlyph, true) + 4) / 7;
+//#region react/knowledgeGraphGeometryBounds.internal.ts
+function createKnowledgeGraphGeometryBounds() {
+	return {
+		minX: Infinity,
+		minY: Infinity,
+		minZ: Infinity,
+		maxX: -Infinity,
+		maxY: -Infinity,
+		maxZ: -Infinity
+	};
 }
-const FOCUS_LABEL_THEME = Object.freeze({
-	dark: Object.freeze({
-		background: "#030711",
-		text: "#e2e8f0"
-	}),
-	light: Object.freeze({
-		background: "#f8fafc",
-		text: "#0f172a"
-	})
-});
+function resetKnowledgeGraphGeometryBounds(bounds) {
+	bounds.minX = bounds.minY = bounds.minZ = Infinity;
+	bounds.maxX = bounds.maxY = bounds.maxZ = -Infinity;
+}
+function isKnowledgeGraphGeometryBoundsFinite(bounds) {
+	return Number.isFinite(bounds.minX) && Number.isFinite(bounds.minY) && Number.isFinite(bounds.minZ) && Number.isFinite(bounds.maxX) && Number.isFinite(bounds.maxY) && Number.isFinite(bounds.maxZ) && bounds.minX <= bounds.maxX && bounds.minY <= bounds.maxY && bounds.minZ <= bounds.maxZ;
+}
+/** Reject an invalid point before changing any coordinate of the prior bounds. */
+function includeKnowledgeGraphGeometryPointInto(bounds, x, y, z, radius = 0) {
+	if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z) || !Number.isFinite(radius) || radius < 0 || !Number.isFinite(x - radius) || !Number.isFinite(x + radius) || !Number.isFinite(y - radius) || !Number.isFinite(y + radius) || !Number.isFinite(z - radius) || !Number.isFinite(z + radius)) return false;
+	bounds.minX = Math.min(bounds.minX, x - radius);
+	bounds.minY = Math.min(bounds.minY, y - radius);
+	bounds.minZ = Math.min(bounds.minZ, z - radius);
+	bounds.maxX = Math.max(bounds.maxX, x + radius);
+	bounds.maxY = Math.max(bounds.maxY, y + radius);
+	bounds.maxZ = Math.max(bounds.maxZ, z + radius);
+	return true;
+}
+function quadraticExtremum(a, control, b) {
+	const scale = Math.max(Math.abs(a), Math.abs(control), Math.abs(b));
+	if (scale === 0) return a;
+	const first = a / scale;
+	const middle = control / scale;
+	const last = b / scale;
+	const t = (first - middle) / (first - 2 * middle + last);
+	if (!(t > 0 && t < 1)) return a;
+	const s = 1 - t;
+	const value = s * s * first + 2 * s * t * middle + t * t * last;
+	return Math.max(Math.min(first, middle, last), Math.min(Math.max(first, middle, last), value)) * scale;
+}
 /**
-* Install one network-free label texture after React commit.
-*
-* The caller must invoke this from a layout/effect boundary. The returned
-* cleanup is idempotent, disposes exactly the texture created by this setup,
-* and cannot clear or hide a newer setup that has replaced its material map.
+* Bound the current quadratic lane, including its true extrema. A control point
+* is not itself painted geometry. Bounding it, or reserving every possible lane,
+* needlessly shrinks sparse graphs. Hidden dash chords stay within this envelope.
 */
-function installFocusLabelResource({ sprite, material, label, color, themeMode, invalidate, createCanvas = () => typeof document === "undefined" ? null : document.createElement("canvas"), createTexture = (canvas) => new THREE.CanvasTexture(canvas) }) {
-	sprite.visible = false;
-	material.map = null;
-	material.needsUpdate = true;
-	if (!label) {
+function includeKnowledgeGraphQuadraticBoundsInto(bounds, a, control, b) {
+	if (!Number.isFinite(a.x) || !Number.isFinite(a.y) || !Number.isFinite(a.z) || !Number.isFinite(control.x) || !Number.isFinite(control.y) || !Number.isFinite(control.z) || !Number.isFinite(b.x) || !Number.isFinite(b.y) || !Number.isFinite(b.z)) return false;
+	const x = quadraticExtremum(a.x, control.x, b.x);
+	const y = quadraticExtremum(a.y, control.y, b.y);
+	const z = quadraticExtremum(a.z, control.z, b.z);
+	if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return false;
+	bounds.minX = Math.min(bounds.minX, a.x, b.x, x);
+	bounds.minY = Math.min(bounds.minY, a.y, b.y, y);
+	bounds.minZ = Math.min(bounds.minZ, a.z, b.z, z);
+	bounds.maxX = Math.max(bounds.maxX, a.x, b.x, x);
+	bounds.maxY = Math.max(bounds.maxY, a.y, b.y, y);
+	bounds.maxZ = Math.max(bounds.maxZ, a.z, b.z, z);
+	return isKnowledgeGraphGeometryBoundsFinite(bounds);
+}
+function unit(value) {
+	const norm = value.x * value.x + value.y * value.y + value.z * value.z;
+	return Number.isFinite(norm) && Math.abs(norm - 1) < 1e-8;
+}
+function dot(a, b) {
+	return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+/** Project all eight AABB corners into an explicitly checked orthonormal camera basis. */
+function projectKnowledgeGraphGeometryBoundsInto(bounds, center, right, up, towardCamera, target) {
+	if (!isKnowledgeGraphGeometryBoundsFinite(bounds) || !Number.isFinite(center.x) || !Number.isFinite(center.y) || !Number.isFinite(center.z) || !unit(right) || !unit(up) || !unit(towardCamera) || Math.abs(dot(right, up)) > 1e-8 || Math.abs(dot(right, towardCamera)) > 1e-8 || Math.abs(dot(up, towardCamera)) > 1e-8) return false;
+	let minX = Infinity;
+	let minY = Infinity;
+	let minZ = Infinity;
+	let maxX = -Infinity;
+	let maxY = -Infinity;
+	let maxZ = -Infinity;
+	for (let corner = 0; corner < 8; corner++) {
+		const x = (corner & 1 ? bounds.maxX : bounds.minX) - center.x;
+		const y = (corner & 2 ? bounds.maxY : bounds.minY) - center.y;
+		const z = (corner & 4 ? bounds.maxZ : bounds.minZ) - center.z;
+		const projectedX = x * right.x + y * right.y + z * right.z;
+		const projectedY = x * up.x + y * up.y + z * up.z;
+		const projectedZ = x * towardCamera.x + y * towardCamera.y + z * towardCamera.z;
+		if (!Number.isFinite(projectedX) || !Number.isFinite(projectedY) || !Number.isFinite(projectedZ)) return false;
+		minX = Math.min(minX, projectedX);
+		minY = Math.min(minY, projectedY);
+		minZ = Math.min(minZ, projectedZ);
+		maxX = Math.max(maxX, projectedX);
+		maxY = Math.max(maxY, projectedY);
+		maxZ = Math.max(maxZ, projectedZ);
+	}
+	target.minX = minX;
+	target.minY = minY;
+	target.minZ = minZ;
+	target.maxX = maxX;
+	target.maxY = maxY;
+	target.maxZ = maxZ;
+	return isKnowledgeGraphGeometryBoundsFinite(target);
+}
+
+//#endregion
+//#region react/knowledgeGraphLabelLayout.internal.ts
+const KNOWLEDGE_GRAPH_MAX_LABELS = 64;
+const KNOWLEDGE_GRAPH_LABEL_HEIGHT_PX = 24;
+const KNOWLEDGE_GRAPH_LABEL_GAP_PX = 5;
+const KNOWLEDGE_GRAPH_LABEL_VIEWPORT_PADDING_PX = 8;
+/** Only presentation priorities change. No node, assertion, or source record is removed. */
+function planKnowledgeGraphLabelCandidates(nodes, selectedId, hoverId, queryMatches) {
+	if (nodes.length > KNOWLEDGE_GRAPH_LIMITS.maxLiveForceNodes) throw new RangeError("label preparation requires an admitted live graph");
+	const candidates = nodes.map((node, nodeIndex) => ({
+		nodeIndex,
+		id: node.id,
+		label: node.label
+	}));
+	const priority = (id) => (id === selectedId ? 8 : 0) + (id === hoverId ? 4 : 0) + (queryMatches.has(id) ? 2 : 0);
+	candidates.sort((a, b) => priority(b.id) - priority(a.id) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+	return candidates.slice(0, 64);
+}
+function createKnowledgeGraphLabelLayout(capacity) {
+	if (!Number.isInteger(capacity) || capacity < 0 || capacity > 64) throw new RangeError("invalid bounded label capacity");
+	return {
+		x: new Float64Array(capacity),
+		y: new Float64Array(capacity),
+		visible: new Uint8Array(capacity),
+		count: 0
+	};
+}
+/**
+* Each projected node has five scalar fields: x/y CSS pixels, conservative
+* radius in CSS pixels, NDC depth, and world units per CSS pixel at that depth.
+* Outputs reuse bounded scratch arrays. Labels never cover another node and
+* never cross the viewport. A hidden label's complete text remains in the DOM.
+*/
+function layoutKnowledgeGraphLabelsInto(candidates, nodes, widths, viewportWidth, viewportHeight, target) {
+	target.visible.fill(0);
+	target.count = 0;
+	if (!Number.isFinite(viewportWidth) || !Number.isFinite(viewportHeight) || viewportWidth <= 0 || viewportHeight <= 0 || candidates.length > target.visible.length || candidates.length > widths.length || nodes.length % 5 !== 0 || candidates.length > 64 || nodes.length > KNOWLEDGE_GRAPH_LIMITS.maxLiveForceNodes * 5 || candidates.length > target.x.length || candidates.length > target.y.length || viewportHeight < 40) return 0;
+	const height = 24;
+	const padding = 8;
+	const budget = Math.min(candidates.length, Math.max(4, Math.floor(viewportWidth * viewportHeight / 12e3)));
+	for (let slot = 0; slot < candidates.length && target.count < budget; slot++) {
+		const base = candidates[slot].nodeIndex * 5;
+		const nodeX = nodes[base];
+		const nodeY = nodes[base + 1];
+		const radius = nodes[base + 2];
+		const depth = nodes[base + 3];
+		const pixelScale = nodes[base + 4];
+		const width = widths[slot];
+		if (!Number.isFinite(nodeX) || !Number.isFinite(nodeY) || !Number.isFinite(radius) || radius < 0 || !Number.isFinite(depth) || depth < -1 || depth > 1 || !Number.isFinite(pixelScale) || pixelScale <= 0 || !Number.isFinite(width) || width <= 0 || width > viewportWidth - 16 || nodeX < -radius || nodeX > viewportWidth + radius || nodeY < -radius || nodeY > viewportHeight + radius) continue;
+		const gap = radius + 5;
+		for (let placement = 0; placement < 8; placement++) {
+			let x = nodeX;
+			let y = nodeY;
+			if (placement === 0 || placement === 4 || placement === 5) y -= gap + height / 2;
+			if (placement === 1 || placement === 6 || placement === 7) y += gap + height / 2;
+			if (placement === 2 || placement === 4 || placement === 6) x += gap + width / 2;
+			if (placement === 3 || placement === 5 || placement === 7) x -= gap + width / 2;
+			x = Math.max(padding + width / 2, Math.min(viewportWidth - padding - width / 2, x));
+			y = Math.max(20, Math.min(viewportHeight - padding - height / 2, y));
+			let collision = false;
+			for (let other = 0; other < slot; other++) if (target.visible[other] && Math.abs(x - target.x[other]) < (width + widths[other]) / 2 + 3 && Math.abs(y - target.y[other]) < 27) {
+				collision = true;
+				break;
+			}
+			for (let n = 0; !collision && n < nodes.length; n += 5) {
+				if (nodes[n + 3] < -1 || nodes[n + 3] > 1 || nodes[n + 4] <= 0) continue;
+				const dx = Math.max(0, Math.abs(nodes[n] - x) - width / 2);
+				const dy = Math.max(0, Math.abs(nodes[n + 1] - y) - height / 2);
+				const r = nodes[n + 2] + 2;
+				if (dx * dx + dy * dy < r * r) collision = true;
+			}
+			if (!collision) {
+				target.x[slot] = x;
+				target.y[slot] = y;
+				target.visible[slot] = 1;
+				target.count++;
+				break;
+			}
+		}
+	}
+	return target.count;
+}
+
+//#endregion
+//#region react/knowledgeGraphLabelResource.internal.ts
+const TILE_WIDTH = 384;
+const TILE_HEIGHT = 64;
+const MAX_COLUMNS = 8;
+const FONT = "500 26px system-ui, sans-serif";
+const PIXELS_PER_CSS_PIXEL = 2;
+const MAX_TEXT_WIDTH = 328;
+const TEXT_PADDING = 12;
+const KNOWLEDGE_GRAPH_LABEL_VERTEX_SHADER = `
+attribute vec4 labelUvRect;
+varying vec2 vLabelUv;
+void main() {
+  vLabelUv = labelUvRect.xy + uv * labelUvRect.zw;
+  vec4 center = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+  vec2 scale = vec2(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz));
+  center.xy += position.xy * scale;
+  gl_Position = projectionMatrix * center;
+}`;
+const KNOWLEDGE_GRAPH_LABEL_FRAGMENT_SHADER = `
+uniform sampler2D labelMap;
+varying vec2 vLabelUv;
+void main() {
+  gl_FragColor = texture2D(labelMap, vLabelUv);
+  if (gl_FragColor.a < 0.01) discard;
+  #include <colorspace_fragment>
+}`;
+function createKnowledgeGraphLabelResourceState(capacity) {
+	if (!Number.isInteger(capacity) || capacity < 0 || capacity > 64) throw new RangeError("invalid bounded label resource capacity");
+	return {
+		widths: new Float32Array(capacity),
+		uvRects: new Float32Array(capacity * 4),
+		ready: false
+	};
+}
+function fitLabel(context, value) {
+	const text = safeDiagnosticText(value, 120);
+	if (context.measureText(text).width <= MAX_TEXT_WIDTH) return text;
+	const chunks = typeof Intl.Segmenter === "function" ? Array.from(new Intl.Segmenter("en", { granularity: "grapheme" }).segment(text), (part) => part.segment) : Array.from(text);
+	while (chunks.length > 0 && context.measureText(chunks.join("") + "…").width > MAX_TEXT_WIDTH) chunks.pop();
+	return chunks.join("") + "…";
+}
+/**
+* Create one local atlas only after commit. At most 64 tiles occupy 3,072 ×
+* 512 pixels (6 MiB of uncompressed RGBA). No network or font loader exists.
+* The exact cleanup cannot clear a later replacement's sampler or ready state.
+*/
+function installKnowledgeGraphLabelResources({ labels, state, map, themeMode, color, invalidate, createCanvas = () => typeof document === "undefined" ? null : document.createElement("canvas"), createTexture = (canvas) => new THREE.CanvasTexture(canvas) }) {
+	if (labels.length > 64 || labels.length !== state.widths.length || state.uvRects.length !== labels.length * 4) throw new RangeError("label atlas capacity mismatch");
+	state.ready = false;
+	state.widths.fill(0);
+	if (labels.length === 0) {
 		invalidate();
 		return;
 	}
@@ -178,83 +378,95 @@ function installFocusLabelResource({ sprite, material, label, color, themeMode, 
 		invalidate();
 		return;
 	}
-	const fontSize = 42;
-	context.font = `600 ${fontSize}px system-ui, sans-serif`;
-	const measured = Math.ceil(context.measureText(label).width);
-	canvas.width = Math.min(1024, Math.max(96, measured + 48));
-	canvas.height = 70;
-	context.font = `600 ${fontSize}px system-ui, sans-serif`;
-	context.textAlign = "center";
+	const columns = Math.min(MAX_COLUMNS, labels.length);
+	canvas.width = columns * TILE_WIDTH;
+	canvas.height = Math.ceil(labels.length / columns) * TILE_HEIGHT;
+	context.font = FONT;
+	context.textAlign = "left";
 	context.textBaseline = "middle";
-	const theme = FOCUS_LABEL_THEME[themeMode];
-	context.fillStyle = theme.background;
-	context.fillRect(0, 0, canvas.width, canvas.height);
-	context.fillStyle = theme.text;
-	context.fillStyle = color;
-	context.fillText(label, canvas.width / 2, canvas.height / 2, canvas.width - 48);
+	const background = themeMode === "light" ? "#f8fafc" : "#030711";
+	const foreground = themeMode === "light" ? "#0f172a" : "#e2e8f0";
+	for (let slot = 0; slot < labels.length; slot++) {
+		const text = fitLabel(context, labels[slot]);
+		const width = Math.max(32, Math.ceil(context.measureText(text).width) + 24);
+		const x = slot % columns * TILE_WIDTH;
+		const y = Math.floor(slot / columns) * TILE_HEIGHT;
+		const height = 24 * PIXELS_PER_CSS_PIXEL;
+		context.fillStyle = background;
+		context.beginPath();
+		if (typeof context.roundRect === "function") context.roundRect(x, y, width, height, 10);
+		else context.rect(x, y, width, height);
+		context.fill();
+		context.fillStyle = foreground;
+		context.fillStyle = color;
+		context.fillText(text, x + TEXT_PADDING, y + height / 2);
+		state.widths[slot] = width / PIXELS_PER_CSS_PIXEL;
+		const uv = slot * 4;
+		state.uvRects[uv] = x / canvas.width;
+		state.uvRects[uv + 1] = 1 - (y + height) / canvas.height;
+		state.uvRects[uv + 2] = width / canvas.width;
+		state.uvRects[uv + 3] = height / canvas.height;
+	}
 	const texture = createTexture(canvas);
 	try {
 		texture.colorSpace = THREE.SRGBColorSpace;
 		texture.minFilter = THREE.LinearFilter;
 		texture.magFilter = THREE.LinearFilter;
 		texture.generateMipmaps = false;
-		material.map = texture;
-		material.needsUpdate = true;
-		sprite.scale.set(Math.min(160, canvas.width / canvas.height * 7), 7, 1);
-		sprite.visible = true;
+		map.value = texture;
+		state.ready = true;
 		invalidate();
-	} catch (setupError) {
-		if (material.map === texture) {
-			material.map = null;
-			material.needsUpdate = true;
-			sprite.visible = false;
+	} catch (error) {
+		if (map.value === texture) {
+			map.value = null;
+			state.ready = false;
 		}
 		try {
 			texture.dispose();
 		} catch (disposeError) {
-			throw new AggregateError([setupError, disposeError], "focus-label setup and rollback both failed");
+			throw new AggregateError([error, disposeError], "label atlas setup and rollback failed");
 		}
-		throw setupError;
+		throw error;
 	}
 	let cleaned = false;
 	return () => {
 		if (cleaned) return;
 		cleaned = true;
-		let shouldInvalidate = false;
-		if (material.map === texture) {
-			material.map = null;
-			material.needsUpdate = true;
-			sprite.visible = false;
-			shouldInvalidate = true;
+		const ownsMap = map.value === texture;
+		if (ownsMap) {
+			map.value = null;
+			state.ready = false;
 		}
-		let disposeFailed = false;
-		let disposeError;
+		let disposalError;
+		let invalidateError;
+		let disposalFailed = false;
+		let invalidateFailed = false;
 		try {
 			texture.dispose();
 		} catch (error) {
-			disposeFailed = true;
-			disposeError = error;
+			disposalError = error;
+			disposalFailed = true;
 		}
-		let invalidateFailed = false;
-		let invalidateError;
-		if (shouldInvalidate) try {
+		if (ownsMap) try {
 			invalidate();
 		} catch (error) {
-			invalidateFailed = true;
 			invalidateError = error;
+			invalidateFailed = true;
 		}
-		if (disposeFailed && invalidateFailed) throw new AggregateError([disposeError, invalidateError], "focus-label disposal and invalidation both failed");
-		if (disposeFailed) throw disposeError;
+		if (disposalFailed && invalidateFailed) throw new AggregateError([disposalError, invalidateError], "label atlas cleanup failed");
+		if (disposalFailed) throw disposalError;
 		if (invalidateFailed) throw invalidateError;
 	};
 }
 
 //#endregion
 //#region react/knowledgeGraphCamera.internal.ts
-const KNOWLEDGE_GRAPH_CAMERA_FIT_MARGIN = 1.12;
 const KNOWLEDGE_GRAPH_CAMERA_MIN_DISTANCE = 120;
 const KNOWLEDGE_GRAPH_CAMERA_DEPTH_MARGIN = 1.25;
 const KNOWLEDGE_GRAPH_PERSPECTIVE_MIN_NEAR = .001;
+/** Small schematic graphs need not inherit the older sphere-fit 120-unit floor. */
+const KNOWLEDGE_GRAPH_GEOMETRY_MIN_DISTANCE = 24;
+const KNOWLEDGE_GRAPH_GEOMETRY_PIXEL_MARGIN = 32;
 const IDENTITY_MATRIX_ELEMENTS = Object.freeze([
 	1,
 	0,
@@ -386,26 +598,40 @@ function planKnowledgeGraphCameraClippingInto(kind, currentNearValue, currentFar
 function positiveFinite(value, fallback) {
 	return Number.isFinite(value) && value > 0 ? value : fallback;
 }
-function planKnowledgeGraphPerspectiveCameraFitInto(contentRadius, currentCameraDistance, verticalFovDegrees, aspectRatio, target) {
-	const paddedRadius = positiveFinite(contentRadius, 1) * KNOWLEDGE_GRAPH_CAMERA_FIT_MARGIN;
-	const verticalFov = positiveFinite(verticalFovDegrees, 50);
-	const aspect = positiveFinite(aspectRatio, 1);
-	const verticalHalf = Math.min(89.5, Math.max(.5, verticalFov / 2)) * Math.PI / 180;
-	const horizontalHalf = Math.atan(Math.tan(verticalHalf) * aspect);
-	const fitDistance = paddedRadius / Math.sin(Math.max(1e-6, Math.min(verticalHalf, horizontalHalf)));
-	target.distance = Math.max(120, fitDistance);
-	target.orthographicZoom = void 0;
-	return target;
+function geometryViewportFraction(span, other) {
+	return 1 - 2 * Math.min(32, Math.min(span, other) * .1) / span;
 }
-function planKnowledgeGraphOrthographicCameraFitInto(contentRadius, currentCameraDistance, horizontalSpan, verticalSpan, currentCameraZoom, target) {
-	const paddedRadius = positiveFinite(contentRadius, 1) * KNOWLEDGE_GRAPH_CAMERA_FIT_MARGIN;
-	const horizontalHalf = positiveFinite(horizontalSpan, 2) / 2;
-	const verticalHalf = positiveFinite(verticalSpan, 2) / 2;
-	const fitZoom = Math.min(horizontalHalf, verticalHalf) / paddedRadius;
-	const currentZoom = positiveFinite(currentCameraZoom, 1);
-	target.distance = Math.max(120, paddedRadius * 2);
-	target.orthographicZoom = positiveFinite(fitZoom, currentZoom);
-	return target;
+/**
+* Fit the checked geometry in camera axes. Positive Z points toward the camera.
+* The frontmost corner supplies a conservative depth term for both axes; this
+* contains every point without the sphere's irrelevant depth-to-width penalty.
+* Invalid observations leave the caller's pending fit and scratch result intact.
+*/
+function planKnowledgeGraphPerspectiveGeometryFitInto(bounds, verticalFovDegrees, aspect, viewportWidth, viewportHeight, target) {
+	if (!isKnowledgeGraphGeometryBoundsFinite(bounds) || !isKnowledgeGraphPerspectiveProjectionReady(verticalFovDegrees, aspect) || !Number.isFinite(viewportWidth) || viewportWidth <= 0 || !Number.isFinite(viewportHeight) || viewportHeight <= 0) return false;
+	const verticalTan = Math.tan(verticalFovDegrees * Math.PI / 360);
+	const horizontalTan = verticalTan * aspect;
+	const x = Math.max(Math.abs(bounds.minX), Math.abs(bounds.maxX));
+	const y = Math.max(Math.abs(bounds.minY), Math.abs(bounds.maxY));
+	const depth = Math.max(0, bounds.maxZ);
+	const distance = Math.max(24, depth + x / (horizontalTan * geometryViewportFraction(viewportWidth, viewportHeight)), depth + y / (verticalTan * geometryViewportFraction(viewportHeight, viewportWidth)));
+	if (!Number.isFinite(distance) || distance <= depth) return false;
+	target.distance = distance;
+	target.orthographicZoom = void 0;
+	return true;
+}
+function planKnowledgeGraphOrthographicGeometryFitInto(bounds, currentCameraDistance, horizontalSpan, verticalSpan, currentZoom, viewportWidth, viewportHeight, target) {
+	if (!isKnowledgeGraphGeometryBoundsFinite(bounds) || !isKnowledgeGraphOrthographicProjectionReady(horizontalSpan, verticalSpan, currentZoom) || !Number.isFinite(currentCameraDistance) || currentCameraDistance < 0 || !Number.isFinite(viewportWidth) || viewportWidth <= 0 || !Number.isFinite(viewportHeight) || viewportHeight <= 0) return false;
+	const x = Math.max(Math.abs(bounds.minX), Math.abs(bounds.maxX));
+	const y = Math.max(Math.abs(bounds.minY), Math.abs(bounds.maxY));
+	const depth = Math.max(0, bounds.maxZ);
+	if (x <= 0 || y <= 0) return false;
+	const zoom = Math.min(horizontalSpan * geometryViewportFraction(viewportWidth, viewportHeight) / (2 * x), verticalSpan * geometryViewportFraction(viewportHeight, viewportWidth) / (2 * y));
+	const distance = Math.max(24, depth + 1, currentCameraDistance);
+	if (!Number.isFinite(zoom) || zoom <= 0 || !Number.isFinite(distance)) return false;
+	target.distance = distance;
+	target.orthographicZoom = zoom;
+	return true;
 }
 
 //#endregion
@@ -454,7 +680,6 @@ function planFlowParticleDistribution(flowEdgeCount, requestedPerEdge, maxPartic
 //#endregion
 //#region react/KnowledgeGraph3DScene.tsx
 const PARTICLES_PER_EDGE = 4;
-const GRAPH_DIRECTION_MARKER_PADDING = 2;
 const GRAPH_LAYOUT_SETTLED_ALPHA = .008;
 const MAX_PARTICLES = MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES;
 const FALLBACK_COLOR = "#64748b";
@@ -470,8 +695,17 @@ const _curvePoint = new THREE.Vector3();
 const _curveNext = new THREE.Vector3();
 const _direction = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
-const _box = new THREE.Box3();
 const _sphere = new THREE.Sphere();
+const _geometryBounds = createKnowledgeGraphGeometryBounds();
+const _projectedGeometryBounds = createKnowledgeGraphGeometryBounds();
+const _cameraRight = new THREE.Vector3();
+const _cameraUp = new THREE.Vector3();
+const _labelPoint = new THREE.Vector3();
+const _labelViewPoint = new THREE.Vector3();
+const _labelSceneScale = new THREE.Vector3();
+const _labelCameraWorld = new THREE.Matrix4();
+const _labelCameraInverse = new THREE.Matrix4();
+const _labelProjectionInverse = new THREE.Matrix4();
 const _layoutClockResult = {
 	ticks: 0,
 	remainderSeconds: 0
@@ -537,46 +771,6 @@ function dim(hex, amount, themeMode) {
 	_color.set(FALLBACK_COLOR);
 	_color.set(hex);
 	return _color.lerp(themeMode === "light" ? _lightDimTarget : _darkDimTarget, amount);
-}
-/** Network-free focus label. Drei/Troika's default Text path fetches fonts and
-*  unicode data from public CDNs; a CanvasTexture uses the host's system font
-*  and keeps Cortexel's no-implicit-network guarantee intact. GPU resources are
-*  created only after commit so an abandoned concurrent render cannot leak a
-*  texture whose cleanup effect never existed. */
-function FocusLabelSprite({ spriteRef, text, color, themeMode, invalidate }) {
-	const label = safeDiagnosticText(text, 120);
-	const materialRef = useRef(null);
-	useLayoutEffect(() => {
-		const sprite = spriteRef.current;
-		const material = materialRef.current;
-		if (!sprite || !material) return void 0;
-		return installFocusLabelResource({
-			sprite,
-			material,
-			label,
-			color,
-			themeMode,
-			invalidate
-		});
-	}, [
-		label,
-		color,
-		themeMode,
-		invalidate
-	]);
-	return /* @__PURE__ */ jsx("sprite", {
-		ref: spriteRef,
-		visible: false,
-		frustumCulled: false,
-		renderOrder: 1e3,
-		children: /* @__PURE__ */ jsx("spriteMaterial", {
-			ref: materialRef,
-			transparent: true,
-			depthTest: false,
-			depthWrite: false,
-			toneMapped: false
-		})
-	});
 }
 function knowledgeGraphNodeUsesFocusScale(nodeId, focus, focusSet) {
 	return focus !== null && (nodeId === focus || focusSet?.has(nodeId) === true);
@@ -673,7 +867,7 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 	const sphereGlyphsRef = useRef(null);
 	const boxGlyphsRef = useRef(null);
 	const diamondGlyphsRef = useRef(null);
-	const labelSpriteRef = useRef(null);
+	const labelsRef = useRef(null);
 	const sceneGroupRef = useRef(null);
 	const camera = useThree(selectCamera);
 	const gl = useThree(selectRenderer);
@@ -685,6 +879,8 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 	const resolvedParticleColor = particleColor ?? (themeMode === "light" ? "#0369a1" : "#8fd3ff");
 	const flowAnimated = flowMotion === "animated" && !reducedMotion;
 	const resolvedGlyphColor = themeMode === "light" ? "#0f172a" : "#f8fafc";
+	const boxShellVertices = useMemo(() => createKnowledgeGraphNodeShellVertices("box_shell"), []);
+	const diamondShellVertices = useMemo(() => createKnowledgeGraphNodeShellVertices("diamond_shell"), []);
 	useEffect(() => {
 		if (autoFrame && cameraProjectionKind === null) devWarn("knowledge-graph auto-frame supports only perspective and orthographic cameras");
 	}, [autoFrame, cameraProjectionKind]);
@@ -725,6 +921,40 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 		edges
 	]);
 	const queryActive = normalizedQuery.length > 0;
+	const labelCandidates = useMemo(() => planKnowledgeGraphLabelCandidates(nodes, selectedId, hoverId, queryMatchIds), [
+		nodes,
+		selectedId,
+		hoverId,
+		queryMatchIds
+	]);
+	const labelResource = useMemo(() => createKnowledgeGraphLabelResourceState(labelCandidates.length), [labelCandidates.length]);
+	const labelLayout = useMemo(() => createKnowledgeGraphLabelLayout(labelCandidates.length), [labelCandidates.length]);
+	const projectedLabelNodes = useMemo(() => new Float64Array(nodes.length * 5), [nodes.length]);
+	const labelUniforms = useMemo(() => ({ labelMap: { value: null } }), [labelResource]);
+	useLayoutEffect(() => {
+		const labels = labelsRef.current;
+		const material = labels?.material;
+		if (!labels || !(material instanceof THREE.ShaderMaterial)) return void 0;
+		const map = material.uniforms.labelMap;
+		if (!map) return void 0;
+		const attribute = labels.geometry.getAttribute("labelUvRect");
+		if (attribute instanceof THREE.InstancedBufferAttribute) attribute.needsUpdate = true;
+		return installKnowledgeGraphLabelResources({
+			labels: labelCandidates.map((node) => node.label),
+			state: labelResource,
+			map,
+			themeMode,
+			color: resolvedLabelColor,
+			invalidate
+		});
+	}, [
+		labelCandidates,
+		labelResource,
+		labelUniforms,
+		themeMode,
+		resolvedLabelColor,
+		invalidate
+	]);
 	const visualNodes = useMemo(() => nodes.map(({ id, label, color, nodeGlyph }) => ({
 		id,
 		label,
@@ -789,6 +1019,35 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 	}, 0), [validEdges]);
 	const linePos = useMemo(() => new Float32Array(visibleLineSegmentCount * 6), [visibleLineSegmentCount]);
 	const lineCol = useMemo(() => new Float32Array(visibleLineSegmentCount * 6), [visibleLineSegmentCount]);
+	const linePositionData = useMemo(() => new THREE.InstancedInterleavedBuffer(linePos, 6), [linePos]);
+	const lineColorData = useMemo(() => new THREE.InstancedInterleavedBuffer(lineCol, 6), [lineCol]);
+	const strokeQuad = useMemo(() => new Float32Array([
+		0,
+		-1,
+		0,
+		0,
+		1,
+		0,
+		1,
+		-1,
+		0,
+		1,
+		1,
+		0
+	]), []);
+	const strokeIndex = useMemo(() => new Uint16Array([
+		0,
+		1,
+		2,
+		2,
+		1,
+		3
+	]), []);
+	const strokeUniforms = useMemo(() => ({
+		strokeViewport: { value: new THREE.Vector2(1, 1) },
+		strokeWidth: { value: KNOWLEDGE_GRAPH_EDGE_STROKE_WIDTH_PX },
+		strokeNear: { value: .1 }
+	}), []);
 	useLayoutEffect(() => {
 		meshRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 		sphereGlyphsRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -796,10 +1055,12 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 		diamondGlyphsRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 		arrowsRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 		particlesRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-		const position = linesRef.current?.geometry.getAttribute("position");
-		if (position instanceof THREE.BufferAttribute) position.setUsage(THREE.DynamicDrawUsage);
+		linePositionData.setUsage(THREE.DynamicDrawUsage);
+		labelsRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 	}, [
 		linePos,
+		linePositionData,
+		labelCandidates.length,
 		nodes.length,
 		directedEdges.length,
 		particleCount,
@@ -899,8 +1160,8 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 				k += 6;
 			}
 		}
-		const attr = (linesRef.current?.geometry)?.getAttribute("color");
-		if (attr) attr.needsUpdate = true;
+		const attr = (linesRef.current?.geometry)?.getAttribute("instanceStrokeColor");
+		if (attr instanceof THREE.InterleavedBufferAttribute) attr.data.needsUpdate = true;
 		const arrows = arrowsRef.current;
 		if (arrows) {
 			directedEdges.forEach(({ edge }, arrowIndex) => {
@@ -944,7 +1205,7 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 		flyToSelection,
 		invalidate
 	]);
-	useFrame((_, delta) => {
+	useFrame((state, delta) => {
 		const runtime = layoutRuntimeRef.current;
 		const mesh = meshRef.current;
 		const controls = controlsRef?.current ?? null;
@@ -1013,8 +1274,8 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 					_curvePoint.copy(_curveNext);
 				}
 			}
-			const posAttr = linesRef.current?.geometry.getAttribute("position");
-			if (posAttr) posAttr.needsUpdate = true;
+			const posAttr = linesRef.current?.geometry.getAttribute("instanceStart");
+			if (posAttr instanceof THREE.InterleavedBufferAttribute) posAttr.data.needsUpdate = true;
 			const arrows = arrowsRef.current;
 			if (arrows) {
 				for (let i = 0; i < directedEdges.length; i++) {
@@ -1030,9 +1291,9 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 						_dummy.quaternion.identity();
 						_dummy.scale.setScalar(0);
 					} else {
-						_dummy.position.copy(_curveNext).addScaledVector(_direction, -3 / 2);
+						_dummy.position.copy(_curveNext).addScaledVector(_direction, -KNOWLEDGE_GRAPH_DIRECTION_MARKER_LENGTH / 2);
 						_dummy.quaternion.setFromUnitVectors(_up, _direction);
-						_dummy.scale.set(1.25, 3, 1.25);
+						_dummy.scale.set(KNOWLEDGE_GRAPH_DIRECTION_MARKER_RADIUS, KNOWLEDGE_GRAPH_DIRECTION_MARKER_LENGTH, KNOWLEDGE_GRAPH_DIRECTION_MARKER_RADIUS);
 					}
 					_dummy.updateMatrix();
 					arrows.setMatrixAt(i, _dummy.matrix);
@@ -1070,16 +1331,6 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 				}
 			}
 			pmesh.instanceMatrix.needsUpdate = true;
-		}
-		const label = labelSpriteRef.current;
-		if (label) {
-			const fi = focus != null ? index.get(focus) : void 0;
-			if (fi != null) {
-				const n = simNodes[fi];
-				label.position.set(n.x ?? 0, n.y ?? 0, n.z ?? 0);
-				label.center.set(.5, knowledgeGraphFocusLabelSpriteCenterY(n.r, visualNodes[fi].nodeGlyph));
-				label.visible = true;
-			} else label.visible = false;
 		}
 		const layoutSettled = sim.alpha() <= GRAPH_LAYOUT_SETTLED_ALPHA;
 		if (autoFrame && autoFrameStageRef.current < 2 && (autoFrameStageRef.current === 0 || layoutSettled) && simNodes.length > 0 && cameraProjectionKind !== null) {
@@ -1129,39 +1380,60 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 			const cameraPositionReady = isKnowledgeGraphCameraVectorFinite(camera.position.x, camera.position.y, camera.position.z);
 			const controlsTargetReady = controls === null || isKnowledgeGraphCameraVectorFinite(controls.target.x, controls.target.y, controls.target.z);
 			if (projectionReady && cameraPositionReady && controlsTargetReady) {
-				_box.makeEmpty();
+				resetKnowledgeGraphGeometryBounds(_geometryBounds);
+				let geometryFinite = true;
 				for (let nodeIndex = 0; nodeIndex < simNodes.length; nodeIndex++) {
-					const n = simNodes[nodeIndex];
-					const glyph = visualNodes[nodeIndex].nodeGlyph;
-					const radius = knowledgeGraphAutoFrameNodeRadialExtent(n.r, glyph, knowledgeGraphNodeUsesFocusScale(visualNodes[nodeIndex].id, focus, focusSet));
-					_box.expandByPoint(_a.set((n.x ?? 0) - radius, (n.y ?? 0) - radius, (n.z ?? 0) - radius));
-					_box.expandByPoint(_b.set((n.x ?? 0) + radius, (n.y ?? 0) + radius, (n.z ?? 0) + radius));
+					const node = simNodes[nodeIndex];
+					const extent = knowledgeGraphAutoFrameNodeRadialExtent(node.r, visualNodes[nodeIndex].nodeGlyph, knowledgeGraphNodeUsesFocusScale(node.id, focus, focusSet));
+					if (!includeKnowledgeGraphGeometryPointInto(_geometryBounds, node.x ?? 0, node.y ?? 0, node.z ?? 0, extent)) geometryFinite = false;
 				}
-				if (validEdges.length > 0) _box.expandByScalar(MAX_GRAPH_EDGE_LANE_OFFSET + GRAPH_DIRECTION_MARKER_PADDING);
-				const sphere = _box.getBoundingSphere(_sphere);
+				for (let edgeIndex = 0; edgeIndex < edgeLanes.length; edgeIndex++) {
+					const lane = edgeLanes[edgeIndex];
+					setEdgeCurve(simNodes[index.get(lane.edge.source)], simNodes[index.get(lane.edge.target)], lane, layoutDimensions);
+					if (!includeKnowledgeGraphQuadraticBoundsInto(_geometryBounds, _a, _curveControl, _b)) geometryFinite = false;
+				}
+				for (let edgeIndex = 0; edgeIndex < directedEdges.length; edgeIndex++) {
+					const lane = directedEdges[edgeIndex];
+					const source = simNodes[index.get(lane.edge.source)];
+					const targetIndex = index.get(lane.edge.target);
+					const target = simNodes[targetIndex];
+					setEdgeCurve(source, target, lane, layoutDimensions);
+					const targetExtent = knowledgeGraphRenderedNodeRadialExtent(target.r, visualNodes[targetIndex].nodeGlyph, knowledgeGraphNodeUsesFocusScale(target.id, focus, focusSet));
+					if (graphEdgeTargetBoundaryInto(_a, _curveControl, _b, targetExtent, _curveNext, _direction)) {
+						_curveNext.addScaledVector(_direction, -KNOWLEDGE_GRAPH_DIRECTION_MARKER_LENGTH / 2);
+						if (!includeKnowledgeGraphGeometryPointInto(_geometryBounds, _curveNext.x, _curveNext.y, _curveNext.z, Math.hypot(4.5 / 2, 1.5))) geometryFinite = false;
+					}
+				}
+				const sphere = _sphere;
+				sphere.center.set(_geometryBounds.minX / 2 + _geometryBounds.maxX / 2, _geometryBounds.minY / 2 + _geometryBounds.maxY / 2, _geometryBounds.minZ / 2 + _geometryBounds.maxZ / 2);
+				sphere.radius = Math.hypot(_geometryBounds.maxX / 2 - _geometryBounds.minX / 2, _geometryBounds.maxY / 2 - _geometryBounds.minY / 2, _geometryBounds.maxZ / 2 - _geometryBounds.minZ / 2);
 				const currentDistance = layoutDimensions === 2 && autoFrameStageRef.current === 0 ? 0 : controls ? camera.position.distanceTo(controls.target) : camera.position.distanceTo(sphere.center);
 				if (layoutDimensions === 2) _direction.set(0, 0, 1);
 				else if (controls && camera.position.distanceToSquared(controls.target) > 1e-12) _direction.copy(camera.position).sub(controls.target).normalize();
 				else camera.getWorldDirection(_direction).multiplyScalar(-1);
-				if (isKnowledgeGraphCameraVectorFinite(_direction.x, _direction.y, _direction.z)) {
+				if (isKnowledgeGraphCameraVectorFinite(_direction.x, _direction.y, _direction.z) && geometryFinite) {
 					if (_direction.lengthSq() <= 1e-12) _direction.set(0, 0, 1);
 					else _direction.normalize();
-					const fit = cameraProjectionKind === "orthographic" ? planKnowledgeGraphOrthographicCameraFitInto(sphere.radius, currentDistance, horizontalSpan, verticalSpan, orthographicCamera.zoom, _cameraFitResult) : planKnowledgeGraphPerspectiveCameraFitInto(sphere.radius, currentDistance, perspectiveFov, perspectiveCamera.aspect, _cameraFitResult);
-					camera.position.copy(sphere.center).addScaledVector(_direction, fit.distance);
-					if (cameraProjectionKind === "orthographic" && fit.orthographicZoom !== void 0) orthographicCamera.zoom = fit.orthographicZoom;
-					const projected = camera;
-					const clipping = planKnowledgeGraphCameraClippingInto(cameraProjectionKind, projected.near, projected.far, fit.distance, sphere.radius, _cameraClippingResult);
-					projected.near = clipping.near;
-					projected.far = clipping.far;
-					projected.updateProjectionMatrix();
-					if (controls) {
-						controls.target.copy(sphere.center);
-						controls.update();
-					} else {
-						camera.lookAt(sphere.center);
-						camera.updateMatrixWorld();
+					_cameraRight.crossVectors(camera.up, _direction).normalize();
+					_cameraUp.crossVectors(_direction, _cameraRight).normalize();
+					if (projectKnowledgeGraphGeometryBoundsInto(_geometryBounds, sphere.center, _cameraRight, _cameraUp, _direction, _projectedGeometryBounds) && (cameraProjectionKind === "orthographic" ? planKnowledgeGraphOrthographicGeometryFitInto(_projectedGeometryBounds, currentDistance, horizontalSpan, verticalSpan, orthographicCamera.zoom, state.size.width, state.size.height, _cameraFitResult) : planKnowledgeGraphPerspectiveGeometryFitInto(_projectedGeometryBounds, perspectiveFov, perspectiveCamera.aspect, state.size.width, state.size.height, _cameraFitResult))) {
+						const fit = _cameraFitResult;
+						camera.position.copy(sphere.center).addScaledVector(_direction, fit.distance);
+						if (cameraProjectionKind === "orthographic" && fit.orthographicZoom !== void 0) orthographicCamera.zoom = fit.orthographicZoom;
+						const projected = camera;
+						const clipping = planKnowledgeGraphCameraClippingInto(cameraProjectionKind, projected.near, projected.far, fit.distance, sphere.radius, _cameraClippingResult);
+						projected.near = clipping.near;
+						projected.far = clipping.far;
+						projected.updateProjectionMatrix();
+						if (controls) {
+							controls.target.copy(sphere.center);
+							controls.update();
+						} else {
+							camera.lookAt(sphere.center);
+							camera.updateMatrixWorld();
+						}
+						autoFrameStageRef.current = layoutSettled ? 2 : 1;
 					}
-					autoFrameStageRef.current = layoutSettled ? 2 : 1;
 				}
 			}
 		}
@@ -1176,6 +1448,64 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 				if (controls.target.distanceTo(_a) < .5) flyToIdRef.current = null;
 			} else flyToIdRef.current = null;
 		}
+		const strokes = linesRef.current;
+		if (strokes) {
+			const viewportUsable = isKnowledgeGraphStrokeViewportUsable(state.size.width, state.size.height, camera.near);
+			strokes.visible = viewportUsable;
+			if (viewportUsable) {
+				strokes.material.uniforms.strokeViewport.value.set(state.size.width, state.size.height);
+				strokes.material.uniforms.strokeNear.value = camera.near;
+			}
+		}
+		const labels = labelsRef.current;
+		if (labels && labelResource.ready && cameraProjectionKind !== null && Number.isFinite(camera.projectionMatrix.elements[5]) && camera.projectionMatrix.elements[5] !== 0) {
+			if (camera.matrixAutoUpdate) _labelCameraWorld.compose(camera.position, camera.quaternion, camera.scale);
+			else _labelCameraWorld.copy(camera.matrix);
+			if (camera.parent) _labelCameraWorld.premultiply(camera.parent.matrixWorld);
+			_labelCameraInverse.copy(_labelCameraWorld).invert();
+			_labelProjectionInverse.copy(camera.projectionMatrix).invert();
+			const sceneGroup = sceneGroupRef.current;
+			if (sceneGroup) sceneGroup.getWorldScale(_labelSceneScale);
+			else _labelSceneScale.set(1, 1, 1);
+			const sceneScale = Math.max(Math.abs(_labelSceneScale.x), Math.abs(_labelSceneScale.y), Math.abs(_labelSceneScale.z));
+			const pixelFactor = 2 / (Math.abs(camera.projectionMatrix.elements[5]) * state.size.height);
+			for (let nodeIndex = 0; nodeIndex < simNodes.length; nodeIndex++) {
+				const node = simNodes[nodeIndex];
+				_labelPoint.set(node.x ?? 0, node.y ?? 0, node.z ?? 0);
+				if (sceneGroup) sceneGroup.localToWorld(_labelPoint);
+				_labelViewPoint.copy(_labelPoint).applyMatrix4(_labelCameraInverse);
+				const depth = -_labelViewPoint.z;
+				const pixelScale = cameraProjectionKind === "perspective" ? depth * pixelFactor : pixelFactor;
+				const radius = sceneScale * knowledgeGraphAutoFrameNodeRadialExtent(node.r, visualNodes[nodeIndex].nodeGlyph, knowledgeGraphNodeUsesFocusScale(node.id, focus, focusSet));
+				_labelPoint.copy(_labelViewPoint).applyMatrix4(camera.projectionMatrix);
+				const slot = nodeIndex * 5;
+				projectedLabelNodes[slot] = (_labelPoint.x + 1) * state.size.width / 2;
+				projectedLabelNodes[slot + 1] = (1 - _labelPoint.y) * state.size.height / 2;
+				projectedLabelNodes[slot + 2] = radius / (pixelScale * (cameraProjectionKind === "perspective" ? Math.max(.05, 1 - radius / depth) : 1));
+				projectedLabelNodes[slot + 3] = _labelPoint.z;
+				projectedLabelNodes[slot + 4] = pixelScale;
+			}
+			layoutKnowledgeGraphLabelsInto(labelCandidates, projectedLabelNodes, labelResource.widths, state.size.width, state.size.height, labelLayout);
+			_dummy.quaternion.identity();
+			for (let slot = 0; slot < labelCandidates.length; slot++) {
+				if (labelLayout.visible[slot]) {
+					const base = labelCandidates[slot].nodeIndex * 5;
+					_labelPoint.set(labelLayout.x[slot] * 2 / state.size.width - 1, 1 - labelLayout.y[slot] * 2 / state.size.height, projectedLabelNodes[base + 3]).applyMatrix4(_labelProjectionInverse).applyMatrix4(_labelCameraWorld);
+					if (sceneGroup) sceneGroup.worldToLocal(_labelPoint);
+					_dummy.position.copy(_labelPoint);
+					const units = projectedLabelNodes[base + 4];
+					_dummy.scale.set(labelResource.widths[slot] * units, 24 * units, 1);
+				} else {
+					_dummy.position.set(0, 0, 0);
+					_dummy.scale.set(0, 0, 0);
+				}
+				_dummy.updateMatrix();
+				labels.setMatrixAt(slot, _dummy.matrix);
+			}
+			labels.instanceMatrix.needsUpdate = true;
+			labels.boundingSphere = null;
+			labels.visible = true;
+		} else if (labels) labels.visible = false;
 		if (sim.alpha() > GRAPH_LAYOUT_SETTLED_ALPHA || flowAnimated && particleCount > 0 || flyToIdRef.current !== null) invalidate();
 		if (positionsChanged) {
 			publishGraphLayoutCache(posMap, runtime, completedCacheBufferIndex);
@@ -1185,9 +1515,6 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 			if (group) group.visible = true;
 		}
 	});
-	const focusLabelId = hoverId ?? selectedId;
-	const focusLabelIndex = focusLabelId != null && index.has(focusLabelId) ? index.get(focusLabelId) : void 0;
-	const focusLabel = focusLabelIndex == null ? "" : visualNodes[focusLabelIndex]?.label ?? "";
 	const handleMove = useCallback((e) => {
 		const runtime = layoutRuntimeRef.current;
 		if (readyGraphKeyRef.current !== graphKey || geometryDirtyRef.current || runtime?.layoutKey !== layoutKey || runtime.reducedMotion !== reducedMotion) return;
@@ -1254,6 +1581,7 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 				] }), /* @__PURE__ */ jsx("meshBasicMaterial", { toneMapped: false })]
 			}, `nodes-${nodes.length}`) : null,
 			glyphNodeIndexes.sphere.length > 0 ? /* @__PURE__ */ jsxs("instancedMesh", {
+				name: "cortexel-kg-contours",
 				ref: sphereGlyphsRef,
 				args: [
 					void 0,
@@ -1264,11 +1592,11 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 				raycast: disableKnowledgeGraphGlyphRaycast,
 				children: [/* @__PURE__ */ jsx("sphereGeometry", { args: [
 					KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE.sphere_outline,
-					12,
-					12
+					32,
+					20
 				] }), /* @__PURE__ */ jsx("meshBasicMaterial", {
 					color: "#ffffff",
-					wireframe: true,
+					side: THREE.BackSide,
 					toneMapped: false
 				})]
 			}) : null,
@@ -1281,16 +1609,12 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 				],
 				frustumCulled: false,
 				raycast: disableKnowledgeGraphGlyphRaycast,
-				children: [/* @__PURE__ */ jsx("boxGeometry", { args: [
-					KNOWLEDGE_GRAPH_BOX_SHELL_SIDE,
-					KNOWLEDGE_GRAPH_BOX_SHELL_SIDE,
-					KNOWLEDGE_GRAPH_BOX_SHELL_SIDE,
-					1,
-					1,
-					1
-				] }), /* @__PURE__ */ jsx("meshBasicMaterial", {
+				children: [/* @__PURE__ */ jsx("bufferGeometry", { children: /* @__PURE__ */ jsx("bufferAttribute", {
+					attach: "attributes-position",
+					args: [boxShellVertices, 3]
+				}) }), /* @__PURE__ */ jsx("meshBasicMaterial", {
 					color: "#ffffff",
-					wireframe: true,
+					side: THREE.DoubleSide,
 					toneMapped: false
 				})]
 			}) : null,
@@ -1303,28 +1627,66 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 				],
 				frustumCulled: false,
 				raycast: disableKnowledgeGraphGlyphRaycast,
-				children: [/* @__PURE__ */ jsx("octahedronGeometry", { args: [KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE.diamond_shell, 0] }), /* @__PURE__ */ jsx("meshBasicMaterial", {
+				children: [/* @__PURE__ */ jsx("bufferGeometry", { children: /* @__PURE__ */ jsx("bufferAttribute", {
+					attach: "attributes-position",
+					args: [diamondShellVertices, 3]
+				}) }), /* @__PURE__ */ jsx("meshBasicMaterial", {
 					color: "#ffffff",
-					wireframe: true,
+					side: THREE.DoubleSide,
 					toneMapped: false
 				})]
 			}) : null,
-			/* @__PURE__ */ jsxs("lineSegments", {
+			/* @__PURE__ */ jsxs("mesh", {
+				name: "cortexel-kg-strokes",
 				ref: linesRef,
 				frustumCulled: false,
-				children: [/* @__PURE__ */ jsxs("bufferGeometry", { children: [/* @__PURE__ */ jsx("bufferAttribute", {
-					attach: "attributes-position",
-					args: [linePos, 3]
-				}), /* @__PURE__ */ jsx("bufferAttribute", {
-					attach: "attributes-color",
-					args: [lineCol, 3]
-				})] }), /* @__PURE__ */ jsx("lineBasicMaterial", {
-					vertexColors: true,
+				raycast: disableKnowledgeGraphGlyphRaycast,
+				children: [/* @__PURE__ */ jsxs("instancedBufferGeometry", {
+					instanceCount: visibleLineSegmentCount,
+					children: [
+						/* @__PURE__ */ jsx("bufferAttribute", {
+							attach: "attributes-position",
+							args: [strokeQuad, 3]
+						}),
+						/* @__PURE__ */ jsx("bufferAttribute", {
+							attach: "index",
+							args: [strokeIndex, 1]
+						}),
+						/* @__PURE__ */ jsx("interleavedBufferAttribute", {
+							attach: "attributes-instanceStart",
+							args: [
+								linePositionData,
+								3,
+								0
+							]
+						}),
+						/* @__PURE__ */ jsx("interleavedBufferAttribute", {
+							attach: "attributes-instanceEnd",
+							args: [
+								linePositionData,
+								3,
+								3
+							]
+						}),
+						/* @__PURE__ */ jsx("interleavedBufferAttribute", {
+							attach: "attributes-instanceStrokeColor",
+							args: [
+								lineColorData,
+								3,
+								0
+							]
+						})
+					]
+				}), /* @__PURE__ */ jsx("shaderMaterial", {
+					uniforms: strokeUniforms,
+					vertexShader: KNOWLEDGE_GRAPH_EDGE_STROKE_VERTEX_SHADER,
+					fragmentShader: KNOWLEDGE_GRAPH_EDGE_STROKE_FRAGMENT_SHADER,
 					toneMapped: false,
 					depthWrite: false,
-					blending: THREE.NormalBlending
+					blending: THREE.NormalBlending,
+					side: THREE.DoubleSide
 				})]
-			}, `lines-${validEdges.length}`),
+			}, `lines-${visibleLineSegmentCount}`),
 			directedEdges.length > 0 ? /* @__PURE__ */ jsxs("instancedMesh", {
 				ref: arrowsRef,
 				args: [
@@ -1360,13 +1722,34 @@ function KnowledgeGraph3DSceneInstance({ graphIdentity, layoutDimensions, nodes,
 					blending: themeMode === "light" ? THREE.NormalBlending : THREE.AdditiveBlending
 				})]
 			}, `p-${particleCount}`) : null,
-			/* @__PURE__ */ jsx(FocusLabelSprite, {
-				spriteRef: labelSpriteRef,
-				text: focusLabel,
-				color: resolvedLabelColor,
-				themeMode,
-				invalidate
-			})
+			labelCandidates.length > 0 ? /* @__PURE__ */ jsxs("instancedMesh", {
+				name: "cortexel-kg-labels",
+				ref: labelsRef,
+				args: [
+					void 0,
+					void 0,
+					labelCandidates.length
+				],
+				frustumCulled: false,
+				visible: false,
+				renderOrder: 1e3,
+				raycast: disableKnowledgeGraphGlyphRaycast,
+				children: [/* @__PURE__ */ jsx("planeGeometry", {
+					args: [1, 1],
+					children: /* @__PURE__ */ jsx("instancedBufferAttribute", {
+						attach: "attributes-labelUvRect",
+						args: [labelResource.uvRects, 4]
+					})
+				}), /* @__PURE__ */ jsx("shaderMaterial", {
+					uniforms: labelUniforms,
+					vertexShader: KNOWLEDGE_GRAPH_LABEL_VERTEX_SHADER,
+					fragmentShader: KNOWLEDGE_GRAPH_LABEL_FRAGMENT_SHADER,
+					transparent: true,
+					depthTest: false,
+					depthWrite: false,
+					toneMapped: false
+				})]
+			}, `labels-${labelCandidates.length}`) : null
 		]
 	}, `graph-${layoutKey}`) });
 }

@@ -646,8 +646,18 @@ The machine-readable state of every release gate is in
   DAC/ownership-bypassing capabilities (including `CAP_FOWNER`), mount-namespace
   changes, or another process with the current UID during or after
   acquisition or publication. Additional VFS types require their own reviewed
-  profile and native controls. The ACL helper also requires an OS-administered
-  `/usr/bin/python3` on macOS or Linux. The helper source itself is opened as one
+  profile and native controls. On Darwin, the ACL helper requires the fixed
+  OS-administered
+  `/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9`
+  profile. Linux retains its fixed `/usr/bin/python3` prerequisite.
+  The helper never selects an ambient interpreter or fallback.
+
+  Darwin admission checks physical ancestry, ownership, protected modes, bounded
+  file extent, and opened identities before and after inspection.
+  Interpreter ACL, framework, standard-library, native-library, and loader
+  authority remain external OS-administrator prerequisites.
+  Launcher hashes, declared versions, and successful helper results do not attest
+  these prerequisites. The helper source itself is opened as one
   bounded no-follow/nonblocking regular file, must match its pinned SHA-256, is
   executed from those exact copied bytes through stdin, and is rechecked by path,
   descriptor, bytes, and digest after every run. Linux pathname subjects are opened

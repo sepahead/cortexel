@@ -6,6 +6,23 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — OS interpreter for ACL inspection
+
+- Use one fixed Command Line Tools Python profile for Darwin ACL inspection.
+- Preserve the Linux interpreter, exact helper, closed environment, finite limits, and strict result checks.
+- Check protected physical ancestry and opened identities before and after each inspection.
+- Keep interpreter ACL and loaded runtime trust as external OS-administrator prerequisites.
+
+### Fixed — interactive knowledge-graph presentation
+
+- Fit graph cameras to complete rendered geometry, including node, stroke, and arrow bounds.
+- Keep planar graphs in one plane during fitting and navigation.
+- Place labels within bounded display regions and release their rendering resources.
+- Preserve complete source records when dense views suppress overlapping labels.
+- Review the exact mapped source closure and emitted private renderer owners.
+- Accept automatic canvas height in clean-package controls while retaining fixed-height controls.
+- Limit package-install connections per origin without changing deadlines or complete-tree checks.
+
 ### Added — built-in presentation themes
 
 - Added twelve named dark and light themes to the existing palette registry.

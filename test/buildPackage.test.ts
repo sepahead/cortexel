@@ -694,13 +694,13 @@ describe('programmatic package build', () => {
 
   it('preserves the eight reviewed graph owner roles after their hash refresh', () => {
     const owners = [
-      ['KnowledgeGraphCorpusFrame.internal-B6Fze8F9.js', 'KnowledgeGraphCorpusFrame.internal-CXuaQ6Bj.js', 'import', 'runtime'],
-      ['KnowledgeGraphCorpusFrame.internal-D37Fsrhv.cjs', 'KnowledgeGraphCorpusFrame.internal-DoZVFmA4.cjs', 'require', 'runtime'],
+      ['KnowledgeGraphCorpusFrame.internal-CUpYwgIa.js', 'KnowledgeGraphCorpusFrame.internal-B6Fze8F9.js', 'import', 'runtime'],
+      ['KnowledgeGraphCorpusFrame.internal-DFjBbocx.cjs', 'KnowledgeGraphCorpusFrame.internal-D37Fsrhv.cjs', 'require', 'runtime'],
       ['KnowledgeGraphCorpusFrame.internal-BhDKFlky.d.cts', 'KnowledgeGraphCorpusFrame.internal-D_SH3P2z.d.cts', 'types', 'declaration'],
       ['KnowledgeGraphCorpusFrame.internal-erLWkXeb.d.ts', 'KnowledgeGraphCorpusFrame.internal-C6neWtSA.d.ts', 'types', 'declaration'],
       ['knowledgeGraphFigure--8Jnku5i.d.cts', 'knowledgeGraphFigure-CRV9X8S3.d.cts', 'types', 'declaration'],
-      ['knowledgeGraphFigure-CJUK98CP.cjs', 'knowledgeGraphFigure-BpwfPh71.cjs', 'require', 'runtime'],
-      ['knowledgeGraphFigure-DP4EPFUs.js', 'knowledgeGraphFigure-v0lohz_8.js', 'import', 'runtime'],
+      ['knowledgeGraphFigure-BJ7Y_maa.cjs', 'knowledgeGraphFigure-CJUK98CP.cjs', 'require', 'runtime'],
+      ['knowledgeGraphFigure-C_NGucds.js', 'knowledgeGraphFigure-DP4EPFUs.js', 'import', 'runtime'],
       ['knowledgeGraphFigure-BKogMpaU.d.ts', 'knowledgeGraphFigure-Dcw_r5ra.d.ts', 'types', 'declaration'],
     ] as const;
     for (const [owner, previousOwner, condition, kind] of owners) {

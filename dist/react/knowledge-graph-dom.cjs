@@ -1,5 +1,5 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
-const require_KnowledgeGraphCorpusFrame_internal = require('../KnowledgeGraphCorpusFrame.internal-D37Fsrhv.cjs');
+const require_KnowledgeGraphCorpusFrame_internal = require('../KnowledgeGraphCorpusFrame.internal-DFjBbocx.cjs');
 let react_jsx_runtime = require("react/jsx-runtime");
 
 //#region react/KnowledgeGraphDomFigure.tsx

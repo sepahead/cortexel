@@ -13,8 +13,8 @@
 //     written straight into the instanced matrix / line buffers via refs — NEVER
 //     through React state (no per-frame re-renders).
 //   • React state changes only on discrete events (hover id, selection) and
-//     drive the emphasis recolor + the single floating label, not the loop.
-//   • Nodes are one unlit instancedMesh; edges are one lineSegments; citation
+//     drive emphasis and a bounded local label atlas, not the loop.
+//   • Nodes are one unlit instancedMesh; edges are one instanced stroke mesh; citation
 //     flow is one instanced particle cloud. Light mode avoids additive blending.
 //   • Cortexel's useFrame body has no explicit allocation syntax. The invoked
 //     d3-force-3d tick is not allocation-free: it rebuilds spatial indexes.
@@ -60,7 +60,6 @@ import {
   graphEdgeMatchesQuery,
   graphCameraTargetDamping,
   graphQueryMatchIds,
-  MAX_GRAPH_EDGE_LANE_OFFSET,
   MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES,
   normalizeGraphQuery,
   reducedMotionLayoutTickBudget,
@@ -81,9 +80,24 @@ import {
   type GraphLayoutPosition,
 } from './knowledgeGraphLayout.internal';
 import {
-  installFocusLabelResource,
-  knowledgeGraphFocusLabelSpriteCenterY,
-} from './focusLabelResource.internal';
+  createKnowledgeGraphGeometryBounds,
+  includeKnowledgeGraphGeometryPointInto,
+  includeKnowledgeGraphQuadraticBoundsInto,
+  projectKnowledgeGraphGeometryBoundsInto,
+  resetKnowledgeGraphGeometryBounds,
+} from './knowledgeGraphGeometryBounds.internal';
+import {
+  createKnowledgeGraphLabelLayout,
+  KNOWLEDGE_GRAPH_LABEL_HEIGHT_PX,
+  layoutKnowledgeGraphLabelsInto,
+  planKnowledgeGraphLabelCandidates,
+} from './knowledgeGraphLabelLayout.internal';
+import {
+  createKnowledgeGraphLabelResourceState,
+  installKnowledgeGraphLabelResources,
+  KNOWLEDGE_GRAPH_LABEL_FRAGMENT_SHADER,
+  KNOWLEDGE_GRAPH_LABEL_VERTEX_SHADER,
+} from './knowledgeGraphLabelResource.internal';
 import {
   assertPreparedCorpusKnowledgeGraphPresentation,
   assertPreparedGenericKnowledgeGraphPresentation,
@@ -115,18 +129,21 @@ import {
   isKnowledgeGraphPerspectiveProjectionReady,
   knowledgeGraphCameraProjectionKind,
   planKnowledgeGraphCameraClippingInto,
-  planKnowledgeGraphOrthographicCameraFitInto,
-  planKnowledgeGraphPerspectiveCameraFitInto,
+  planKnowledgeGraphOrthographicGeometryFitInto,
+  planKnowledgeGraphPerspectiveGeometryFitInto,
 } from './knowledgeGraphCamera.internal';
 import {
   advanceKnowledgeGraphFlowPhase,
   planFlowParticleDistribution,
   reducedMotionFlowParticleFraction,
 } from './knowledgeGraphParticles.internal';
-import { safeDiagnosticText } from '../core/safeRuntime';
 import {
   KNOWLEDGE_GRAPH_DIRECTION_MARKER_LENGTH,
-  KNOWLEDGE_GRAPH_BOX_SHELL_SIDE,
+  KNOWLEDGE_GRAPH_DIRECTION_MARKER_RADIUS,
+  KNOWLEDGE_GRAPH_EDGE_STROKE_FRAGMENT_SHADER,
+  KNOWLEDGE_GRAPH_EDGE_STROKE_VERTEX_SHADER,
+  KNOWLEDGE_GRAPH_EDGE_STROKE_WIDTH_PX,
+  createKnowledgeGraphNodeShellVertices,
   KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE,
   knowledgeGraphAutoFrameNodeRadialExtent,
   knowledgeGraphContrastSafeColor,
@@ -134,6 +151,7 @@ import {
   knowledgeGraphNodeEmphasisDimAmount,
   knowledgeGraphRenderedNodeRadialExtent,
   knowledgeGraphRenderedNodeScale,
+  isKnowledgeGraphStrokeViewportUsable,
 } from './knowledgeGraphVisualEncoding.internal';
 
 export type { KnowledgeGraph3DEdge, KnowledgeGraph3DNode } from
@@ -222,7 +240,6 @@ interface KnowledgeGraph3DSceneInstanceProps
 }
 
 const PARTICLES_PER_EDGE = 4;
-const GRAPH_DIRECTION_MARKER_PADDING = 2;
 const GRAPH_LAYOUT_SETTLED_ALPHA = 0.008;
 // The renderer admits at most this many edges. Keeping the particle cap bound to
 // the same authority guarantees that every valid all-flow graph retains at least
@@ -247,8 +264,17 @@ const _curvePoint = new THREE.Vector3();
 const _curveNext = new THREE.Vector3();
 const _direction = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
-const _box = new THREE.Box3();
 const _sphere = new THREE.Sphere();
+const _geometryBounds = createKnowledgeGraphGeometryBounds();
+const _projectedGeometryBounds = createKnowledgeGraphGeometryBounds();
+const _cameraRight = new THREE.Vector3();
+const _cameraUp = new THREE.Vector3();
+const _labelPoint = new THREE.Vector3();
+const _labelViewPoint = new THREE.Vector3();
+const _labelSceneScale = new THREE.Vector3();
+const _labelCameraWorld = new THREE.Matrix4();
+const _labelCameraInverse = new THREE.Matrix4();
+const _labelProjectionInverse = new THREE.Matrix4();
 const _layoutClockResult = { ticks: 0, remainderSeconds: 0 };
 const _cameraFitResult = { distance: 0, orthographicZoom: undefined as number | undefined };
 const _cameraClippingResult = { near: 0, far: 0 };
@@ -322,58 +348,6 @@ function dim(
   return _color.lerp(
     themeMode === 'light' ? _lightDimTarget : _darkDimTarget,
     amount,
-  );
-}
-
-/** Network-free focus label. Drei/Troika's default Text path fetches fonts and
- *  unicode data from public CDNs; a CanvasTexture uses the host's system font
- *  and keeps Cortexel's no-implicit-network guarantee intact. GPU resources are
- *  created only after commit so an abandoned concurrent render cannot leak a
- *  texture whose cleanup effect never existed. */
-function FocusLabelSprite({
-  spriteRef,
-  text,
-  color,
-  themeMode,
-  invalidate,
-}: {
-  spriteRef: React.RefObject<THREE.Sprite | null>;
-  text: string;
-  color: string;
-  themeMode: 'dark' | 'light';
-  invalidate: () => void;
-}) {
-  const label = safeDiagnosticText(text, 120);
-  const materialRef = useRef<THREE.SpriteMaterial>(null);
-  useLayoutEffect(() => {
-    const sprite = spriteRef.current;
-    const material = materialRef.current;
-    if (!sprite || !material) return undefined;
-    return installFocusLabelResource({
-      sprite,
-      material,
-      label,
-      color,
-      themeMode,
-      invalidate,
-    });
-  }, [label, color, themeMode, invalidate]);
-
-  return (
-    <sprite
-      ref={spriteRef}
-      visible={false}
-      frustumCulled={false}
-      renderOrder={1_000}
-    >
-      <spriteMaterial
-        ref={materialRef}
-        transparent
-        depthTest={false}
-        depthWrite={false}
-        toneMapped={false}
-      />
-    </sprite>
   );
 }
 
@@ -560,13 +534,13 @@ function KnowledgeGraph3DSceneInstance({
   reducedMotion = false,
 }: KnowledgeGraph3DSceneInstanceProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  const linesRef = useRef<THREE.LineSegments>(null);
+  const linesRef = useRef<THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>>(null);
   const particlesRef = useRef<THREE.InstancedMesh>(null);
   const arrowsRef = useRef<THREE.InstancedMesh>(null);
   const sphereGlyphsRef = useRef<THREE.InstancedMesh>(null);
   const boxGlyphsRef = useRef<THREE.InstancedMesh>(null);
   const diamondGlyphsRef = useRef<THREE.InstancedMesh>(null);
-  const labelSpriteRef = useRef<THREE.Sprite>(null);
+  const labelsRef = useRef<THREE.InstancedMesh>(null);
   const sceneGroupRef = useRef<THREE.Group>(null);
   const camera = useThree(selectCamera);
   const gl = useThree(selectRenderer);
@@ -582,6 +556,8 @@ function KnowledgeGraph3DSceneInstance({
   );
   const flowAnimated = flowMotion === 'animated' && !reducedMotion;
   const resolvedGlyphColor = themeMode === 'light' ? '#0f172a' : '#f8fafc';
+  const boxShellVertices = useMemo(() => createKnowledgeGraphNodeShellVertices('box_shell'), []);
+  const diamondShellVertices = useMemo(() => createKnowledgeGraphNodeShellVertices('diamond_shell'), []);
   useEffect(() => {
     if (autoFrame && cameraProjectionKind === null) {
       devWarn(
@@ -652,6 +628,39 @@ function KnowledgeGraph3DSceneInstance({
     [nodes, normalizedQuery, edges],
   );
   const queryActive = normalizedQuery.length > 0;
+  const labelCandidates = useMemo(
+    () => planKnowledgeGraphLabelCandidates(nodes, selectedId, hoverId, queryMatchIds),
+    [nodes, selectedId, hoverId, queryMatchIds],
+  );
+  const labelResource = useMemo(
+    () => createKnowledgeGraphLabelResourceState(labelCandidates.length),
+    [labelCandidates.length],
+  );
+  const labelLayout = useMemo(
+    () => createKnowledgeGraphLabelLayout(labelCandidates.length),
+    [labelCandidates.length],
+  );
+  const projectedLabelNodes = useMemo(() => new Float64Array(nodes.length * 5), [nodes.length]);
+  const labelUniforms = useMemo(() => ({ labelMap: { value: null as THREE.Texture | null } }), [labelResource]);
+  useLayoutEffect(() => {
+    const labels = labelsRef.current;
+    const material = labels?.material;
+    if (!labels || !(material instanceof THREE.ShaderMaterial)) return undefined;
+    // R3F can copy uniform records while applying declarative material props.
+    // Bind the owner to the actual committed material, rather than that copy.
+    const map = material.uniforms.labelMap;
+    if (!map) return undefined;
+    const attribute = labels.geometry.getAttribute('labelUvRect');
+    if (attribute instanceof THREE.InstancedBufferAttribute) attribute.needsUpdate = true;
+    return installKnowledgeGraphLabelResources({
+      labels: labelCandidates.map(node => node.label),
+      state: labelResource,
+      map,
+      themeMode,
+      color: resolvedLabelColor,
+      invalidate,
+    });
+  }, [labelCandidates, labelResource, labelUniforms, themeMode, resolvedLabelColor, invalidate]);
   const visualNodes = useMemo(
     () => nodes.map(({ id, label, color, nodeGlyph }) => ({
       id,
@@ -776,6 +785,21 @@ function KnowledgeGraph3DSceneInstance({
     () => new Float32Array(visibleLineSegmentCount * 6),
     [visibleLineSegmentCount],
   );
+  const linePositionData = useMemo(
+    () => new THREE.InstancedInterleavedBuffer(linePos, 6), [linePos],
+  );
+  const lineColorData = useMemo(
+    () => new THREE.InstancedInterleavedBuffer(lineCol, 6), [lineCol],
+  );
+  const strokeQuad = useMemo(() => new Float32Array([
+    0, -1, 0, 0, 1, 0, 1, -1, 0, 1, 1, 0,
+  ]), []);
+  const strokeIndex = useMemo(() => new Uint16Array([0, 1, 2, 2, 1, 3]), []);
+  const strokeUniforms = useMemo(() => ({
+    strokeViewport: { value: new THREE.Vector2(1, 1) },
+    strokeWidth: { value: KNOWLEDGE_GRAPH_EDGE_STROKE_WIDTH_PX },
+    strokeNear: { value: 0.1 },
+  }), []);
 
   // Declare every continuously streamed GPU attribute before its first frame
   // upload. Colors change only on discrete interaction state and remain static
@@ -787,12 +811,12 @@ function KnowledgeGraph3DSceneInstance({
     diamondGlyphsRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     arrowsRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     particlesRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    const position = linesRef.current?.geometry.getAttribute('position');
-    if (position instanceof THREE.BufferAttribute) {
-      position.setUsage(THREE.DynamicDrawUsage);
-    }
+    linePositionData.setUsage(THREE.DynamicDrawUsage);
+    labelsRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   }, [
     linePos,
+    linePositionData,
+    labelCandidates.length,
     nodes.length,
     directedEdges.length,
     particleCount,
@@ -998,8 +1022,8 @@ function KnowledgeGraph3DSceneInstance({
       }
     }
     const geom = linesRef.current?.geometry;
-    const attr = geom?.getAttribute('color') as THREE.BufferAttribute | undefined;
-    if (attr) attr.needsUpdate = true;
+    const attr = geom?.getAttribute('instanceStrokeColor');
+    if (attr instanceof THREE.InterleavedBufferAttribute) attr.data.needsUpdate = true;
     const arrows = arrowsRef.current;
     if (arrows) {
       directedEdges.forEach(({ edge }, arrowIndex) => {
@@ -1067,7 +1091,7 @@ function KnowledgeGraph3DSceneInstance({
 
   // The animation loop: settle the sim, stream positions into the GPU buffers,
   // advance flow particles, keep the label pinned, and ease the camera.
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const runtime = layoutRuntimeRef.current;
     const mesh = meshRef.current;
 
@@ -1201,10 +1225,8 @@ function KnowledgeGraph3DSceneInstance({
           _curvePoint.copy(_curveNext);
         }
       }
-      const posAttr = linesRef.current?.geometry.getAttribute('position') as
-        | THREE.BufferAttribute
-        | undefined;
-      if (posAttr) posAttr.needsUpdate = true;
+      const posAttr = linesRef.current?.geometry.getAttribute('instanceStart');
+      if (posAttr instanceof THREE.InterleavedBufferAttribute) posAttr.data.needsUpdate = true;
 
       // Persistent arrowheads encode edge direction without relying on motion.
       // This remains legible under prefers-reduced-motion and in screenshots.
@@ -1242,9 +1264,9 @@ function KnowledgeGraph3DSceneInstance({
               );
             _dummy.quaternion.setFromUnitVectors(_up, _direction);
             _dummy.scale.set(
-              1.25,
+              KNOWLEDGE_GRAPH_DIRECTION_MARKER_RADIUS,
               KNOWLEDGE_GRAPH_DIRECTION_MARKER_LENGTH,
-              1.25,
+              KNOWLEDGE_GRAPH_DIRECTION_MARKER_RADIUS,
             );
           }
           _dummy.updateMatrix();
@@ -1310,28 +1332,6 @@ function KnowledgeGraph3DSceneInstance({
       pmesh.instanceMatrix.needsUpdate = true;
     }
 
-    // One floating label follows the focus node. The Sprite remains anchored at
-    // the node and its camera-facing center creates a bounded world-unit offset,
-    // so later auto-frame/control camera mutations cannot stale its direction.
-    const label = labelSpriteRef.current;
-    if (label) {
-      const fi = focus != null ? index.get(focus) : undefined;
-      if (fi != null) {
-        const n = simNodes[fi];
-        label.position.set(n.x ?? 0, n.y ?? 0, n.z ?? 0);
-        label.center.set(
-          0.5,
-          knowledgeGraphFocusLabelSpriteCenterY(
-            n.r,
-            visualNodes[fi].nodeGlyph,
-          ),
-        );
-        label.visible = true;
-      } else {
-        label.visible = false;
-      }
-    }
-
     // Frame the deterministic seed immediately so first paint is usable, then
     // correct once after force settlement. A user grab cancels the final fit.
     const layoutSettled = sim.alpha() <= GRAPH_LAYOUT_SETTLED_ALPHA;
@@ -1342,11 +1342,8 @@ function KnowledgeGraph3DSceneInstance({
       simNodes.length > 0 &&
       cameraProjectionKind !== null
     ) {
-      const cameraParentIdentity = isKnowledgeGraphCameraParentChainIdentity(
-        camera.parent,
-      );
-      const cameraSelfTransformCanonical =
-        isKnowledgeGraphCameraSelfTransformCanonical(camera);
+      const cameraParentIdentity = isKnowledgeGraphCameraParentChainIdentity(camera.parent);
+      const cameraSelfTransformCanonical = isKnowledgeGraphCameraSelfTransformCanonical(camera);
       const cameraMethodsCanonical =
         camera.getWorldDirection === THREE.Camera.prototype.getWorldDirection &&
         camera.lookAt === THREE.Object3D.prototype.lookAt &&
@@ -1356,18 +1353,14 @@ function KnowledgeGraph3DSceneInstance({
       if (cameraProjectionKind === 'perspective') {
         _perspectiveAutoFrameProjection.isArrayCamera =
           (camera as THREE.ArrayCamera).isArrayCamera === true;
-        _perspectiveAutoFrameProjection.viewEnabled =
-          perspectiveCamera.view?.enabled === true;
+        _perspectiveAutoFrameProjection.viewEnabled = perspectiveCamera.view?.enabled === true;
         _perspectiveAutoFrameProjection.parentTransformIdentity = cameraParentIdentity;
-        _perspectiveAutoFrameProjection.selfTransformCanonical =
-          cameraSelfTransformCanonical;
+        _perspectiveAutoFrameProjection.selfTransformCanonical = cameraSelfTransformCanonical;
         _perspectiveAutoFrameProjection.cameraMethodsCanonical = cameraMethodsCanonical;
         _perspectiveAutoFrameProjection.projectionMethodCanonical =
-          camera.updateProjectionMatrix ===
-            THREE.PerspectiveCamera.prototype.updateProjectionMatrix;
+          camera.updateProjectionMatrix === THREE.PerspectiveCamera.prototype.updateProjectionMatrix;
         _perspectiveAutoFrameProjection.effectiveFovMethodCanonical =
-          perspectiveCamera.getEffectiveFOV ===
-            THREE.PerspectiveCamera.prototype.getEffectiveFOV;
+          perspectiveCamera.getEffectiveFOV === THREE.PerspectiveCamera.prototype.getEffectiveFOV;
         _perspectiveAutoFrameProjection.webGlCoordinateSystem =
           camera.coordinateSystem === THREE.WebGLCoordinateSystem;
         _perspectiveAutoFrameProjection.fovDegrees = perspectiveCamera.fov;
@@ -1378,22 +1371,18 @@ function KnowledgeGraph3DSceneInstance({
         _perspectiveAutoFrameProjection.filmOffset = perspectiveCamera.filmOffset;
         _perspectiveAutoFrameProjection.projectionMatrixElements =
           perspectiveCamera.projectionMatrix.elements;
-        centeredProjectionSupported =
-          isKnowledgeGraphCenteredAutoFrameProjectionSupported(
-            _perspectiveAutoFrameProjection,
-          );
+        centeredProjectionSupported = isKnowledgeGraphCenteredAutoFrameProjectionSupported(
+          _perspectiveAutoFrameProjection,
+        );
       } else {
         _orthographicAutoFrameProjection.isArrayCamera =
           (camera as THREE.ArrayCamera).isArrayCamera === true;
-        _orthographicAutoFrameProjection.viewEnabled =
-          orthographicCamera.view?.enabled === true;
+        _orthographicAutoFrameProjection.viewEnabled = orthographicCamera.view?.enabled === true;
         _orthographicAutoFrameProjection.parentTransformIdentity = cameraParentIdentity;
-        _orthographicAutoFrameProjection.selfTransformCanonical =
-          cameraSelfTransformCanonical;
+        _orthographicAutoFrameProjection.selfTransformCanonical = cameraSelfTransformCanonical;
         _orthographicAutoFrameProjection.cameraMethodsCanonical = cameraMethodsCanonical;
         _orthographicAutoFrameProjection.projectionMethodCanonical =
-          camera.updateProjectionMatrix ===
-            THREE.OrthographicCamera.prototype.updateProjectionMatrix;
+          camera.updateProjectionMatrix === THREE.OrthographicCamera.prototype.updateProjectionMatrix;
         _orthographicAutoFrameProjection.webGlCoordinateSystem =
           camera.coordinateSystem === THREE.WebGLCoordinateSystem;
         _orthographicAutoFrameProjection.left = orthographicCamera.left;
@@ -1405,86 +1394,121 @@ function KnowledgeGraph3DSceneInstance({
         _orthographicAutoFrameProjection.far = orthographicCamera.far;
         _orthographicAutoFrameProjection.projectionMatrixElements =
           orthographicCamera.projectionMatrix.elements;
-        centeredProjectionSupported =
-          isKnowledgeGraphCenteredAutoFrameProjectionSupported(
-            _orthographicAutoFrameProjection,
-          );
+        centeredProjectionSupported = isKnowledgeGraphCenteredAutoFrameProjectionSupported(
+          _orthographicAutoFrameProjection,
+        );
       }
-      const perspectiveFov = centeredProjectionSupported &&
-          cameraProjectionKind === 'perspective'
-        ? perspectiveCamera.getEffectiveFOV()
-        : 0;
-      const horizontalSpan = cameraProjectionKind === 'orthographic'
-        ? Math.abs(orthographicCamera.right - orthographicCamera.left)
-        : 0;
-      const verticalSpan = cameraProjectionKind === 'orthographic'
-        ? Math.abs(orthographicCamera.top - orthographicCamera.bottom)
-        : 0;
-      const projectionReady = centeredProjectionSupported && (
-        cameraProjectionKind === 'perspective'
-        ? isKnowledgeGraphPerspectiveProjectionReady(
-            perspectiveFov,
-            perspectiveCamera.aspect,
-          )
-        : isKnowledgeGraphOrthographicProjectionReady(
-            horizontalSpan,
-            verticalSpan,
-            orthographicCamera.zoom,
-          )
-      );
+      const perspectiveFov =
+        centeredProjectionSupported && cameraProjectionKind === 'perspective'
+          ? perspectiveCamera.getEffectiveFOV()
+          : 0;
+      const horizontalSpan =
+        cameraProjectionKind === 'orthographic'
+          ? Math.abs(orthographicCamera.right - orthographicCamera.left)
+          : 0;
+      const verticalSpan =
+        cameraProjectionKind === 'orthographic'
+          ? Math.abs(orthographicCamera.top - orthographicCamera.bottom)
+          : 0;
+      const projectionReady =
+        centeredProjectionSupported &&
+        (cameraProjectionKind === 'perspective'
+          ? isKnowledgeGraphPerspectiveProjectionReady(perspectiveFov, perspectiveCamera.aspect)
+          : isKnowledgeGraphOrthographicProjectionReady(
+              horizontalSpan,
+              verticalSpan,
+              orthographicCamera.zoom,
+            ));
       const cameraPositionReady = isKnowledgeGraphCameraVectorFinite(
         camera.position.x,
         camera.position.y,
         camera.position.z,
       );
-      const controlsTargetReady = controls === null ||
-        isKnowledgeGraphCameraVectorFinite(
-          controls.target.x,
-          controls.target.y,
-          controls.target.z,
-        );
+      const controlsTargetReady =
+        controls === null ||
+        isKnowledgeGraphCameraVectorFinite(controls.target.x, controls.target.y, controls.target.z);
       if (projectionReady && cameraPositionReady && controlsTargetReady) {
-        _box.makeEmpty();
+        resetKnowledgeGraphGeometryBounds(_geometryBounds);
+        let geometryFinite = true;
         for (let nodeIndex = 0; nodeIndex < simNodes.length; nodeIndex++) {
-          const n = simNodes[nodeIndex];
-          // Whole-graph framing follows geometry rendered on this frame. Reserving
-          // the maximum hypothetical label around every node makes a small graph
-          // unreadable; labels belong only to the active focus/fly-to interaction.
-          // A later hover never restarts either one-shot whole-graph fit stage.
-          const glyph = visualNodes[nodeIndex].nodeGlyph;
-          const radius = knowledgeGraphAutoFrameNodeRadialExtent(
-            n.r,
-            glyph,
-            knowledgeGraphNodeUsesFocusScale(
-              visualNodes[nodeIndex].id,
-              focus,
-              focusSet,
-            ),
+          const node = simNodes[nodeIndex];
+          const extent = knowledgeGraphAutoFrameNodeRadialExtent(
+            node.r,
+            visualNodes[nodeIndex].nodeGlyph,
+            knowledgeGraphNodeUsesFocusScale(node.id, focus, focusSet),
           );
-          _box.expandByPoint(_a.set(
-            (n.x ?? 0) - radius,
-            (n.y ?? 0) - radius,
-            (n.z ?? 0) - radius,
-          ));
-          _box.expandByPoint(_b.set(
-            (n.x ?? 0) + radius,
-            (n.y ?? 0) + radius,
-            (n.z ?? 0) + radius,
-          ));
+          if (
+            !includeKnowledgeGraphGeometryPointInto(
+              _geometryBounds,
+              node.x ?? 0,
+              node.y ?? 0,
+              node.z ?? 0,
+              extent,
+            )
+          )
+            geometryFinite = false;
         }
-        if (validEdges.length > 0) {
-          _box.expandByScalar(
-            MAX_GRAPH_EDGE_LANE_OFFSET + GRAPH_DIRECTION_MARKER_PADDING,
+        // Use current routed lanes, not a reserve for every possible bundle.
+        for (let edgeIndex = 0; edgeIndex < edgeLanes.length; edgeIndex++) {
+          const lane = edgeLanes[edgeIndex];
+          setEdgeCurve(
+            simNodes[index.get(lane.edge.source) as number],
+            simNodes[index.get(lane.edge.target) as number],
+            lane,
+            layoutDimensions,
           );
+          if (!includeKnowledgeGraphQuadraticBoundsInto(_geometryBounds, _a, _curveControl, _b))
+            geometryFinite = false;
         }
-        const sphere = _box.getBoundingSphere(_sphere);
+        for (let edgeIndex = 0; edgeIndex < directedEdges.length; edgeIndex++) {
+          const lane = directedEdges[edgeIndex];
+          const source = simNodes[index.get(lane.edge.source) as number];
+          const targetIndex = index.get(lane.edge.target) as number;
+          const target = simNodes[targetIndex];
+          setEdgeCurve(source, target, lane, layoutDimensions);
+          const targetExtent = knowledgeGraphRenderedNodeRadialExtent(
+            target.r,
+            visualNodes[targetIndex].nodeGlyph,
+            knowledgeGraphNodeUsesFocusScale(target.id, focus, focusSet),
+          );
+          if (
+            graphEdgeTargetBoundaryInto(_a, _curveControl, _b, targetExtent, _curveNext, _direction)
+          ) {
+            _curveNext.addScaledVector(_direction, -KNOWLEDGE_GRAPH_DIRECTION_MARKER_LENGTH / 2);
+            if (
+              !includeKnowledgeGraphGeometryPointInto(
+                _geometryBounds,
+                _curveNext.x,
+                _curveNext.y,
+                _curveNext.z,
+                Math.hypot(
+                  KNOWLEDGE_GRAPH_DIRECTION_MARKER_LENGTH / 2,
+                  KNOWLEDGE_GRAPH_DIRECTION_MARKER_RADIUS,
+                ),
+              )
+            )
+              geometryFinite = false;
+          }
+        }
+        const sphere = _sphere;
+        sphere.center.set(
+          _geometryBounds.minX / 2 + _geometryBounds.maxX / 2,
+          _geometryBounds.minY / 2 + _geometryBounds.maxY / 2,
+          _geometryBounds.minZ / 2 + _geometryBounds.maxZ / 2,
+        );
+        sphere.radius = Math.hypot(
+          _geometryBounds.maxX / 2 - _geometryBounds.minX / 2,
+          _geometryBounds.maxY / 2 - _geometryBounds.minY / 2,
+          _geometryBounds.maxZ / 2 - _geometryBounds.minZ / 2,
+        );
         // The first planar fit is independent of the host's initial distance.
         // Later stages observe the camera; pointer intent cancels both stages.
-        const currentDistance = layoutDimensions === 2 && autoFrameStageRef.current === 0
-          ? 0
-          : controls
-            ? camera.position.distanceTo(controls.target)
-            : camera.position.distanceTo(sphere.center);
+        const currentDistance =
+          layoutDimensions === 2 && autoFrameStageRef.current === 0
+            ? 0
+            : controls
+              ? camera.position.distanceTo(controls.target)
+              : camera.position.distanceTo(sphere.center);
         if (layoutDimensions === 2) {
           _direction.set(0, 0, 1);
         } else if (controls && camera.position.distanceToSquared(controls.target) > 1e-12) {
@@ -1497,55 +1521,69 @@ function KnowledgeGraph3DSceneInstance({
           _direction.y,
           _direction.z,
         );
-        if (directionReady) {
+        if (directionReady && geometryFinite) {
           if (_direction.lengthSq() <= 1e-12) _direction.set(0, 0, 1);
           else _direction.normalize();
-          const fit = cameraProjectionKind === 'orthographic'
-            ? planKnowledgeGraphOrthographicCameraFitInto(
-                sphere.radius,
-                currentDistance,
-                horizontalSpan,
-                verticalSpan,
-                orthographicCamera.zoom,
-                _cameraFitResult,
-              )
-            : planKnowledgeGraphPerspectiveCameraFitInto(
-                sphere.radius,
-                currentDistance,
-                perspectiveFov,
-                perspectiveCamera.aspect,
-                _cameraFitResult,
-              );
-          camera.position.copy(sphere.center).addScaledVector(_direction, fit.distance);
-          if (
-            cameraProjectionKind === 'orthographic' &&
-            fit.orthographicZoom !== undefined
-          ) {
-            orthographicCamera.zoom = fit.orthographicZoom;
-          }
-          const projected = camera as
-            THREE.PerspectiveCamera | THREE.OrthographicCamera;
-          const clipping = planKnowledgeGraphCameraClippingInto(
-            cameraProjectionKind,
-            projected.near,
-            projected.far,
-            fit.distance,
-            sphere.radius,
-            _cameraClippingResult,
+          _cameraRight.crossVectors(camera.up, _direction).normalize();
+          _cameraUp.crossVectors(_direction, _cameraRight).normalize();
+          const boundsProjected = projectKnowledgeGraphGeometryBoundsInto(
+            _geometryBounds,
+            sphere.center,
+            _cameraRight,
+            _cameraUp,
+            _direction,
+            _projectedGeometryBounds,
           );
-          projected.near = clipping.near;
-          projected.far = clipping.far;
-          projected.updateProjectionMatrix();
-          if (controls) {
-            controls.target.copy(sphere.center);
-            controls.update();
-          } else {
-            camera.lookAt(sphere.center);
-            camera.updateMatrixWorld();
+          const fitReady =
+            boundsProjected &&
+            (cameraProjectionKind === 'orthographic'
+              ? planKnowledgeGraphOrthographicGeometryFitInto(
+                  _projectedGeometryBounds,
+                  currentDistance,
+                  horizontalSpan,
+                  verticalSpan,
+                  orthographicCamera.zoom,
+                  state.size.width,
+                  state.size.height,
+                  _cameraFitResult,
+                )
+              : planKnowledgeGraphPerspectiveGeometryFitInto(
+                  _projectedGeometryBounds,
+                  perspectiveFov,
+                  perspectiveCamera.aspect,
+                  state.size.width,
+                  state.size.height,
+                  _cameraFitResult,
+                ));
+          if (fitReady) {
+            const fit = _cameraFitResult;
+            camera.position.copy(sphere.center).addScaledVector(_direction, fit.distance);
+            if (cameraProjectionKind === 'orthographic' && fit.orthographicZoom !== undefined) {
+              orthographicCamera.zoom = fit.orthographicZoom;
+            }
+            const projected = camera as THREE.PerspectiveCamera | THREE.OrthographicCamera;
+            const clipping = planKnowledgeGraphCameraClippingInto(
+              cameraProjectionKind,
+              projected.near,
+              projected.far,
+              fit.distance,
+              sphere.radius,
+              _cameraClippingResult,
+            );
+            projected.near = clipping.near;
+            projected.far = clipping.far;
+            projected.updateProjectionMatrix();
+            if (controls) {
+              controls.target.copy(sphere.center);
+              controls.update();
+            } else {
+              camera.lookAt(sphere.center);
+              camera.updateMatrixWorld();
+            }
+            // A throwing host control remains retryable; user grabs still cancel
+            // eagerly because user intent, unlike programmatic framing, is final.
+            autoFrameStageRef.current = layoutSettled ? 2 : 1;
           }
-          // A throwing host control remains retryable; user grabs still cancel
-          // eagerly because user intent, unlike programmatic framing, is final.
-          autoFrameStageRef.current = layoutSettled ? 2 : 1;
         }
       }
     }
@@ -1565,6 +1603,116 @@ function KnowledgeGraph3DSceneInstance({
       } else {
         flyToIdRef.current = null; // no controls to move — drop the stale intent
       }
+    }
+
+    // The committed material owns its uniform records. One quad expands each
+    // visible chord by a bounded CSS width without a matrix upload per chord.
+    const strokes = linesRef.current;
+    if (strokes) {
+      const viewportUsable = isKnowledgeGraphStrokeViewportUsable(
+        state.size.width,
+        state.size.height,
+        camera.near,
+      );
+      strokes.visible = viewportUsable;
+      if (viewportUsable) {
+        strokes.material.uniforms.strokeViewport.value.set(state.size.width, state.size.height);
+        strokes.material.uniforms.strokeNear.value = camera.near;
+      }
+    }
+
+    // Labels use CSS-pixel dimensions and the final camera of this frame. The
+    // layout changes only presentation; all nodes and directed assertions stay.
+    const labels = labelsRef.current;
+    if (
+      labels &&
+      labelResource.ready &&
+      cameraProjectionKind !== null &&
+      Number.isFinite(camera.projectionMatrix.elements[5]) &&
+      camera.projectionMatrix.elements[5] !== 0
+    ) {
+      // Compute this frame's view in owned scratch matrices. Labels must not
+      // write even derived camera matrices when auto-frame is disabled.
+      if (camera.matrixAutoUpdate)
+        _labelCameraWorld.compose(camera.position, camera.quaternion, camera.scale);
+      else _labelCameraWorld.copy(camera.matrix);
+      if (camera.parent) _labelCameraWorld.premultiply(camera.parent.matrixWorld);
+      _labelCameraInverse.copy(_labelCameraWorld).invert();
+      _labelProjectionInverse.copy(camera.projectionMatrix).invert();
+      const sceneGroup = sceneGroupRef.current;
+      if (sceneGroup) sceneGroup.getWorldScale(_labelSceneScale);
+      else _labelSceneScale.set(1, 1, 1);
+      const sceneScale = Math.max(
+        Math.abs(_labelSceneScale.x),
+        Math.abs(_labelSceneScale.y),
+        Math.abs(_labelSceneScale.z),
+      );
+      const pixelFactor = 2 / (Math.abs(camera.projectionMatrix.elements[5]) * state.size.height);
+      for (let nodeIndex = 0; nodeIndex < simNodes.length; nodeIndex++) {
+        const node = simNodes[nodeIndex];
+        _labelPoint.set(node.x ?? 0, node.y ?? 0, node.z ?? 0);
+        if (sceneGroup) sceneGroup.localToWorld(_labelPoint);
+        _labelViewPoint.copy(_labelPoint).applyMatrix4(_labelCameraInverse);
+        const depth = -_labelViewPoint.z;
+        const pixelScale = cameraProjectionKind === 'perspective' ? depth * pixelFactor : pixelFactor;
+        const radius =
+          sceneScale *
+          knowledgeGraphAutoFrameNodeRadialExtent(
+            node.r,
+            visualNodes[nodeIndex].nodeGlyph,
+            knowledgeGraphNodeUsesFocusScale(node.id, focus, focusSet),
+          );
+        _labelPoint.copy(_labelViewPoint).applyMatrix4(camera.projectionMatrix);
+        const slot = nodeIndex * 5;
+        projectedLabelNodes[slot] = ((_labelPoint.x + 1) * state.size.width) / 2;
+        projectedLabelNodes[slot + 1] = ((1 - _labelPoint.y) * state.size.height) / 2;
+        projectedLabelNodes[slot + 2] =
+          radius /
+          (pixelScale *
+            (cameraProjectionKind === 'perspective' ? Math.max(0.05, 1 - radius / depth) : 1));
+        projectedLabelNodes[slot + 3] = _labelPoint.z;
+        projectedLabelNodes[slot + 4] = pixelScale;
+      }
+      layoutKnowledgeGraphLabelsInto(
+        labelCandidates,
+        projectedLabelNodes,
+        labelResource.widths,
+        state.size.width,
+        state.size.height,
+        labelLayout,
+      );
+      _dummy.quaternion.identity();
+      for (let slot = 0; slot < labelCandidates.length; slot++) {
+        if (labelLayout.visible[slot]) {
+          const base = labelCandidates[slot].nodeIndex * 5;
+          _labelPoint
+            .set(
+              (labelLayout.x[slot] * 2) / state.size.width - 1,
+              1 - (labelLayout.y[slot] * 2) / state.size.height,
+              projectedLabelNodes[base + 3],
+            )
+            .applyMatrix4(_labelProjectionInverse)
+            .applyMatrix4(_labelCameraWorld);
+          if (sceneGroup) sceneGroup.worldToLocal(_labelPoint);
+          _dummy.position.copy(_labelPoint);
+          const units = projectedLabelNodes[base + 4];
+          _dummy.scale.set(
+            labelResource.widths[slot] * units,
+            KNOWLEDGE_GRAPH_LABEL_HEIGHT_PX * units,
+            1,
+          );
+        } else {
+          _dummy.position.set(0, 0, 0);
+          _dummy.scale.set(0, 0, 0);
+        }
+        _dummy.updateMatrix();
+        labels.setMatrixAt(slot, _dummy.matrix);
+      }
+      labels.instanceMatrix.needsUpdate = true;
+      labels.boundingSphere = null;
+      labels.visible = true;
+    } else if (labels) {
+      labels.visible = false;
     }
 
     if (
@@ -1587,15 +1735,6 @@ function KnowledgeGraph3DSceneInstance({
       if (group) group.visible = true;
     }
   });
-
-  const focusLabelId = hoverId ?? selectedId;
-  const focusLabelIndex =
-    focusLabelId != null && index.has(focusLabelId)
-      ? index.get(focusLabelId)
-      : undefined;
-  const focusLabel = focusLabelIndex == null
-    ? ''
-    : visualNodes[focusLabelIndex]?.label ?? '';
 
   const handleMove = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
@@ -1693,6 +1832,7 @@ function KnowledgeGraph3DSceneInstance({
           bounded by the already-validated node count. They never raycast. */}
       {glyphNodeIndexes.sphere.length > 0 ? (
         <instancedMesh
+          name="cortexel-kg-contours"
           ref={sphereGlyphsRef}
           args={[undefined, undefined, glyphNodeIndexes.sphere.length]}
           frustumCulled={false}
@@ -1700,12 +1840,12 @@ function KnowledgeGraph3DSceneInstance({
         >
           <sphereGeometry args={[
             KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE.sphere_outline,
-            12,
-            12,
+            32,
+            20,
           ]} />
           <meshBasicMaterial
             color="#ffffff"
-            wireframe
+            side={THREE.BackSide}
             toneMapped={false}
           />
         </instancedMesh>
@@ -1717,17 +1857,12 @@ function KnowledgeGraph3DSceneInstance({
           frustumCulled={false}
           raycast={disableKnowledgeGraphGlyphRaycast}
         >
-          <boxGeometry args={[
-            KNOWLEDGE_GRAPH_BOX_SHELL_SIDE,
-            KNOWLEDGE_GRAPH_BOX_SHELL_SIDE,
-            KNOWLEDGE_GRAPH_BOX_SHELL_SIDE,
-            1,
-            1,
-            1,
-          ]} />
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[boxShellVertices, 3]} />
+          </bufferGeometry>
           <meshBasicMaterial
             color="#ffffff"
-            wireframe
+            side={THREE.DoubleSide}
             toneMapped={false}
           />
         </instancedMesh>
@@ -1739,32 +1874,37 @@ function KnowledgeGraph3DSceneInstance({
           frustumCulled={false}
           raycast={disableKnowledgeGraphGlyphRaycast}
         >
-          <octahedronGeometry args={[
-            KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE.diamond_shell,
-            0,
-          ]} />
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[diamondShellVertices, 3]} />
+          </bufferGeometry>
           <meshBasicMaterial
             color="#ffffff"
-            wireframe
+            side={THREE.DoubleSide}
             toneMapped={false}
           />
         </instancedMesh>
       ) : null}
 
-      {/* Edges — theme-aware line segments (culling off: positions stream
-          every frame, so the once-cached geometry bounds go stale). */}
-      <lineSegments key={`lines-${validEdges.length}`} ref={linesRef} frustumCulled={false}>
-        <bufferGeometry>
-          <bufferAttribute attach="attributes-position" args={[linePos, 3]} />
-          <bufferAttribute attach="attributes-color" args={[lineCol, 3]} />
-        </bufferGeometry>
-        <lineBasicMaterial
-          vertexColors
+      {/* Edges — one bounded screen stroke per current visible chord. Hidden
+          dash chords remain absent; projection never changes assertion IDs. */}
+      <mesh name="cortexel-kg-strokes" key={`lines-${visibleLineSegmentCount}`} ref={linesRef} frustumCulled={false} raycast={disableKnowledgeGraphGlyphRaycast}>
+        <instancedBufferGeometry instanceCount={visibleLineSegmentCount}>
+          <bufferAttribute attach="attributes-position" args={[strokeQuad, 3]} />
+          <bufferAttribute attach="index" args={[strokeIndex, 1]} />
+          <interleavedBufferAttribute attach="attributes-instanceStart" args={[linePositionData, 3, 0]} />
+          <interleavedBufferAttribute attach="attributes-instanceEnd" args={[linePositionData, 3, 3]} />
+          <interleavedBufferAttribute attach="attributes-instanceStrokeColor" args={[lineColorData, 3, 0]} />
+        </instancedBufferGeometry>
+        <shaderMaterial
+          uniforms={strokeUniforms}
+          vertexShader={KNOWLEDGE_GRAPH_EDGE_STROKE_VERTEX_SHADER}
+          fragmentShader={KNOWLEDGE_GRAPH_EDGE_STROKE_FRAGMENT_SHADER}
           toneMapped={false}
           depthWrite={false}
           blending={THREE.NormalBlending}
+          side={THREE.DoubleSide}
         />
-      </lineSegments>
+      </mesh>
 
       {/* Direction is structural evidence, so every directed edge gets a static
           arrowhead; animation is only a redundant cue for citation flow. */}
@@ -1802,14 +1942,32 @@ function KnowledgeGraph3DSceneInstance({
         </instancedMesh>
       ) : null}
 
-      {/* Floating label for the focused node. */}
-      <FocusLabelSprite
-        spriteRef={labelSpriteRef}
-        text={focusLabel}
-        color={resolvedLabelColor}
-        themeMode={themeMode}
-        invalidate={invalidate}
-      />
+      {/* One bounded, locally generated atlas; complete text stays in records. */}
+      {labelCandidates.length > 0 ? (
+        <instancedMesh
+          key={`labels-${labelCandidates.length}`}
+          name="cortexel-kg-labels"
+          ref={labelsRef}
+          args={[undefined, undefined, labelCandidates.length]}
+          frustumCulled={false}
+          visible={false}
+          renderOrder={1_000}
+          raycast={disableKnowledgeGraphGlyphRaycast}
+        >
+          <planeGeometry args={[1, 1]}>
+            <instancedBufferAttribute attach="attributes-labelUvRect" args={[labelResource.uvRects, 4]} />
+          </planeGeometry>
+          <shaderMaterial
+            uniforms={labelUniforms}
+            vertexShader={KNOWLEDGE_GRAPH_LABEL_VERTEX_SHADER}
+            fragmentShader={KNOWLEDGE_GRAPH_LABEL_FRAGMENT_SHADER}
+            transparent
+            depthTest={false}
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </instancedMesh>
+      ) : null}
       </group>
     </>
   );

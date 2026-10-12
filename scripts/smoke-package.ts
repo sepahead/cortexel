@@ -1147,6 +1147,8 @@ const NPM_CI_FLAGS = [
   '--legacy-peer-deps',
   '--install-strategy=nested',
   '--registry=https://registry.npmjs.org/',
+  // Bound connections per origin; keep the command deadline and complete-tree checks.
+  '--maxsockets=1',
 ] as const;
 const NPM_USER_CONFIG_SOURCE = '# isolated package-smoke npm user config\n';
 const NPM_GLOBAL_CONFIG_SOURCE = '# isolated package-smoke npm global config\n';
@@ -8469,6 +8471,26 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
             JSON.stringify(['RENDER_LAYOUT_UNAVAILABLE']) ||
           internalFigureResultCapability.isLiveBuiltFigureResult(layoutFailure)) {
         throw new Error('validated but unrenderable request received result authority');
+      }
+      const automaticPopulation = structuredClone(unrenderablePopulation);
+      automaticPopulation.presentation.height = 'auto';
+      const validatedAutomatic = esmFigure.validateRequestValue(automaticPopulation);
+      if (!validatedAutomatic.ok) {
+        throw new Error('packed automatic population-rate counterpart is not valid input');
+      }
+      const automaticResult = cjsRenderer.buildFigureFromValidated(
+        validatedAutomatic.request
+      );
+      if (!automaticResult.ok ||
+          automaticResult.plan.width !== unrenderablePopulation.presentation.width ||
+          automaticResult.plan.height <= unrenderablePopulation.presentation.height ||
+          automaticResult.plan.height > 4096 ||
+          JSON.stringify(automaticResult.artifact.canonicalRequest.data) !==
+            JSON.stringify(unrenderablePopulation.data) ||
+          JSON.stringify(automaticResult.artifact.canonicalRequest.source) !==
+            JSON.stringify(unrenderablePopulation.source) ||
+          !internalFigureResultCapability.isLiveBuiltFigureResult(automaticResult)) {
+        throw new Error('packed automatic canvas counterpart lost complete source or result authority');
       }
       const liveResult = combinations[0][1];
       const reconstructedResult = {

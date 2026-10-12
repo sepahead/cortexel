@@ -794,11 +794,19 @@ describe('offline NEST official-example source inventory', () => {
         const [root, modulePath] = process.argv.slice(2);
         const originalClose = fs.closeSync;
         const originalFstat = fs.fstatSync;
+        const rootIdentity = fs.statSync(root);
         const directoryCloses = [];
         let injected = false;
+        let subjectCleanup = false;
         fs.closeSync = (descriptor) => {
           const descriptorStat = originalFstat(descriptor);
           if (descriptorStat.isDirectory()) {
+            // The composed ACL inspection also holds OS Python directories.
+            // Inject into the subject root's cleanup after those owners finish.
+            if (descriptorStat.dev === rootIdentity.dev && descriptorStat.ino === rootIdentity.ino) {
+              subjectCleanup = true;
+            }
+            if (!subjectCleanup) return originalClose(descriptor);
             directoryCloses.push(descriptor);
             originalClose(descriptor);
             if (!injected) {
@@ -822,9 +830,13 @@ describe('offline NEST official-example source inventory', () => {
         if (!message.includes('cleanup is uncertain')) {
           throw new Error('ambiguous ancestor close did not fail closed');
         }
-        if (directoryCloses.length < 2 || new Set(directoryCloses).size !== directoryCloses.length) {
+        const expectedAncestorCount = root.split('/').filter(Boolean).length + 1;
+        if (directoryCloses.length !== expectedAncestorCount || new Set(directoryCloses).size !== directoryCloses.length) {
           throw new Error('ancestor descriptors were not each closed exactly once');
         }
+        fs.closeSync = originalClose;
+        syncBuiltinESMExports();
+        requireProtectedDirectoryEntryChain(root, 'legal cleanup control');
         process.stdout.write(JSON.stringify({ message, directoryCloses }));
       `,
       [root, modulePath],

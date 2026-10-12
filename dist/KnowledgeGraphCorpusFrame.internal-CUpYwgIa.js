@@ -1,6 +1,6 @@
 import { d as safeErrorMessage, i as SAFE_DISPLAY_STRING_PATTERN, n as KNOWLEDGE_GRAPH_LIMITS, u as safeDiagnosticText } from "./knowledgeGraphLimits-Du09-etI.js";
-import { l as knowledgeGraphContrastSafeColor, p as knowledgeGraphNodeGlyphDescription, u as knowledgeGraphEdgeStrokeDescription, v as graphEdgeIdentityKey } from "./knowledgeGraphVisualEncoding.internal-Bk0I-Mgt.js";
-import { G as normalizeGraphQuery, H as knowledgeGraphLiveForceAvailability, W as normalizeGraphNodeRadius, j as filterGraphEdges, n as prepareCorpusKnowledgeGraphFigureJson, t as prepareCorpusKnowledgeGraphFigure, z as graphQueryMatchIds } from "./knowledgeGraphFigure-DP4EPFUs.js";
+import { g as knowledgeGraphEdgeStrokeDescription, h as knowledgeGraphContrastSafeColor, w as graphEdgeIdentityKey, y as knowledgeGraphNodeGlyphDescription } from "./knowledgeGraphVisualEncoding.internal-CuP5jO83.js";
+import { G as normalizeGraphQuery, H as knowledgeGraphLiveForceAvailability, W as normalizeGraphNodeRadius, j as filterGraphEdges, n as prepareCorpusKnowledgeGraphFigureJson, t as prepareCorpusKnowledgeGraphFigure, z as graphQueryMatchIds } from "./knowledgeGraphFigure-C_NGucds.js";
 import { assertPreparedCorpusKnowledgeGraphPresentation, assertPreparedGenericKnowledgeGraphPresentation, assertPreparedKnowledgeGraphPresentation, assertPreparedKnowledgeGraphView, knowledgeGraphPresentationContainsNode, knowledgeGraphViewContainsNode, prepareKnowledgeGraphView } from "#cortexel-knowledge-graph-presentation-capability";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
@@ -1439,4 +1439,4 @@ function KnowledgeGraphCorpusFrameInternal({ sourceInput, selectionController, h
 
 //#endregion
 export { KnowledgeGraphLegend as a, handleKnowledgeGraphNodeClick as c, synchronizeKnowledgeGraphControlsListener as d, toggledKnowledgeGraphSelection as f, KnowledgeGraphA11yList as i, handleKnowledgeGraphPointerOut as l, assertKnowledgeGraphNodeReference as m, KnowledgeGraphStaticRecordView as n, MAX_A11Y_NODE_PAGE_SIZE as o, assertKnowledgeGraphColor as p, DEFAULT_A11Y_NODE_PAGE_SIZE as r, beginKnowledgeGraphRuntimeTransition as s, KnowledgeGraphCorpusFrameInternal as t, isKnowledgeGraphInstanceId as u };
-//# sourceMappingURL=KnowledgeGraphCorpusFrame.internal-B6Fze8F9.js.map
+//# sourceMappingURL=KnowledgeGraphCorpusFrame.internal-CUpYwgIa.js.map
