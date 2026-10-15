@@ -9,7 +9,7 @@
 import { freezeGenerated } from '../core/deep-freeze.js';
 
 /** The same owning contract identity as every full validation and render gate. */
-export const STRUCTURAL_SCHEMA_CONTRACT_DIGEST = "sha256:3c5c60c5a1751ce94c17a08601d49b94114b06c5fd50f5810e0ab354175c9bfc";
+export const STRUCTURAL_SCHEMA_CONTRACT_DIGEST = "sha256:8f86e1163e408e26102c548694330407d0494f3a046e85f80f234021f0979b1b";
 
 /** Exact offline resources; generated from normative schemas, never fetched at runtime. */
 export const STRUCTURAL_SCHEMAS: Readonly<Record<string, Readonly<Record<string, unknown>>>> =

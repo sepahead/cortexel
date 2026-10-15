@@ -149,7 +149,7 @@ const REVIEWED_SOURCE_SET: ReadonlySet<string> = new Set(
 
 /** SHA-256(JSON(sorted [identity, decoded UTF-8 source text] pairs)). */
 export const REVIEWED_PACKAGE_SOURCE_MAP_INPUT_CLOSURE_DIGEST =
-  '5dc1503aa60a1828b7f241a551ecfa35132dfc0290bdc8cc7e65d9041433b791' as const;
+  '69ced85117f3d034bc7e9d320c4de6915af567af150d7e1dae17d3aecc2ee9dd' as const;
 
 export type SourceMapOwnerKind = 'runtime' | 'declaration';
 

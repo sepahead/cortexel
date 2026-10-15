@@ -630,7 +630,7 @@ describe('spike-raster source-bound clock and render semantics', () => {
     });
     expect(result.disclosures).toContainEqual(expect.objectContaining({
       id: 'EVENTS_EXCLUDED_OUT_OF_WINDOW',
-      text: '3 observations fell outside the declared observation window and are excluded from this analysis.',
+      text: 'Observations outside the declared observation window: 3. They are excluded from this analysis.',
     }));
   });
 
