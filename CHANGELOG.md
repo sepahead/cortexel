@@ -6,6 +6,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — count-safe disclosure text
+
+- The out-of-window disclosure now reads "Observations outside the declared observation window: {excludedCount}. They are excluded from this analysis." It no longer renders "1 observations".
+- The duplicate-time replicate disclosure uses the same `Label: {count}.` form.
+- The contract digest, generated identity and registry, Python catalog, packaged `dist/`, and the reviewed source-map closure digest are regenerated. No request is rejected or reinterpreted, so the request and artifact contracts stay within 1.x.
+
 ### Added — checked agent index
 
 - Added `agent-index.json`, which restates the contributor commands, generated artifacts, delivery rules, and ecosystem relations for tools.

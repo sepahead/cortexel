@@ -117,7 +117,7 @@
       "id": "EVENTS_EXCLUDED_OUT_OF_WINDOW",
       "severity": "important",
       "trigger": "derivation receipt reports excludedOutOfWindow > 0",
-      "text": "{excludedCount} observations fell outside the declared observation window and are excluded from this analysis."
+      "text": "Observations outside the declared observation window: {excludedCount}. They are excluded from this analysis."
     },
     {
       "id": "NEST_SERIALIZED_CLOCK_BOUNDARY",
@@ -213,7 +213,7 @@
       "id": "MISSING_REPLICATES_EXCLUDED_FROM_AGGREGATE",
       "severity": "important",
       "trigger": "one or more null replicate values were excluded from a duplicate-time aggregate that retained a non-null result",
-      "text": "{missingReplicateCount} missing replicate values were excluded from duplicate-time aggregates. An all-missing replicate group remains a visible gap rather than becoming zero."
+      "text": "Missing replicate values excluded from duplicate-time aggregates: {missingReplicateCount}. An all-missing replicate group remains a visible gap rather than becoming zero."
     },
 
     {
