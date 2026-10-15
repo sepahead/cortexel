@@ -48,7 +48,8 @@
   <text x="52" y="512" class="laneDetail">skill, deletes data,</text>
   <text x="52" y="528" class="laneDetail">or grants render</text>
   <text x="52" y="544" class="laneDetail">authority.</text>
-  <path d="M 224 1090 L 132 1090 L 132 576" fill="none" stroke="#983307" stroke-width="1.4" stroke-dasharray="4 4" marker-end="url(#cxArrowRed)"/>
+  <!-- The repair loop: beside its description, a fixed request re-enters the pipeline at stage 1 -->
+  <path d="M 224 364 L 238 364 L 238 145 L 247 145" fill="none" stroke="#983307" stroke-width="1.4" stroke-dasharray="4 4" marker-end="url(#cxArrowRed)"/>
 
   <!-- Stage 1 -->
   <g>
