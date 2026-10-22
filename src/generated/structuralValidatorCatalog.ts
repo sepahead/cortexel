@@ -10,7 +10,7 @@ import type { ValidateFunction } from 'ajv';
 import * as validators from './structuralValidators.js';
 
 /** Precompiled functions for the complete exact offline structural resource closure. */
-export const STRUCTURAL_VALIDATOR_CONTRACT_DIGEST = "sha256:3c5c60c5a1751ce94c17a08601d49b94114b06c5fd50f5810e0ab354175c9bfc";
+export const STRUCTURAL_VALIDATOR_CONTRACT_DIGEST = "sha256:8f86e1163e408e26102c548694330407d0494f3a046e85f80f234021f0979b1b";
 export const STRUCTURAL_VALIDATORS: Readonly<Record<string, ValidateFunction>> = Object.freeze({
   "schemas/common.v1.schema.json": validators.validateSchema0,
   "schemas/figure-artifact.v1.schema.json": validators.validateSchema1,

@@ -3,14 +3,14 @@ const require_canonicalize = require('../canonicalize-CM-RPRQS.cjs');
 const require_exact_binary64 = require('../exact-binary64-B9QJo1AS.cjs');
 const require_deep_freeze = require('../deep-freeze-CX4sIEIO.cjs');
 const require_errors = require('../errors-DaUwoa4p.cjs');
-const require_identity = require('../identity-WmWIxK_t.cjs');
+const require_identity = require('../identity-C1sQzrkc.cjs');
 const require_catalog = require('../catalog-Y8HvVZCF.cjs');
-const require_registry = require('../registry-CCvLcMCj.cjs');
+const require_registry = require('../registry-CZilDx4S.cjs');
 const require_provenance = require('../provenance-jOGKOHvC.cjs');
-const require_response_curve_basis = require('../response-curve-basis-BoFkbgrp.cjs');
-const require_contract_identity = require('../contract-identity-CQdBXmkP.cjs');
+const require_response_curve_basis = require('../response-curve-basis-7q0CRSEh.cjs');
+const require_contract_identity = require('../contract-identity-BKwfY9Y0.cjs');
 const require_nest_time = require('../nest-time-CaEztfRm.cjs');
-const require_structural_validator = require('../structural-validator-Kdfv8ABY.cjs');
+const require_structural_validator = require('../structural-validator-bhg1BHnf.cjs');
 
 //#region src/core/semantics/types.ts
 /** Read a value at a JSON Pointer. Returns undefined rather than throwing. */
@@ -6347,7 +6347,7 @@ function checkIdentity(request) {
 		message: `this build implements ${require_identity.REQUEST_CONTRACT}. Compare with getBuildIdentity(), then use migrateLegacyRequest() for a supported pre-1.0 request. The packaged CLI equivalents are \`cortexel identity --json\` and \`cortexel migrate ...\`; a repository checkout may run the same implementation through \`bun src/cli/main.ts ...\`.`
 	}));
 	const digest = request.contractDigest;
-	if (typeof digest === "string" && digest !== "sha256:3c5c60c5a1751ce94c17a08601d49b94114b06c5fd50f5810e0ab354175c9bfc") errors.push(require_errors.makeError({
+	if (typeof digest === "string" && digest !== "sha256:8f86e1163e408e26102c548694330407d0494f3a046e85f80f234021f0979b1b") errors.push(require_errors.makeError({
 		code: "CONTRACT_DIGEST_MISMATCH",
 		stage: "identity",
 		instancePath: "/contractDigest",

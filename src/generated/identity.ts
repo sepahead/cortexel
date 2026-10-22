@@ -9,7 +9,7 @@
 export const PACKAGE_VERSION = "0.10.0-dev.0";
 export const REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 export const ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-export const CONTRACT_DIGEST = "sha256:3c5c60c5a1751ce94c17a08601d49b94114b06c5fd50f5810e0ab354175c9bfc";
+export const CONTRACT_DIGEST = "sha256:8f86e1163e408e26102c548694330407d0494f3a046e85f80f234021f0979b1b";
 export const CATALOG_DIGEST = "sha256:9db77ac767cf8b83c63ad9a67a07f9e7146541c3707bf7b0abb455421faf1e8e";
 export const CATALOG_DIGEST_DOMAIN = "cortexel-public-stable-catalog.v2";
 export const STABLE_SKILL_COUNT = 19;

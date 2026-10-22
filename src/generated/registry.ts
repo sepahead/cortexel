@@ -1728,7 +1728,7 @@ export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity
   {
     "id": "EVENTS_EXCLUDED_OUT_OF_WINDOW",
     "severity": "important",
-    "text": "{excludedCount} observations fell outside the declared observation window and are excluded from this analysis."
+    "text": "Observations outside the declared observation window: {excludedCount}. They are excluded from this analysis."
   },
   {
     "id": "NEST_SERIALIZED_CLOCK_BOUNDARY",
@@ -1808,7 +1808,7 @@ export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity
   {
     "id": "MISSING_REPLICATES_EXCLUDED_FROM_AGGREGATE",
     "severity": "important",
-    "text": "{missingReplicateCount} missing replicate values were excluded from duplicate-time aggregates. An all-missing replicate group remains a visible gap rather than becoming zero."
+    "text": "Missing replicate values excluded from duplicate-time aggregates: {missingReplicateCount}. An all-missing replicate group remains a visible gap rather than becoming zero."
   },
   {
     "id": "CALLER_NOTE_UNVERIFIED",
