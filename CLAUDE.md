@@ -425,6 +425,10 @@ Mirrored in [CONTRIBUTING.md](./CONTRIBUTING.md); laws 3–5 have executable gua
 - Update `CHANGELOG.md` under the working version.
 - Match the surrounding comment density and idiom; comments state *why/constraints*,
   not narration.
+- Do not cite social-media posts. A post can be deleted or edited, and it can state an
+  opinion as a fact, which biases readers and agents and weakens scientific rigor. State
+  the substance in your own words with its date, cite the primary source, and do not link
+  the post or name its author.
 
 ## Source of truth & mirroring
 
