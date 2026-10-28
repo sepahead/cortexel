@@ -1095,7 +1095,7 @@ function run(
 const EXPECTED_FIXTURE_MANIFEST_SHA256 =
   'd91462201f6907ce0bea98638c65d2ad84b672d0eed06b96e05b0f25cd79780e';
 const EXPECTED_FIXTURE_LOCK_SHA256 =
-  '67542d680a65af2aadb0d8043bcb5885bb63ce2bfd439e40a94924c3ad4e9679';
+  'd49c8cf6dcdf0dc85f7192c869a1c32359e0e6ca7e2c4ed2e4977f721df1b43e';
 const EXPECTED_DEV_DEPENDENCIES = Object.freeze({
   '@types/node': '26.1.2',
   '@types/react': '19.2.18',

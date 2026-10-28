@@ -6,6 +6,19 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — validation, test-runner, and URI parser dependencies
+
+- Updated `zod` to 4.6.7 for GHSA-mrhx-c7xc-m3w5, `vitest` to 4.1.12 for GHSA-qxg6-89mg-rqv8
+  and GHSA-xp26-3454-mjgp, and the `fast-uri` override to 3.1.9 for GHSA-w74x-v6f9-j3xg,
+  GHSA-xhq7-xmqj-769h, GHSA-wjr9-j795-jxcr, and GHSA-333x-w4r6-6crp. Added a `vite` 8.3.5
+  override for GHSA-9jrq-w75r-8gcw, GHSA-rq7h-c2jc-7f22, GHSA-698v-4r3x-3vcv,
+  GHSA-r825-w8mm-5pxw, GHSA-587h-7wmj-h5pm, and GHSA-vfpm-58rq-9qcg; vite reaches only the
+  development graph through vitest. Every unrelated dependency is retained, and `bun audit`
+  reports no vulnerabilities.
+- zod 4.6.7 emits `items: false` before `minItems` and `maxItems` in tuple schemas. The
+  regenerated `dist/skills.manifest.json` differs only in that key order.
+- Updated both dependency locks and renewed the package-smoke fixture digest for the changed lock.
+
 ### Fixed — count-safe disclosure text
 
 - The out-of-window disclosure now reads "Observations outside the declared observation window: {excludedCount}. They are excluded from this analysis." It no longer renders "1 observations".
